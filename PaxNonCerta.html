@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PaxNonCerta</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+    <header>
+        <div class="brand">
+            <div class="brand-icon">⚔️</div>
+            <div>
+                <div class="brand-title">PaxNonCerta</div>
+                <div class="brand-subtitle">16x16 Local Hotseat Battlefield</div>
+            </div>
+        </div>
+        <div style="display: flex; gap: 0.5rem;">
+            <button id="btn-menu" class="btn btn-secondary">🏠 Menu</button>
+            <button id="btn-rules" class="btn btn-secondary">📖 Rules</button>
+            <button id="btn-restart" class="btn btn-primary">🔄 New Game</button>
+        </div>
+    </header>
+
+    <main>
+        <!-- Left Sidebar: Player Status & Actions -->
+        <section class="panel">
+            <div class="panel-title">Current Phase</div>
+            
+            <div style="background-color: #0b1120; padding: 0.85rem; border-radius: 10px; border: 1px solid var(--border-color);">
+                <div id="active-player-name" style="font-weight: 700; font-size: 1.1rem; color: var(--p1-red);">
+                    Red (Player 1) Turn
+                </div>
+                <div id="active-player-desc" style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.2rem;">
+                    Plan moves for any surviving pieces.
+                </div>
+            </div>
+
+            <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+                <button id="btn-finish-plan" class="btn btn-primary" style="padding: 0.75rem;">🔒 Lock In Plan</button>
+                <button id="btn-clear-plan" class="btn btn-secondary">❌ Reset Turn Plans</button>
+                <button id="btn-cancel-siege" class="btn btn-secondary" hidden>🏹 Cancel Selected Siege</button>
+                <button id="btn-sally-out" class="btn btn-amber" hidden>⚔️ Sally Out</button>
+                <button id="btn-force-skip" class="btn btn-amber hidden">⏭️ Skip Disconnected Players</button>
+            </div>
+
+            <div class="panel-title" style="margin-top: 0.5rem;">Players Status</div>
+            
+            <div id="card-p1" class="player-card player-p1 active-turn">
+                <span>🔴 Player 1 (Red)</span>
+                <span id="badge-p1" class="status-badge" style="background: rgba(239, 68, 68, 0.2); color: var(--p1-red);">Planning</span>
+            </div>
+            
+            <div id="card-p2" class="player-card player-p2">
+                <span>🔵 Player 2 (Blue)</span>
+                <span id="badge-p2" class="status-badge" style="background: rgba(59, 130, 246, 0.2); color: var(--p2-blue);">Waiting</span>
+            </div>
+
+            <div id="card-p3" class="player-card player-p3">
+                <span>🟢 Player 3 (Green)</span>
+                <span id="badge-p3" class="status-badge" style="background: rgba(16, 185, 129, 0.2); color: var(--p3-green);">Waiting</span>
+            </div>
+
+            <div id="card-p4" class="player-card player-p4">
+                <span>🟡 Player 4 (Yellow)</span>
+                <span id="badge-p4" class="status-badge" style="background: rgba(234, 179, 8, 0.2); color: var(--p4-yellow);">Waiting</span>
+            </div>
+            <div class="panel-title">Retreating Units</div>
+            <div id="retreat-table" class="retreat-table"></div>
+        </section>
+
+        <!-- Center: Board Container -->
+        <section class="board-container">
+            <div class="board-wrapper">
+                <div id="board" class="chessboard"></div>
+                <svg id="plan-arrows" class="plan-arrows" viewBox="0 0 16 16" aria-hidden="true"></svg>
+                <div id="movement-animation-layer" class="movement-animation-layer"></div>
+                <svg id="battle-connector" class="battle-connector hidden" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+                    <line id="battle-connector-line" x1="0" y1="0" x2="0" y2="0"></line>
+                    <circle id="battle-connector-target" cx="0" cy="0" r="1.2"></circle>
+                </svg>
+
+                <!-- Pass Device Privacy Overlay -->
+                <div id="privacy-overlay" class="overlay-screen hidden">
+                    <div id="privacy-icon" class="overlay-icon">🛡️</div>
+                    <h2 id="privacy-title" style="font-size: 1.5rem; color: #fff;">Pass Device to Player 2</h2>
+                    <p id="privacy-desc" style="font-size: 0.85rem; color: var(--text-muted); max-width: 300px;">
+                        Previous player locked in their plans. Hand screen over and click ready!
+                    </p>
+                    <button id="btn-privacy-ready" class="btn btn-amber" style="padding: 0.75rem 2rem; font-size: 1rem;">
+                        I Am Ready
+                    </button>
+                </div>
+
+                <!-- Clash Overlay -->
+                <div id="clash-overlay" class="overlay-screen clash-overlay hidden">
+                    <div id="battle-window" class="battle-window">
+                        <div id="battle-window-header" class="battle-window-header">
+                            <div>
+                                <div class="clash-box animate-clash">⚔️</div>
+                                <h2 style="font-size: 1.25rem; color: #f59e0b;">Battle</h2>
+                            </div>
+                            <span class="battle-drag-hint">Drag to move</span>
+                        </div>
+                        <div id="battle-candidates" class="battle-candidates"></div>
+                        <div class="battle-explanation">
+                            Odds use raw strength raised to 1.35: counted stack units, +20% per unit above the strongest opponent,
+                            King +10%, Queen/Bishop +5%, XP/armour +5% per level, then stationary Tower defence ×3.
+                            XP/armour also reduce casualties by 5% per level; winners receive 50% casualty protection.
+                        </div>
+                        <div id="clash-result" class="battle-status">Ready</div>
+                        <div id="battle-rolls" class="battle-rolls"></div>
+                        <div class="battle-actions">
+                            <button id="btn-start-battle" class="btn btn-amber">Start Battle</button>
+                            <button id="btn-proceed-battle" class="btn btn-primary hidden">Proceed</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="merge-prompt" class="merge-prompt hidden">
+                    <p id="merge-prompt-text">Merge these pieces?</p>
+                    <div class="merge-prompt-actions">
+                        <button id="btn-merge-confirm" class="btn btn-amber">Merge</button>
+                        <button id="btn-merge-cancel" class="btn btn-secondary">Cancel</button>
+                    </div>
+                </div>
+
+                <div id="piece-tooltip" class="piece-tooltip hidden"></div>
+            </div>
+            <div id="hint-text" style="margin-top: 0.5rem; font-size: 0.8rem; color: var(--text-muted); text-align: center;">
+                Left-click a piece to select it or choose a unit from its list, then right-click an adjacent square to queue a 1-step move. You can move multiple pieces per turn!
+            </div>
+            <div style="font-size: 0.7rem; color: var(--text-muted); text-align: center; margin-top: 0.25rem;">
+                <span style="color: #22c55e;">━ Green: move</span> ·
+                <span style="color: #facc15;">━ Yellow: merge</span> ·
+                <span style="color: #ef4444;">━ Red: battle</span> ·
+                <span style="color: #3b82f6;">━ Blue: transfer</span>
+            </div>
+        </section>
+
+        <!-- Right Sidebar: Log & Round -->
+        <section class="panel">
+            <div style="display: flex; align-items: center; justify-content: space-between;">
+                <div class="panel-title">📜 Combat Log</div>
+                <div id="round-tag" style="font-size: 0.75rem; font-weight: 700; color: #6366f1;">Round 1</div>
+            </div>
+            <div id="battle-log" class="log-container">
+                <div class="log-item" style="color: var(--text-muted); text-align: center;">
+                    Match Started! 16x16 grid initialized. Plan moves secretly!
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Main Menu Modal -->
+    <div id="main-menu-modal" class="modal-overlay hidden">
+        <div class="modal-card menu-card">
+            <div class="modal-header"><h3>⚔️ PaxNonCerta</h3></div>
+            <div class="modal-body">
+                Choose how to play.
+            </div>
+            <button id="btn-menu-hotseat" class="btn btn-primary">🪑 Hotseat<br><small>One device, pass it between players</small></button>
+            <button id="btn-menu-multiplayer" class="btn btn-amber">🌐 Multiplayer<br><small>Each player on their own device, plans resolve together</small></button>
+        </div>
+    </div>
+
+    <!-- Multiplayer Modal (connect + lobby) -->
+    <div id="mp-modal" class="modal-overlay hidden">
+        <div class="modal-card menu-card">
+            <div class="modal-header"><h3>🌐 Multiplayer</h3></div>
+            <div id="mp-connect-view" class="modal-body">
+                <label class="mp-field">Your name
+                    <input id="mp-name" type="text" maxlength="16" placeholder="Commander">
+                </label>
+                <button id="btn-mp-create" class="btn btn-primary">➕ Create Room</button>
+                <div class="mp-or">or join a friend's room</div>
+                <label class="mp-field">Room code
+                    <input id="mp-code" type="text" maxlength="5" placeholder="ABCDE" autocapitalize="characters">
+                </label>
+                <button id="btn-mp-join" class="btn btn-amber">🚪 Join Room</button>
+            </div>
+            <div id="mp-lobby-view" class="modal-body hidden">
+                <div class="mp-code-box">Room code <strong id="mp-room-code">-----</strong></div>
+                <div id="mp-roster" class="mp-roster"></div>
+                <div id="mp-host-options" class="hidden">
+                    <label class="mp-field">Number of players
+                        <select id="mp-count"><option>2</option><option>3</option><option>4</option></select>
+                    </label>
+                    <div class="setup-option">
+                        <strong>Unit progression</strong>
+                        <label><input type="radio" name="mp-progression" value="zero" checked> All level 0</label>
+                        <label><input type="radio" name="mp-progression" value="random"> Random levels 1-3</label>
+                    </div>
+                    <button id="btn-mp-start" class="btn btn-primary" disabled>▶ Start Game</button>
+                </div>
+                <div id="mp-guest-wait" class="hidden mp-status">Waiting for the host to start the game…</div>
+            </div>
+            <div id="mp-status" class="mp-status"></div>
+            <button id="btn-mp-back" class="btn btn-secondary">⬅ Back</button>
+        </div>
+    </div>
+
+    <!-- Player Selection Modal -->
+    <div id="player-selection-modal" class="modal-overlay">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h3>Choose Players</h3>
+            </div>
+            <div class="modal-body">
+                Select which players will participate in this game. Choose at least two.
+                <div id="player-selection-list" class="player-selection-list">
+                    <label class="player-selection-option" style="border-color: var(--p1-red);">
+                        <input type="checkbox" data-player-id="1" checked>
+                        <span style="color: var(--p1-red);">🔴 Red</span>
+                    </label>
+                    <label class="player-selection-option" style="border-color: var(--p2-blue);">
+                        <input type="checkbox" data-player-id="2" checked>
+                        <span style="color: var(--p2-blue);">🔵 Blue</span>
+                    </label>
+                    <label class="player-selection-option" style="border-color: var(--p3-green);">
+                        <input type="checkbox" data-player-id="3" checked>
+                        <span style="color: var(--p3-green);">🟢 Green</span>
+                    </label>
+                    <label class="player-selection-option" style="border-color: var(--p4-yellow);">
+                        <input type="checkbox" data-player-id="4" checked>
+                        <span style="color: var(--p4-yellow);">🟡 Yellow</span>
+                    </label>
+                </div>
+                <div id="player-selection-error" style="color: #f87171; font-size: 0.8rem; min-height: 1.1rem;"></div>
+                <div class="setup-option">
+                    <strong>Unit progression</strong>
+                    <label><input type="radio" name="progression-mode" value="zero" checked> All level 0</label>
+                    <label><input type="radio" name="progression-mode" value="random"> Random levels 1-3</label>
+                </div>
+                <div class="setup-option">
+                    <strong>Starting position</strong>
+                    <label><input type="radio" name="setup-mode" value="random" checked> Default random corner positions</label>
+                    <label><input type="radio" name="setup-mode" value="custom"> Custom placement</label>
+                </div>
+                <div class="saved-setup-section">
+                    <strong>Saved custom setups</strong>
+                    <div id="saved-setup-list" class="saved-setup-list"></div>
+                </div>
+            </div>
+            <button id="btn-start-selected-game" class="btn btn-primary">Start Game</button>
+        </div>
+    </div>
+
+    <!-- Custom Starting Position Modal -->
+    <div id="custom-setup-modal" class="modal-overlay hidden">
+        <div class="modal-card custom-setup-card">
+            <div class="modal-header">
+                <h3>Place Starting Pieces</h3>
+            </div>
+            <div class="modal-body custom-setup-body">
+                <div id="custom-setup-status">Select a player and piece, then right-click a board square to place it. Same-player pieces stack.</div>
+                <div id="custom-player-list" class="custom-player-list"></div>
+                <div class="custom-piece-list">
+                    <button class="custom-piece-option selected" data-piece-type="p">Pawn</button>
+                    <button class="custom-piece-option" data-piece-type="r">Tower</button>
+                    <button class="custom-piece-option" data-piece-type="n">Horse</button>
+                    <button class="custom-piece-option" data-piece-type="b">Bishop</button>
+                    <button class="custom-piece-option" data-piece-type="q">Queen</button>
+                    <button class="custom-piece-option" data-piece-type="k">King</button>
+                </div>
+                <div id="custom-setup-board" class="custom-setup-board"></div>
+            </div>
+            <div class="custom-setup-actions">
+                <button id="btn-reset-custom-setup" class="btn btn-secondary">Reset</button>
+                <button id="btn-save-custom-setup" class="btn btn-secondary">Save Setup</button>
+                <button id="btn-load-custom-setup" class="btn btn-secondary">Load Setup</button>
+                <button id="btn-confirm-custom-setup" class="btn btn-primary">Confirm Placement</button>
+            </div>
+            <div id="custom-saved-setup-list" class="saved-setup-list"></div>
+        </div>
+    </div>
+
+    <!-- Rules Modal -->
+    <div id="rules-modal" class="modal-overlay hidden">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h3>PaxNonCerta Rules</h3>
+                <button id="btn-close-rules" class="btn btn-secondary" style="padding: 0.2rem 0.5rem;">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="rule-box">
+                    <h4>1. 16x16 Quadrupled Board</h4>
+                    4 players spawn in each of the 4 corners: Red (Top-Left), Blue (Top-Right), Green (Bottom-Right), Yellow (Bottom-Left).
+                </div>
+                <div class="rule-box">
+                    <h4>2. Movement Rules & Unmovable Towers</h4>
+                    • <strong>Movable pieces</strong> (Pawn, Knight, Bishop, Queen, King) move <strong>exactly 1 square</strong> in any direction.<br>
+                    • <strong>Towers (Rooks) are UNMOVABLE</strong>: They serve as stationary defenses/obstacles that cannot move, but enemy pieces can target them to attack!
+                </div>
+                <div class="rule-box">
+                    <h4>3. Multi-Piece Turns</h4>
+                    During your turn, you can move <strong>0, 1, or MULTIPLE</strong> of your movable surviving pieces at once!
+                </div>
+                <div class="rule-box">
+                    <h4>4. Same-Player Merging</h4>
+                    Move onto one of your own pieces to choose <strong>Merge</strong> or <strong>Cancel</strong>. Accepted merges commit the involved pieces for the turn, and multiple pieces can merge into one stack. If two or more same-player pieces plan the same destination, they merge automatically. Towers take priority; otherwise the result follows Tower, Pawn, Horse, Bishop, King, Queen precedence. Same-player paths never intercept each other. Left-click a piece or stack to open its unit list; selecting no individual unit selects the whole stack. Select a movable unit, then right-click an adjacent square to unmerge it. Selecting another same-player piece prompts for transfer confirmation.
+                </div>
+                <div class="rule-box">
+                    <h4>5. Simultaneous Resolution & Collisions</h4>
+                    All players submit their secret plans. All moves happen at the exact same instant.<br>
+                    Resolution follows this order: pieces leave their original squares, opposing swaps are resolved first, same-player pieces merge on each planned square, then every remaining opposing stack on that square fights.<br>
+                    • <strong>Target Collision:</strong> 2+ pieces move into the same square.<br>
+                    • <strong>Swap Interception:</strong> Piece A moves to S2 while Piece B moves to S1 (crossing paths).<br>
+                    • <strong>Stationary Collision:</strong> Piece A moves into Piece B which stayed stationary.<br>
+                    Same-player candidates at a destination become one stack before fighting. All opposing stacks then fight using weighted odds: counted units provide stack strength, a side receives a 20% bonus for each counted unit it has above the strongest opposing stack, and the final strength is curved to make larger stacks more influential without removing randomness. King, Queen, Bishop morale, experience, armour, and stationary Tower bonuses are also shown on the battle cards.
+                </div>
+                <div class="rule-box">
+                    <h4>6. Sieges</h4>
+                    A Tower attack requires at least one attacking Pawn and starts a siege instead of an immediate battle. The attacker remains on its source square as a catapult, with an assault timer of 3 rounds; when it reaches 0, select the catapult and target the adjacent Tower to launch. The besieged Tower displays a 6-round timer and crossed marks. After the Tower timer reaches 0, it loses one random non-Tower unit each round. Defenders cannot move, transfer, merge, or unmerge units out of the Tower square while it is under siege. The full defending non-Tower stack may instead choose <strong>Sally Out</strong> at any time to battle the catapult; casualties disappear, surviving defenders return inside the Tower, and the siege continues if the catapult survives. Counterattacks exclude the Tower.
+                </div>
+                <div class="rule-box">
+                    <h4>7. King Elimination</h4>
+                    Capturing a player's King eliminates that player. Last remaining player wins!
+                </div>
+            </div>
+            <button id="btn-ack-rules" class="btn btn-primary">Got It!</button>
+        </div>
+    </div>
+
+    <!-- Victory Modal -->
+    <div id="gameover-modal" class="modal-overlay hidden">
+        <div class="modal-card" style="text-align: center;">
+            <div style="font-size: 3rem; margin-bottom: 0.5rem;">🏆</div>
+            <h2 id="gameover-title" style="font-size: 1.5rem;">Player Wins!</h2>
+            <p id="gameover-desc" style="font-size: 0.9rem; color: var(--text-muted);">All opponent Kings have been eliminated!</p>
+            <button id="btn-gameover-restart" class="btn btn-primary" style="margin-top: 1rem; padding: 0.75rem;">Play Again</button>
+        </div>
+    </div>
+
+    <script src="lib/peerjs.min.js"></script>
+    <script src="js/constants.js"></script>
+    <script src="js/models.js"></script>
+    <script src="js/game-state.js"></script>
+    <script src="js/setup-utils.js"></script>
+    <script src="js/board-utils.js"></script>
+    <script src="js/battle-rules.js"></script>
+    <script src="js/combat-log.js"></script>
+    <script src="js/board-renderer.js"></script>
+    <script src="js/setup-renderer.js"></script>
+    <script src="js/battle-ui.js"></script>
+    <script src="js/status-ui.js"></script>
+    <script src="js/movement-rules.js"></script>
+    <script src="js/siege-rules.js"></script>
+    <script src="js/retreat-rules.js"></script>
+    <script src="js/planning-rules.js"></script>
+    <script src="js/plan-renderer.js"></script>
+    <script src="js/board-setup.js"></script>
+    <script src="js/setup-actions.js"></script>
+    <script src="js/game.js"></script>
+    <script src="js/multiplayer.js"></script>
+    <!--
+        The game is intentionally loaded with classic scripts instead of a build step.
+        Open this HTML file directly in a browser to run it.
+    -->
+</body>
+</html>
