@@ -45,14 +45,26 @@
         const btnMergeConfirm = document.getElementById('btn-merge-confirm');
         const btnMergeCancel = document.getElementById('btn-merge-cancel');
         const pieceTooltip = document.getElementById('piece-tooltip');
+        const pieceTooltipUnits = document.getElementById('piece-tooltip-units');
+        document.getElementById('btn-close-piece-tooltip').addEventListener('click', () => {
+            pieceTooltip.classList.add('hidden');
+        });
         const battleLogEl = document.getElementById('battle-log');
+        const combatLogPanel = document.getElementById('combat-log-panel');
+        const btnToggleCombatLog = document.getElementById('btn-toggle-combat-log');
         const roundTagEl = document.getElementById('round-tag');
         const dayClockEl = document.getElementById('day-clock');
         const dayClockHandEl = document.getElementById('day-clock-hand');
-        const dayClockLabelEl = document.getElementById('day-clock-label');
         const hintTextEl = document.getElementById('hint-text');
-        const retreatTableEl = document.getElementById('retreat-table');
         let battleTargetSquare = null;
+        btnToggleCombatLog.addEventListener('click', () => {
+            const isExpanded = btnToggleCombatLog.getAttribute('aria-expanded') === 'true';
+            combatLogPanel.classList.toggle('hidden', isExpanded);
+            document.querySelector('main').classList.toggle('combat-log-hidden', isExpanded);
+            btnToggleCombatLog.setAttribute('aria-expanded', String(!isExpanded));
+            btnToggleCombatLog.setAttribute('aria-label', `${isExpanded ? 'Show' : 'Hide'} combat log`);
+            btnToggleCombatLog.innerText = isExpanded ? '📜 Show Log' : '📜 Hide Log';
+        });
         bindBoardInteractions();
 
         function updateBattleConnector() {
@@ -321,7 +333,10 @@
 
             const pendingIndices = getPendingHeldIndices(piece, gameState.plans[gameState.turnIndex]);
             const contents = getPieceContents(piece);
-            pieceTooltip.innerHTML = contents
+            const siege = getSiegeAtSquare([r, c]);
+            btnCancelSiege.hidden = !getSiegeForAttacker(piece.id);
+            btnSallyOut.hidden = !(siege && contents.some(unit => getUnitType(unit) !== 'r'));
+            pieceTooltipUnits.innerHTML = contents
                 .map((unit, index) => `<span class="held-piece-entry">
                     <button class="held-piece-button ${PLAYERS[piece.player - 1].class}${pendingIndices.has(index) ? ' pending' : ''}${unit.type === 'r' ? ' disabled' : ''}" data-held-index="${index}" title="${getUnitName(unit)}: ${unit.type === 'r' ? 'Tower' : 'Unmerge'}" aria-label="${getUnitName(unit)}">${PIECE_SVGS[unit.type]}</button>
                     <span class="unit-levels" title="${getUnitName(unit)} · Experience ${getUnitLevel(unit, 'experience')} · Armour ${getUnitLevel(unit, 'armour')}">
@@ -339,8 +354,9 @@
                 });
             }
             pieceTooltip.classList.remove('hidden');
-            pieceTooltip.style.left = `${Math.min(square.offsetLeft + square.offsetWidth, boardEl.clientWidth - pieceTooltip.offsetWidth - 8)}px`;
-            pieceTooltip.style.top = `${Math.max(8, square.offsetTop - pieceTooltip.offsetHeight - 4)}px`;
+            pieceTooltip.style.left = `${Math.max(8, Math.min(square.offsetLeft + square.offsetWidth, boardEl.clientWidth - pieceTooltip.offsetWidth - 8))}px`;
+            const above = square.offsetTop - pieceTooltip.offsetHeight - 4;
+            pieceTooltip.style.top = `${above >= 8 ? above : Math.min(square.offsetTop + square.offsetHeight + 4, boardEl.clientHeight - pieceTooltip.offsetHeight - 8)}px`;
 
             pieceTooltip.querySelectorAll('.held-piece-button').forEach(button => {
                 button.addEventListener('click', (event) => {
@@ -407,6 +423,7 @@
                 });
                 gameState.selectedSquare = null;
                 gameState.validMoves = [];
+                pieceTooltip.classList.add('hidden');
                 hintTextEl.innerText = "Cancel Siege queued for this round.";
                 renderBoard();
                 return;
@@ -418,6 +435,7 @@
             logAction(`🏳️ Player ${gameState.turnIndex + 1} cancelled a siege at ${coordsToNotation(...siege.towerSquare)}.`);
             gameState.selectedSquare = null;
             gameState.validMoves = [];
+            pieceTooltip.classList.add('hidden');
             hintTextEl.innerText = "Siege cancelled.";
             renderBoard();
         };
@@ -462,6 +480,9 @@
             const clickedPiece = gameState.board[r][c];
             if (clickedPiece && !isEliminatedPiece(clickedPiece) && clickedPiece.player === activePlayerId) {
                 selectBoardPiece(r, c, clickedPiece);
+                if (gameState.selectedSquare && (getSiegeForAttacker(clickedPiece.id) || getSiegeAtSquare([r, c]))) {
+                    showPieceTooltip(r, c, boardEl.children[r * 16 + c]);
+                }
             } else {
                 gameState.selectedSquare = null;
                 gameState.selectedHeldPiece = null;
@@ -681,6 +702,7 @@
             });
             gameState.selectedSquare = null;
             gameState.validMoves = [];
+            pieceTooltip.classList.add('hidden');
             hintTextEl.innerText = "Sally Out queued for this round.";
             renderBoard();
         });
@@ -762,6 +784,7 @@
                 return;
             }
             if (gameState.phase !== 'PLANNING') return;
+            pieceTooltip.classList.add('hidden');
             advanceTurn();
         });
 

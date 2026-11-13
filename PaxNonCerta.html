@@ -16,76 +16,42 @@
                 <div class="brand-subtitle">16x16 Local Hotseat Battlefield</div>
             </div>
         </div>
-        <div style="display: flex; gap: 0.5rem;">
+        <div class="header-actions">
+            <button id="btn-toggle-combat-log" class="btn btn-secondary log-toggle" type="button"
+                aria-controls="combat-log-panel" aria-expanded="false" aria-label="Show combat log">📜 Show Log</button>
             <button id="btn-menu" class="btn btn-secondary">🏠 Menu</button>
             <button id="btn-rules" class="btn btn-secondary">📖 Rules</button>
             <button id="btn-restart" class="btn btn-primary">🔄 New Game</button>
         </div>
     </header>
 
-    <main>
-        <!-- Left Sidebar: Player Status & Actions -->
-        <section class="panel">
-            <div class="panel-title">Current Phase</div>
-            
-            <div style="background-color: #0b1120; padding: 0.85rem; border-radius: 10px; border: 1px solid var(--border-color);">
-                <div id="active-player-name" style="font-weight: 700; font-size: 1.1rem; color: var(--p1-red);">
-                    Red (Player 1) Turn
-                </div>
-                <div id="active-player-desc" style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.2rem;">
-                    Plan moves for any surviving pieces.
-                </div>
-            </div>
-
-            <div class="day-cycle">
-                <div id="day-clock" class="day-clock" role="img" aria-label="Round 1: Dawn">
-                    <span class="day-clock-divider day-clock-divider-horizontal" aria-hidden="true"></span>
-                    <span class="day-clock-divider day-clock-divider-vertical" aria-hidden="true"></span>
-                    <span id="day-clock-hand" class="day-clock-hand" aria-hidden="true"></span>
-                    <span class="day-clock-center" aria-hidden="true">☀</span>
-                </div>
-                <div>
-                    <div class="panel-title">Time of Day</div>
-                    <div id="day-clock-label" class="day-clock-label">Dawn</div>
-                    <div class="day-clock-caption">Advances each round</div>
-                </div>
-            </div>
-
-            <div style="display: flex; flex-direction: column; gap: 0.5rem;">
-                <button id="btn-finish-plan" class="btn btn-primary" style="padding: 0.75rem;">🔒 Lock In Plan</button>
-                <button id="btn-clear-plan" class="btn btn-secondary">❌ Reset Turn Plans</button>
-                <button id="btn-cancel-siege" class="btn btn-secondary" hidden>🏹 Cancel Selected Siege</button>
-                <button id="btn-sally-out" class="btn btn-amber" hidden>⚔️ Sally Out</button>
-                <button id="btn-force-skip" class="btn btn-amber hidden">⏭️ Skip Disconnected Players</button>
-            </div>
-
-            <div class="panel-title" style="margin-top: 0.5rem;">Players Status</div>
-            
-            <div id="card-p1" class="player-card player-p1 active-turn">
-                <span>🔴 Player 1 (Red)</span>
-                <span id="badge-p1" class="status-badge" style="background: rgba(239, 68, 68, 0.2); color: var(--p1-red);">Planning</span>
-            </div>
-            
-            <div id="card-p2" class="player-card player-p2">
-                <span>🔵 Player 2 (Blue)</span>
-                <span id="badge-p2" class="status-badge" style="background: rgba(59, 130, 246, 0.2); color: var(--p2-blue);">Waiting</span>
-            </div>
-
-            <div id="card-p3" class="player-card player-p3">
-                <span>🟢 Player 3 (Green)</span>
-                <span id="badge-p3" class="status-badge" style="background: rgba(16, 185, 129, 0.2); color: var(--p3-green);">Waiting</span>
-            </div>
-
-            <div id="card-p4" class="player-card player-p4">
-                <span>🟡 Player 4 (Yellow)</span>
-                <span id="badge-p4" class="status-badge" style="background: rgba(234, 179, 8, 0.2); color: var(--p4-yellow);">Waiting</span>
-            </div>
-            <div class="panel-title">Retreating Units</div>
-            <div id="retreat-table" class="retreat-table"></div>
-        </section>
-
-        <!-- Center: Board Container -->
+    <main class="combat-log-hidden">
+        <!-- Board and player status -->
         <section class="board-container">
+            <div class="board-dashboard">
+                <div class="board-edge">
+                    <div id="card-p1" class="player-card player-p1 active-turn">
+                        <span class="player-name">🔴 Player 1 (Red)</span>
+                        <span id="badge-p1" class="status-badge">Planning</span>
+                        <div id="retreat-p1" class="retreat-row" aria-label="Red retreating units"></div>
+                    </div>
+                    <div class="board-top-controls">
+                        <div id="day-clock" class="day-clock" role="img" aria-label="Round 1: Dawn">
+                            <span class="day-clock-divider day-clock-divider-horizontal" aria-hidden="true"></span>
+                            <span class="day-clock-divider day-clock-divider-vertical" aria-hidden="true"></span>
+                            <span id="day-clock-hand" class="day-clock-hand" aria-hidden="true"></span>
+                            <span class="day-clock-center" aria-hidden="true">☀</span>
+                        </div>
+                        <div class="siege-actions">
+                            <button id="btn-force-skip" class="btn btn-amber hidden">⏭️ Skip Disconnected Players</button>
+                        </div>
+                    </div>
+                    <div id="card-p2" class="player-card player-p2">
+                        <span class="player-name">🔵 Player 2 (Blue)</span>
+                        <span id="badge-p2" class="status-badge">Waiting</span>
+                        <div id="retreat-p2" class="retreat-row" aria-label="Blue retreating units"></div>
+                    </div>
+                </div>
             <div class="board-wrapper">
                 <div id="board" class="chessboard"></div>
                 <svg id="plan-arrows" class="plan-arrows" viewBox="0 0 16 16" aria-hidden="true"></svg>
@@ -140,10 +106,42 @@
                     </div>
                 </div>
 
-                <div id="piece-tooltip" class="piece-tooltip hidden"></div>
+                <div id="piece-tooltip" class="piece-tooltip hidden">
+                    <button id="btn-cancel-siege" class="btn btn-secondary" hidden>🏹 Cancel Siege</button>
+                    <button id="btn-sally-out" class="btn btn-amber" hidden>⚔️ Sally Out</button>
+                    <div id="piece-tooltip-units" class="piece-tooltip-units"></div>
+                    <button id="btn-close-piece-tooltip" class="piece-tooltip-close" type="button" aria-label="Close unit list">×</button>
+                </div>
+            </div>
+                <div class="board-edge">
+                    <div id="card-p4" class="player-card player-p4">
+                        <span class="player-name">🟡 Player 4 (Yellow)</span>
+                        <span id="badge-p4" class="status-badge">Waiting</span>
+                        <div id="retreat-p4" class="retreat-row" aria-label="Yellow retreating units"></div>
+                    </div>
+                    <div class="plan-actions">
+                        <button id="btn-finish-plan" class="plan-action plan-commit" type="button" aria-label="Commit Plans">
+                            <span id="commit-plan-icon" class="plan-action-icon" aria-hidden="true">✓</span>
+                            <span id="commit-plan-label">Commit Plans</span>
+                        </button>
+                        <button id="btn-clear-plan" class="plan-action plan-reset" type="button" aria-label="Reset Plans">
+                            <span class="plan-action-icon" aria-hidden="true">✕</span>
+                            <span>Reset Plans</span>
+                        </button>
+                    </div>
+                    <div id="card-p3" class="player-card player-p3">
+                        <span class="player-name">🟢 Player 3 (Green)</span>
+                        <span id="badge-p3" class="status-badge">Waiting</span>
+                        <div id="retreat-p3" class="retreat-row" aria-label="Green retreating units"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="phase-status" aria-live="polite">
+                <span id="active-player-name">Red (Player 1) Turn</span>
+                <span id="active-player-desc">Plan moves for any surviving pieces.</span>
             </div>
             <div id="hint-text" style="margin-top: 0.5rem; font-size: 0.8rem; color: var(--text-muted); text-align: center;">
-                Click or tap a piece to select it, then an adjacent square to queue a 1-step move. Right-click or long-press a piece to open its unit list. You can move multiple pieces per turn!
+                Click or tap a piece to select it, then an adjacent square to queue a 1-step move. Right-click or long-press for its unit list; click a catapult or besieged tower for siege actions.
             </div>
             <div style="font-size: 0.7rem; color: var(--text-muted); text-align: center; margin-top: 0.25rem;">
                 <span style="color: #22c55e;">━ Green: move</span> ·
@@ -154,7 +152,7 @@
         </section>
 
         <!-- Right Sidebar: Log & Round -->
-        <section class="panel">
+        <section id="combat-log-panel" class="panel hidden">
             <div style="display: flex; align-items: center; justify-content: space-between;">
                 <div class="panel-title">📜 Combat Log</div>
                 <div id="round-tag" style="font-size: 0.75rem; font-weight: 700; color: #6366f1;">Round 1</div>
@@ -315,7 +313,7 @@
                 </div>
                 <div class="rule-box">
                     <h4>4. Same-Player Merging</h4>
-                    Move onto one of your own pieces to choose <strong>Merge</strong> or <strong>Cancel</strong>. Accepted merges commit the involved pieces for the turn, and multiple pieces can merge into one stack. If two or more same-player pieces plan the same destination, they merge automatically. Towers take priority; otherwise the result follows Tower, Pawn, Horse, Bishop, King, Queen precedence. Same-player paths never intercept each other. Click or tap a piece to select the whole stack. Right-click or long-press it to open its unit list. Select a movable unit, then click or tap an adjacent square to unmerge it. Choosing an adjacent same-player piece prompts for transfer confirmation.
+                    Move onto one of your own pieces to choose <strong>Merge</strong> or <strong>Cancel</strong>. Accepted merges commit the involved pieces for the turn, and multiple pieces can merge into one stack. If two or more same-player pieces plan the same destination, they merge automatically. Towers take priority; otherwise the result follows Tower, Pawn, Horse, Bishop, King, Queen precedence. Same-player paths never intercept each other. Click or tap a piece to select the whole stack. Right-click or long-press it to open its unit list; clicking a catapult or besieged Tower also opens the list and its siege action. Select a movable unit, then click or tap an adjacent square to unmerge it. Choosing an adjacent same-player piece prompts for transfer confirmation.
                 </div>
                 <div class="rule-box">
                     <h4>5. Simultaneous Resolution & Collisions</h4>

@@ -57,7 +57,9 @@ chess rules.
 - A collision overlay shows the involved candidate stacks visually.
 - Collision resolution requires **Start Battle** before the weighted roll and
   **Proceed** after the winner is shown.
-- The right panel shows the combat log and round number.
+- The right panel shows the combat log and round number. Hiding the combat log
+  removes its entire panel and gives the board more space; showing it again
+  preserves all log entries.
 - The Rules button opens the in-game rules modal.
 - New Game and Play Again reopen player selection.
 - A privacy overlay asks players to pass the device between planning turns.
@@ -76,8 +78,8 @@ chess rules.
 - The game is local hotseat play on one device.
 - Players plan moves privately, one player at a time.
 - The active player may plan zero, one, or multiple moves.
-- A player locks in their plan with **Lock In Plan**.
-- **Reset Turn Plans** clears only the active player's current plans and
+- A player locks in their plan with **Commit Plans**.
+- **Reset Plans** clears only the active player's current plans and
   planning selections.
 - The next non-eliminated player receives the device.
 - Once every non-eliminated player has planned, all plans resolve simultaneously.

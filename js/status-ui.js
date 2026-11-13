@@ -1,5 +1,5 @@
 function renderRetreatTable() {
-    retreatTableEl.innerHTML = gameState.retreating.map((entries, index) => {
+    gameState.retreating.forEach((entries, index) => {
         const player = PLAYERS[index];
         const text = entries.length
             ? entries.map(entry => `
@@ -10,8 +10,9 @@ function renderRetreatTable() {
                 </div>
             `).join('')
             : '<span class="retreat-empty">—</span>';
-        return `<div class="retreat-row"><span class="retreat-player" style="color:${player.color}">P${player.id}</span><span class="retreat-entries">${text}</span></div>`;
-    }).join('');
+        document.getElementById(`retreat-p${player.id}`).innerHTML =
+            `<span class="retreat-flag" aria-hidden="true">⚑</span><span class="retreat-entries">${text}</span>`;
+    });
 }
 
 function showPrivacyOverlay() {
@@ -35,7 +36,6 @@ function showPrivacyOverlay() {
 function updateRoundDisplay() {
     const timeOfDay = ['Dawn', 'Day', 'Dusk', 'Night'][(gameState.round - 1) % 4];
     roundTagEl.innerText = `Round ${gameState.round}`;
-    dayClockLabelEl.innerText = timeOfDay;
     dayClockEl.setAttribute('aria-label', `Round ${gameState.round}: ${timeOfDay}`);
     dayClockHandEl.style.transform = `rotate(${(gameState.round - 1) * 90}deg)`;
 }

@@ -63,28 +63,7 @@ function bindBoardInteractions() {
 
 function renderBoard() {
     boardEl.innerHTML = '';
-    const activePlayerId = gameState.turnIndex + 1;
     const currentPlans = gameState.plans[gameState.turnIndex];
-    const selectedPiece = gameState.selectedSquare
-        ? gameState.board[gameState.selectedSquare[0]][gameState.selectedSquare[1]]
-        : null;
-    btnCancelSiege.hidden = !(
-        gameState.phase === 'PLANNING' &&
-        selectedPiece &&
-        getSiegeForAttacker(selectedPiece.id) &&
-        selectedPiece.player === activePlayerId
-    );
-    const selectedSiege = gameState.selectedSquare
-        ? getSiegeAtSquare(gameState.selectedSquare)
-        : null;
-    btnSallyOut.hidden = !(
-        gameState.phase === 'PLANNING' &&
-        selectedPiece &&
-        selectedSiege &&
-        selectedPiece.player === activePlayerId &&
-        getPieceContents(selectedPiece).some(unit => getUnitType(unit) !== 'r') &&
-        selectedPiece.player === gameState.board[selectedSiege.towerSquare[0]][selectedSiege.towerSquare[1]]?.player
-    );
 
     for (let r = 0; r < 16; r++) {
         for (let c = 0; c < 16; c++) {

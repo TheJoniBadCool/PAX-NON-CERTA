@@ -311,7 +311,7 @@ const Multiplayer = (() => {
         btnGameOverRestart.classList.remove('hidden');
         updatePlayerCards();
         renderBoard();
-        hintTextEl.innerText = 'Plan your moves, then press Lock In Plan. The round resolves when everyone has locked in.';
+        hintTextEl.innerText = 'Plan your moves, then press Commit Plans. The round resolves when everyone has committed.';
         syncNow();
     }
 
@@ -359,7 +359,7 @@ const Multiplayer = (() => {
         gameState.lockedPieceIds = new Set();
         gameState.phase = gameState.eliminated[m.myIndex] ? 'COMMITTED' : 'PLANNING';
         clearTransientUi();
-        hintTextEl.innerText = 'New round! Plan your moves, then press Lock In Plan.';
+        hintTextEl.innerText = 'New round! Plan your moves, then press Commit Plans.';
         updatePlayerCards();
         renderBoard();
     }
@@ -713,7 +713,7 @@ const Multiplayer = (() => {
                 .map(player => player.name);
             return `Plan locked. Waiting for: ${waiting.join(', ') || '…'}. You can unlock to change it.`;
         }
-        return 'Plan moves for your pieces, then Lock In Plan.';
+        return 'Plan moves for your pieces, then Commit Plans.';
     }
 
     function refreshControls() {
@@ -725,9 +725,10 @@ const Multiplayer = (() => {
         const me = m.myIndex;
         const canAct = ['PLANNING', 'COMMITTED'].includes(gameState.phase) && !gameState.eliminated[me];
         btnFinishPlan.disabled = !canAct;
-        btnFinishPlan.innerText = gameState.phase === 'COMMITTED' && !gameState.eliminated[me]
-            ? '🔓 Unlock Plan'
-            : '🔒 Lock In Plan';
+        const canUnlock = gameState.phase === 'COMMITTED' && !gameState.eliminated[me];
+        $('commit-plan-icon').innerText = canUnlock ? '↶' : '✓';
+        $('commit-plan-label').innerText = canUnlock ? 'Unlock Plan' : 'Commit Plans';
+        btnFinishPlan.setAttribute('aria-label', canUnlock ? 'Unlock Plan' : 'Commit Plans');
         btnRestart.innerText = isHost() ? '🔄 Restart Room' : '🚪 Leave';
         activePlayerDescEl.innerText = describePhase();
         btnForceSkip.classList.toggle('hidden', !(isHost() && ['PLANNING', 'COMMITTED'].includes(gameState.phase) &&
