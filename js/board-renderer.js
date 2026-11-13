@@ -140,6 +140,19 @@ function renderBoard() {
                     square.appendChild(countBadge);
                 }
                 square.appendChild(pieceWrapper);
+                if (isTowerPiece(piece)) {
+                    const gate = getTowerGate(piece);
+                    if (gate) {
+                        const direction = gate[0] === -1 ? 'north' : gate[0] === 1 ? 'south' :
+                            gate[1] === -1 ? 'west' : 'east';
+                        const arrow = document.createElement('span');
+                        arrow.className = `tower-gate tower-gate-${direction}`;
+                        arrow.innerText = { north: '▲', south: '▼', west: '◀', east: '▶' }[direction];
+                        arrow.title = `Tower gate: ${direction} (${coordsToNotation(r + gate[0], c + gate[1])})`;
+                        arrow.setAttribute('aria-label', arrow.title);
+                        square.appendChild(arrow);
+                    }
+                }
                 if (attackerSiege) {
                     const attacker = attackerSiege.attackers.find(entry => entry.pieceId === piece.id);
                     const attackerTimer = document.createElement('div');

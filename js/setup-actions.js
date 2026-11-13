@@ -5,6 +5,12 @@ function placeCustomPiece(row, column) {
         customSetupStatusEl.innerText = 'Different players cannot share a square.';
         return;
     }
+    if (gameState.customSetupType === 'r' && gameState.customSetupBoard.some((boardRow, r) =>
+        boardRow.some((piece, c) => isTowerPiece(piece) &&
+            Math.max(Math.abs(r - row), Math.abs(c - column)) < 3))) {
+        customSetupStatusEl.innerText = 'Towers must have at least two squares between them, including diagonally.';
+        return;
+    }
     if (gameState.customSetupType === 'k' &&
         gameState.customSetupBoard.flat().some(piece =>
             piece && piece.player === player && getPieceContents(piece).some(unit => unit.type === 'k'))) {
@@ -60,6 +66,10 @@ function deleteSavedSetup(index) {
 }
 
 function saveCustomSetup() {
+    if (!towersAreSpaced(gameState.customSetupBoard)) {
+        customSetupStatusEl.innerText = 'Towers must have at least two squares between them, including diagonally.';
+        return;
+    }
     const setup = {
         name: '',
         activePlayers: [...gameState.activePlayers],

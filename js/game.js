@@ -304,6 +304,10 @@
         }
 
         function confirmCustomSetup() {
+            if (!towersAreSpaced(gameState.customSetupBoard)) {
+                customSetupStatusEl.innerText = 'Towers must have at least two squares between them, including diagonally. Reset this setup to replace the towers.';
+                return;
+            }
             const missingKing = gameState.activePlayers.findIndex((isSelected, index) =>
                 isSelected && !gameState.customSetupBoard.flat().some(piece =>
                     piece && piece.player === index + 1 && getPieceContents(piece).some(unit => unit.type === 'k')));
@@ -379,7 +383,8 @@
                     };
                     pieceTooltip.classList.add('hidden');
                     gameState.selectedSquare = [r, c];
-                    gameState.validMoves = getAdjacentMoves(r, c);
+                    gameState.validMoves = getAdjacentMoves(r, c)
+                        .filter(destination => isTowerGateMove([r, c], destination));
                     hintTextEl.innerText = `Selected a held ${getPieceLabel(gameState.selectedHeldPiece.type)}. Pick an adjacent square or your piece to transfer it.`;
                     renderBoard();
                 });

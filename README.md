@@ -8,6 +8,8 @@ Open `PaxNonCerta.html` directly in a modern browser. No installation, server, o
 
 Click or tap to select pieces and their destinations, or to place pieces in custom setup. Right-click a piece to open its unit list; on mobile, hold it for half a second instead. Clicking your catapult or besieged tower also opens that list, with its siege action alongside.
 
+Each tower has one randomly chosen, in-bounds cardinal gate, shown by an arrow. Merges, transfers, unmerges, and sieges must use that adjacent square. Towers must start at least two squares apart in every direction, including diagonals; older custom setups that violate this rule must be reset before playing.
+
 Each player's corner card shows their status and retreating units. Use **Commit Plans** or **Reset Plans** below the board. The time-of-day clock above the board advances once per completed round, cycling through dawn, day, dusk, and night. It is decorative and does not affect gameplay.
 
 ## Game modes

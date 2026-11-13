@@ -15,8 +15,20 @@ function generatePlayerPieces(playerIdx) {
         [coords[i], coords[j]] = [coords[j], coords[i]];
     }
 
+    const towerPairs = [];
+    coords.forEach((first, index) => {
+        coords.slice(index + 1).forEach(second => {
+            if (Math.max(Math.abs(first[0] - second[0]), Math.abs(first[1] - second[1])) >= 3) {
+                towerPairs.push([first, second]);
+            }
+        });
+    });
+    const towers = towerPairs[Math.floor(Math.random() * towerPairs.length)];
+    const otherCoords = coords.filter(coord => !towers.includes(coord));
+    const placements = [otherCoords[0], otherCoords[1], ...towers, ...otherCoords.slice(2, 10)];
+
     const typeCounts = {};
-    coords.slice(0, 12).forEach((coord, idx) => {
+    placements.forEach((coord, idx) => {
         const [r, c] = coord;
         const pieceId = `p${playerIdx + 1}_${idx}_${Date.now()}_${Math.random()}`;
         const pieceType = pieceTypes[idx];
@@ -33,17 +45,24 @@ function generatePlayerPieces(playerIdx) {
 
 function initBoard(customBoard = null) {
     if (customBoard) {
-        gameState.board = customBoard;
+        gameState.board = cloneSetupBoard(customBoard);
         gameState.eliminated = gameState.activePlayers.map(isSelected => !isSelected);
-        return;
-    }
-    gameState.board = Array(16).fill(null).map(() => Array(16).fill(null));
-    gameState.eliminated = gameState.activePlayers.map(isSelected => !isSelected);
-    for (let p = 0; p < 4; p++) {
-        if (gameState.activePlayers[p]) {
-            generatePlayerPieces(p);
+    } else {
+        gameState.board = Array(16).fill(null).map(() => Array(16).fill(null));
+        gameState.eliminated = gameState.activePlayers.map(isSelected => !isSelected);
+        for (let p = 0; p < 4; p++) {
+            if (gameState.activePlayers[p]) {
+                generatePlayerPieces(p);
+            }
         }
     }
+    gameState.board.forEach((row, r) => row.forEach((piece, c) => {
+        if (!isTowerPiece(piece)) return;
+        const directions = [[-1, 0], [1, 0], [0, -1], [0, 1]]
+            .filter(([dr, dc]) => r + dr >= 0 && r + dr < 16 && c + dc >= 0 && c + dc < 16);
+        const tower = getPieceContents(piece).find(unit => getUnitType(unit) === 'r');
+        tower.gate = directions[Math.floor(Math.random() * directions.length)];
+    }));
 }
 
 function createEmptySetupBoard() {

@@ -7,7 +7,7 @@ function getReadySiegeAssault(piece, from, to) {
         siege.towerSquare[0] === to[0] && siege.towerSquare[1] === to[1] &&
         tower && isTowerPiece(tower) &&
         getPieceContents(piece).some(unit => getUnitType(unit) === 'p') &&
-        isAdjacentSquare(from, to)
+        isAdjacentSquare(from, to) && isTowerGateMove(from, to)
         ? siege
         : null;
 }
@@ -109,7 +109,15 @@ function applySiegeRoundProgress() {
 
 function rejectInvalidTowerAttacks(allIntendedMoves) {
     allIntendedMoves.forEach(move => {
-        if (move.invalid || move.siegeAssault || move.sallyOut) return;
+        if (move.invalid) return;
+        const stationarySiegeAction = !move.isUnmerge && (move.sallyOut || move.siegeCancel) &&
+            move.from[0] === move.to[0] && move.from[1] === move.to[1];
+        if (!stationarySiegeAction && !isTowerGateMove(move.from, move.to)) {
+            move.invalid = true;
+            logAction(`🚫 Player ${move.player}'s action was rejected: Towers can only be entered or exited through their gate.`);
+            return;
+        }
+        if (move.siegeAssault || move.sallyOut || move.siegeCancel) return;
         if (move.isUnmerge && getSiegeAtSquare(move.from)) {
             move.invalid = true;
             logAction(`🚫 The defending Tower at ${coordsToNotation(...move.from)} is under siege; ordinary extraction is not allowed.`);

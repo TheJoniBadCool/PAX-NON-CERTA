@@ -54,6 +54,7 @@ function getValidMovesForPiece(r, c) {
         const tr = r + dr;
         const tc = c + dc;
         if (tr >= 0 && tr < 16 && tc >= 0 && tc < 16) {
+            if (!isTowerGateMove([r, c], [tr, tc])) continue;
             const targetPiece = gameState.board[tr][tc];
             if (targetPiece && targetPiece.player !== activePlayerId &&
                 isTowerPiece(targetPiece) &&

@@ -257,6 +257,9 @@ const Multiplayer = (() => {
             if (Math.max(Math.abs(entry.from[0] - entry.to[0]), Math.abs(entry.from[1] - entry.to[1])) > 1) return null;
             const piece = gameState.board[entry.from[0]][entry.from[1]];
             if (!piece || piece.player !== index + 1) return null;
+            const stationarySiegeAction = !entry.isUnmerge && (entry.sallyOut || entry.siegeCancel) &&
+                entry.from[0] === entry.to[0] && entry.from[1] === entry.to[1];
+            if (!stationarySiegeAction && !isTowerGateMove(entry.from, entry.to)) return null;
             const clean = { ...entry };
             if (entry.isUnmerge) {
                 if (entry.sourcePieceId !== piece.id) return null;

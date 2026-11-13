@@ -129,7 +129,12 @@ chess rules.
   participate in a battle.
 - Towers are stationary obstacles/defenses:
   - They cannot be selected for ordinary movement.
-  - They can be targeted by enemy moves.
+  - At the start of each game, each Tower receives one random in-bounds cardinal
+    gate, indicated by an arrow on the Tower. It keeps this gate when captured.
+  - Enemy sieges and friendly merges, transfers, and unmerges must use the
+    adjacent gate square. Diagonal and other adjacent squares cannot be used.
+  - Towers start with at least two intervening squares in every direction,
+    including diagonals; custom placement and saved setups must obey this rule.
   - They cannot be selected as held pieces for unmerge or transfer.
 - A friendly occupied adjacent square may be selected as a merge destination.
 - A friendly piece that is already committed to a merge cannot be selected again
