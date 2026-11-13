@@ -46,10 +46,12 @@ chess rules.
 - The board is rendered as a 16x16 grid with alternating square colors.
 - Corner spawn zones are visually highlighted.
 - Pieces use inline SVG artwork and player-specific colors.
+- On even-numbered rounds, every piece containing a Pawn displays a `zzz` marker
+  to indicate that the Pawn is resting.
 - Pieces belonging to an eliminated player are rendered gray across the board,
   movement animations, and battle displays.
 - The left panel shows the current phase, current player, planning controls,
-  and player statuses.
+  player statuses, and a four-part time-of-day clock.
 - The center panel shows the board, planned-move arrows, movement animation,
   collision overlay, merge prompt, and piece tooltip.
 - A collision overlay shows the involved candidate stacks visually.
@@ -86,6 +88,9 @@ chess rules.
   - Blue: held-piece transfer.
 - Planned movement is animated before resolution.
 - The round number increments after resolution.
+- The clock is decorative and advances once per completed round, cycling through
+  Dawn, Day, Dusk, and Night. Round 1 starts at Dawn; starting a new game resets
+  the clock. Multiplayer clients display the host's current round.
 
 ### Movement rules
 
@@ -101,6 +106,20 @@ chess rules.
   - King (`k`)
 - Piece-specific chess movement, check, checkmate, castling, en passant, and
   promotion are not implemented.
+- Pawns may move on odd-numbered rounds only, beginning with round 1.
+  On even-numbered rounds, a Pawn cannot move, merge, unmerge, transfer, or
+  initiate an attack, except that a ready siege attacker may launch its
+  previously deployed assault.
+- A stack containing any Pawn may move as a whole only on odd-numbered rounds.
+  On even-numbered rounds, its non-Pawn units may still be unmerged and moved
+  individually, including by transfer or attack; its Pawn units cannot be
+  moved separately. Such a stack may receive non-Pawn units and remains a
+  valid target for enemy attacks. A whole stack may also Sally Out from a
+  besieged Tower on an even-numbered round.
+- Starting a new siege is allowed only on odd-numbered rounds. This restriction
+  does not prevent launching a ready siege assault or performing a Sally Out.
+- This rule applies to both hotseat and multiplayer games. Other non-Pawn
+  pieces and stacks retain their normal movement on every round.
 - Every unit has a stable human-readable name based on its player and type:
   - Player A: `Ap1`-`Ap4`, `Aq1`, `Ar1`-`Ar2`, `An1`-`An2`, `Ab1`-`Ab2`, `Ak1`.
   - Players B, C, and D use the same numbering with their player prefix.
@@ -115,6 +134,18 @@ chess rules.
   during the same planning turn.
 - A planned ordinary move from a piece can be replaced by selecting that piece
   and choosing another destination.
+- On even-numbered rounds, reject a whole-stack action if the source stack
+  contains a Pawn. Reject any unmerge or transfer of a Pawn unit, but allow a
+  non-Pawn unit inside a Pawn-containing stack to move independently.
+- On even-numbered rounds, a Pawn or Pawn-containing stack may still be a
+  stationary friendly merge/transfer target or an enemy attack target.
+- On even-numbered rounds, allow an existing siege attacker to assault only
+  when its timer is 0 and it targets the besieged Tower. Allow a valid Sally
+  Out from a besieged Tower regardless of round parity.
+- Reject any new siege deployment on an even-numbered round.
+- The multiplayer host must reject plans that violate the even-round pawn
+  restrictions, while accepting only valid ready siege assaults and Sally Outs
+  as exceptions, even if a client submits them directly.
 - Same-player pieces may pass through or otherwise plan around each other; paths
   are not blocked by friendly planned movement.
 - A move into an enemy piece is allowed and becomes a collision/capture decision

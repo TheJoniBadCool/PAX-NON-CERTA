@@ -1,3 +1,27 @@
+function getReadySiegeAssault(piece, from, to) {
+    const siege = getSiegeForAttacker(piece.id);
+    const attacker = getSiegeAttacker(piece.id);
+    const tower = gameState.board[to[0]][to[1]];
+    return siege && attacker && attacker.timer === 0 &&
+        attacker.sourceSquare[0] === from[0] && attacker.sourceSquare[1] === from[1] &&
+        siege.towerSquare[0] === to[0] && siege.towerSquare[1] === to[1] &&
+        tower && isTowerPiece(tower) &&
+        getPieceContents(piece).some(unit => getUnitType(unit) === 'p') &&
+        isAdjacentSquare(from, to)
+        ? siege
+        : null;
+}
+
+function isValidSallyOutPlan(piece, from, to, player, siegeId) {
+    const siege = gameState.sieges.find(entry => entry.id === siegeId);
+    const tower = siege && gameState.board[siege.towerSquare[0]][siege.towerSquare[1]];
+    return Boolean(siege && tower && tower.id === piece.id &&
+        piece.player === player &&
+        from[0] === siege.towerSquare[0] && from[1] === siege.towerSquare[1] &&
+        to[0] === siege.towerSquare[0] && to[1] === siege.towerSquare[1] &&
+        getPieceContents(piece).some(unit => getUnitType(unit) !== 'r'));
+}
+
 function registerSiegeStarts(allIntendedMoves) {
     allIntendedMoves.forEach(move => {
         if (move.invalid || move.isUnmerge || move.siegeAssault) return;
@@ -9,6 +33,11 @@ function registerSiegeStarts(allIntendedMoves) {
         }
         if (!getPieceContents(source).some(unit => getUnitType(unit) === 'p')) {
             move.invalid = true;
+            return;
+        }
+        if (isPawnRestTurn()) {
+            move.invalid = true;
+            logAction(`🚫 Player ${move.player}'s siege deployment was rejected: new sieges may only be started on odd-numbered rounds.`);
             return;
         }
 

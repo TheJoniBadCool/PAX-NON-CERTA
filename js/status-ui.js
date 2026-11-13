@@ -27,7 +27,17 @@ function showPrivacyOverlay() {
     privacyIcon.style.background = player.color;
     privacyTitle.innerText = `Pass Device to ${player.name} (Player ${player.id})`;
     privacyDesc.innerText = `Previous player locked in their plans. Please hand the device to ${player.name}.`;
+    updatePlayerCards();
+    renderBoard();
     privacyOverlay.classList.remove('hidden');
+}
+
+function updateRoundDisplay() {
+    const timeOfDay = ['Dawn', 'Day', 'Dusk', 'Night'][(gameState.round - 1) % 4];
+    roundTagEl.innerText = `Round ${gameState.round}`;
+    dayClockLabelEl.innerText = timeOfDay;
+    dayClockEl.setAttribute('aria-label', `Round ${gameState.round}: ${timeOfDay}`);
+    dayClockHandEl.style.transform = `rotate(${(gameState.round - 1) * 90}deg)`;
 }
 
 function updatePlayerCards() {
@@ -53,7 +63,7 @@ function updatePlayerCards() {
             badge.style.color = PLAYERS[i].color;
         } else {
             card.className = `player-card player-p${i + 1}`;
-            badge.innerText = gameState.plans[i].length > 0 ? 'Planned' : 'Waiting';
+            badge.innerText = 'Hidden';
             badge.style.background = 'rgba(255,255,255,0.05)';
             badge.style.color = 'var(--text-muted)';
         }
@@ -65,5 +75,5 @@ function updatePlayerCards() {
         : `${p.name} (Player ${p.id}) Turn`;
     activePlayerNameEl.style.color = p.color;
     if (gameState.multiplayer) Multiplayer.refreshControls();
-    roundTagEl.innerText = `Round ${gameState.round}`;
+    updateRoundDisplay();
 }

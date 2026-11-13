@@ -47,6 +47,9 @@
         const pieceTooltip = document.getElementById('piece-tooltip');
         const battleLogEl = document.getElementById('battle-log');
         const roundTagEl = document.getElementById('round-tag');
+        const dayClockEl = document.getElementById('day-clock');
+        const dayClockHandEl = document.getElementById('day-clock-hand');
+        const dayClockLabelEl = document.getElementById('day-clock-label');
         const hintTextEl = document.getElementById('hint-text');
         const retreatTableEl = document.getElementById('retreat-table');
         let battleTargetSquare = null;
@@ -327,6 +330,14 @@
                     ${contents.some(other => other.type === 'r') && getUnitLevel(unit, 'armour') < 3 ? `<button class="armor-upgrade-button" data-armour-index="${index}" title="Upgrade armour">🛡️</button>` : ''}
                 </span>`)
                 .join('');
+            if (isPawnRestTurn()) {
+                pieceTooltip.querySelectorAll('.held-piece-button').forEach((button, index) => {
+                    if (!canMoveHeldUnit(contents[index])) {
+                        button.disabled = true;
+                        button.title = `${getUnitName(contents[index])}: Pawns cannot move on even-numbered rounds`;
+                    }
+                });
+            }
             pieceTooltip.classList.remove('hidden');
             pieceTooltip.style.left = `${Math.min(square.offsetLeft + square.offsetWidth, boardEl.clientWidth - pieceTooltip.offsetWidth - 8)}px`;
             pieceTooltip.style.top = `${Math.max(8, square.offsetTop - pieceTooltip.offsetHeight - 4)}px`;
@@ -336,8 +347,10 @@
                     event.stopPropagation();
                     const heldIndex = Number(button.dataset.heldIndex);
                     const heldUnit = getPieceContents(piece)[heldIndex];
-                    if (heldUnit.type === 'r') {
-                        hintTextEl.innerText = "Towers are unmovable and cannot be unmerged or transferred.";
+                    if (heldUnit.type === 'r' || !canMoveHeldUnit(heldUnit)) {
+                        hintTextEl.innerText = heldUnit.type === 'r'
+                            ? "Towers are unmovable and cannot be unmerged or transferred."
+                            : "Pawns cannot be moved, unmerged, or transferred on even-numbered rounds.";
                         return;
                     }
                     gameState.selectedHeldPiece = {
@@ -482,7 +495,11 @@
             gameState.validMoves = getValidMovesForPiece(r, c);
             gameState.selectedHeldPiece = null;
             hintTextEl.innerText = clickedPiece.type === 'r'
-                ? "Towers (Rooks) are unmovable. Right-click or long-press to choose a movable unit from the stack."
+                ? (isPawnRestTurn() && pieceContainsPawn(clickedPiece)
+                    ? "Towers are unmovable. On even-numbered rounds, non-pawn units in this stack may still be moved separately."
+                    : "Towers (Rooks) are unmovable. Right-click or long-press to choose a movable unit from the stack.")
+                : !canMoveWholePiece(clickedPiece)
+                ? "Pawn-containing stacks cannot move on even-numbered rounds. Right-click or long-press to move a non-pawn unit separately."
                 : `Selected ${PLAYERS[clickedPiece.player - 1].name} ${getPieceLabel(clickedPiece.type)} at ${coordsToNotation(r, c)}. Click or tap an adjacent target to act; right-click or long-press for the unit list.`;
             renderBoard();
         }
@@ -505,6 +522,12 @@
                     gameState.selectedSquare = null;
                     gameState.validMoves = [];
                     renderBoard();
+                    return;
+                }
+                const heldUnit = getPieceContents(sourcePiece).find(unit =>
+                    unit.id === gameState.selectedHeldPiece.unitId);
+                if (!heldUnit || !canMoveHeldUnit(heldUnit)) {
+                    hintTextEl.innerText = "Pawns cannot be moved, unmerged, or transferred on even-numbered rounds.";
                     return;
                 }
                 if (getSiegeAtSquare(gameState.selectedHeldPiece.from)) {
@@ -551,15 +574,11 @@
                 renderBoard();
                 return;
             }
-
             const attackerSiege = getSiegeForAttacker(pieceToMove.id);
             if (attackerSiege &&
                 attackerSiege.towerSquare[0] === r &&
                 attackerSiege.towerSquare[1] === c) {
-                const attacker = getSiegeAttacker(pieceToMove.id);
-                if (attacker && attacker.timer === 0 &&
-                    targetPiece && isTowerPiece(targetPiece) &&
-                    getPieceContents(pieceToMove).some(unit => getUnitType(unit) === 'p')) {
+                if (getReadySiegeAssault(pieceToMove, [fromR, fromC], [r, c])) {
                     gameState.plans[gameState.turnIndex] = currentPlans.filter(move =>
                         move.pieceId !== pieceToMove.id
                     );
@@ -578,6 +597,11 @@
                     renderBoard();
                     return;
                 }
+            }
+
+            if (!canMoveWholePiece(pieceToMove)) {
+                hintTextEl.innerText = "Pawn-containing stacks cannot move, merge, or attack on even-numbered rounds, except for a ready siege assault.";
+                return;
             }
 
             if (targetPiece && targetPiece.player !== activePlayerId &&
@@ -663,6 +687,16 @@
 
         btnMergeConfirm.addEventListener('click', () => {
             if (gameState.pendingTransfer) {
+                const { sourcePiece, heldPiece } = gameState.pendingTransfer;
+                const unit = getPieceContents(sourcePiece).find(candidate => candidate.id === heldPiece.unitId);
+                if (!unit || !canMoveHeldUnit(unit)) {
+                    hintTextEl.innerText = "Pawns cannot be moved, unmerged, or transferred on even-numbered rounds.";
+                    gameState.pendingTransfer = null;
+                    mergePrompt.classList.add('hidden');
+                    btnMergeConfirm.innerText = 'Merge';
+                    renderBoard();
+                    return;
+                }
                 queueUnmergePlan(
                     gameState.pendingTransfer.sourcePiece,
                     gameState.pendingTransfer.heldPiece,
@@ -680,6 +714,14 @@
             if (!gameState.pendingMerge || gameState.phase !== 'PLANNING') return;
 
             const { from, to, movingPiece, targetPiece } = gameState.pendingMerge;
+            if (!canMoveWholePiece(movingPiece)) {
+                hintTextEl.innerText = "Pawn-containing stacks cannot move or merge on even-numbered rounds.";
+                gameState.pendingMerge = null;
+                mergePrompt.classList.add('hidden');
+                btnMergeConfirm.innerText = 'Merge';
+                renderBoard();
+                return;
+            }
             const currentPlans = gameState.plans[gameState.turnIndex];
             gameState.plans[gameState.turnIndex] = currentPlans.filter(move =>
                 move.pieceId !== movingPiece.id && move.pieceId !== targetPiece.id
@@ -1031,6 +1073,7 @@
             gameState.plans = [[], [], [], []];
             applySiegeRoundProgress();
             gameState.round++;
+            updateRoundDisplay();
             processRetreatsAtRoundStart();
 
             // Count active players remaining

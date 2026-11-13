@@ -260,8 +260,18 @@ const Multiplayer = (() => {
             const clean = { ...entry };
             if (entry.isUnmerge) {
                 if (entry.sourcePieceId !== piece.id) return null;
+                const heldUnit = getPieceContents(piece).find(unit => unit.id === entry.unitId);
+                if (!heldUnit || !canMoveHeldUnit(heldUnit)) return null;
             } else {
                 if (entry.pieceId !== piece.id) return null;
+                if (entry.siegeAssault) {
+                    const siege = getReadySiegeAssault(piece, entry.from, entry.to);
+                    if (!siege || entry.siegeId !== siege.id) return null;
+                } else if (entry.sallyOut) {
+                    if (!isValidSallyOutPlan(piece, entry.from, entry.to, index + 1, entry.siegeId)) return null;
+                } else if (!entry.siegeCancel && !canMoveWholePiece(piece)) {
+                    return null;
+                }
                 clean.pieceType = piece.type;
                 clean.contents = getPieceContents(piece);
             }

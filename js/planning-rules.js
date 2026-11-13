@@ -6,15 +6,9 @@ function getPendingHeldIndices(piece, currentPlans) {
 
 function getAllPlannedMoves() {
     const moves = [];
-    if (gameState.multiplayer) {
-        if (gameState.phase === 'RESOLVING') return moves;
-        gameState.plans[gameState.turnIndex].forEach(move =>
-            moves.push({ ...move, player: gameState.turnIndex + 1 }));
-        return moves;
-    }
-    gameState.plans.forEach((playerMoves, playerIndex) => {
-        playerMoves.forEach(move => moves.push({ ...move, player: playerIndex + 1 }));
-    });
+    if (gameState.multiplayer && gameState.phase === 'RESOLVING') return moves;
+    gameState.plans[gameState.turnIndex].forEach(move =>
+        moves.push({ ...move, player: gameState.turnIndex + 1 }));
     return moves;
 }
 

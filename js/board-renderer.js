@@ -145,6 +145,13 @@ function renderBoard() {
                 pieceWrapper.title = getPieceContents(piece).map(getUnitName).join(', ');
                 const attackerSiege = getSiegeForAttacker(piece.id);
                 pieceWrapper.innerHTML = attackerSiege ? PIECE_SVGS.catapult : PIECE_SVGS[piece.type];
+                if (isPawnRestTurn() && pieceContainsPawn(piece)) {
+                    const pawnRestBadge = document.createElement('div');
+                    pawnRestBadge.className = 'pawn-rest-badge';
+                    pawnRestBadge.innerText = 'zzz';
+                    pawnRestBadge.title = 'Pawn resting this round';
+                    square.appendChild(pawnRestBadge);
+                }
                 const pieceCount = getPieceContents(piece).length;
                 if (pieceCount > 1) {
                     const countBadge = document.createElement('div');

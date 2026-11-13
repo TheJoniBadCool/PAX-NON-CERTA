@@ -8,11 +8,13 @@ Open `PaxNonCerta.html` directly in a modern browser. No installation, server, o
 
 Click or tap to select pieces and their destinations, or to place pieces in custom setup. Right-click a piece to open its unit list; on mobile, hold it for half a second instead.
 
+The time-of-day clock advances once per completed round, cycling through dawn, day, dusk, and night. It is decorative and does not affect gameplay.
+
 ## Game modes
 
 The main menu offers:
 
-- **Hotseat** – one device, pass it between players (unchanged).
+- **Hotseat** – one device, pass it between players; each player sees only their own planned moves.
 - **Multiplayer** – one browser per player. One player creates a room and shares the 5-letter code; others join, the creator picks 2–4 players and starts. Everyone plans in secret and locks in (a locked plan can be unlocked until the last player locks in); then the round resolves: move, merge, battles. Cancel Siege is a planned action resolved with movement, and a simultaneous Sally Out then fights the cancelling catapult.
   - The creator's browser is the authority (dice, resolution, battle buttons) and must stay open. Others can reload and rejoin with the same code.
   - Uses PeerJS (WebRTC) with the free public PeerJS signalling server; no backend to run. Very strict corporate networks may block WebRTC.

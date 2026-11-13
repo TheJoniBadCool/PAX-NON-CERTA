@@ -9,6 +9,22 @@ function getAdjacentMoves(r, c) {
         .filter(([tr, tc]) => tr >= 0 && tr < 16 && tc >= 0 && tc < 16);
 }
 
+function isPawnRestTurn() {
+    return gameState.round % 2 === 0;
+}
+
+function pieceContainsPawn(piece) {
+    return getPieceContents(piece).some(unit => getUnitType(unit) === 'p');
+}
+
+function canMoveWholePiece(piece) {
+    return !isPawnRestTurn() || !pieceContainsPawn(piece);
+}
+
+function canMoveHeldUnit(unit) {
+    return !isPawnRestTurn() || getUnitType(unit) !== 'p';
+}
+
 // Universal 1-Square Movement Rule in all 8 directions
 function getValidMovesForPiece(r, c) {
     const piece = gameState.board[r][c];
@@ -17,15 +33,11 @@ function getValidMovesForPiece(r, c) {
 
     const attackerSiege = getSiegeForAttacker(piece.id);
     if (attackerSiege) {
-        const attacker = getSiegeAttacker(piece.id);
-        const tower = gameState.board[attackerSiege.towerSquare[0]][attackerSiege.towerSquare[1]];
-        return attacker && attacker.timer === 0 &&
-            tower && isTowerPiece(tower) &&
-            getPieceContents(piece).some(unit => getUnitType(unit) === 'p') &&
-            isAdjacentSquare([r, c], attackerSiege.towerSquare)
+        return getReadySiegeAssault(piece, [r, c], attackerSiege.towerSquare)
             ? [attackerSiege.towerSquare]
             : [];
     }
+    if (!canMoveWholePiece(piece)) return [];
     if (piece.type === 'r') return []; // Towers and stacks led by Towers are immovable.
 
     const moves = [];
