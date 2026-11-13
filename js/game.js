@@ -50,6 +50,7 @@
         const hintTextEl = document.getElementById('hint-text');
         const retreatTableEl = document.getElementById('retreat-table');
         let battleTargetSquare = null;
+        bindBoardInteractions();
 
         function updateBattleConnector() {
             if (!battleTargetSquare || clashOverlay.classList.contains('hidden')) return;
@@ -279,7 +280,7 @@
             gameState.nextUnitSequence = [1, 1, 1, 1];
             gameState.customSetupPlayer = selectedPlayers.findIndex(Boolean);
             gameState.customSetupType = 'p';
-            customSetupStatusEl.innerText = 'Select a player and piece, then right-click a board square to place it. Every selected player needs exactly one King.';
+            customSetupStatusEl.innerText = 'Select a player and piece, then click or tap a board square to place it. Every selected player needs exactly one King.';
             renderCustomSetupPlayers();
             renderCustomSetupBoard();
             playerSelectionModal.classList.add('hidden');
@@ -355,41 +356,6 @@
                 });
 
             });
-            btnCancelSiege.onclick = () => {
-                if (gameState.phase !== 'PLANNING' || !gameState.selectedSquare) return;
-                const selectedPiece = gameState.board[gameState.selectedSquare[0]][gameState.selectedSquare[1]];
-                const siege = selectedPiece ? getSiegeForAttacker(selectedPiece.id) : null;
-                const attacker = siege && siege.attackers.find(entry => entry.pieceId === selectedPiece.id);
-                if (!siege || !attacker || attacker.player !== gameState.turnIndex + 1) return;
-                if (gameState.multiplayer) {
-                    // Planned like any other action: the catapult stack does nothing else this round.
-                    const plans = gameState.plans[gameState.turnIndex];
-                    gameState.plans[gameState.turnIndex] = plans.filter(move => move.pieceId !== selectedPiece.id);
-                    gameState.plans[gameState.turnIndex].push({
-                        pieceId: selectedPiece.id,
-                        from: [...gameState.selectedSquare],
-                        to: [...gameState.selectedSquare],
-                        pieceType: selectedPiece.type,
-                        contents: getPieceContents(selectedPiece),
-                        siegeCancel: true,
-                        siegeId: siege.id
-                    });
-                    gameState.selectedSquare = null;
-                    gameState.validMoves = [];
-                    hintTextEl.innerText = "Cancel Siege queued for this round.";
-                    renderBoard();
-                    return;
-                }
-                siege.attackers = siege.attackers.filter(entry => entry.pieceId !== selectedPiece.id);
-                if (!siege.attackers.length) {
-                    gameState.sieges = gameState.sieges.filter(entry => entry.id !== siege.id);
-                }
-                logAction(`🏳️ Player ${gameState.turnIndex + 1} cancelled a siege at ${coordsToNotation(...siege.towerSquare)}.`);
-                gameState.selectedSquare = null;
-                gameState.validMoves = [];
-                hintTextEl.innerText = "Siege cancelled.";
-                renderBoard();
-            };
             pieceTooltip.querySelectorAll('.armor-upgrade-button').forEach(button => {
                 button.addEventListener('click', (event) => {
                     event.stopPropagation();
@@ -406,6 +372,42 @@
                 });
             });
         }
+
+        btnCancelSiege.onclick = () => {
+            if (gameState.phase !== 'PLANNING' || !gameState.selectedSquare) return;
+            const selectedPiece = gameState.board[gameState.selectedSquare[0]][gameState.selectedSquare[1]];
+            const siege = selectedPiece ? getSiegeForAttacker(selectedPiece.id) : null;
+            const attacker = siege && siege.attackers.find(entry => entry.pieceId === selectedPiece.id);
+            if (!siege || !attacker || attacker.player !== gameState.turnIndex + 1) return;
+            if (gameState.multiplayer) {
+                // Planned like any other action: the catapult stack does nothing else this round.
+                const plans = gameState.plans[gameState.turnIndex];
+                gameState.plans[gameState.turnIndex] = plans.filter(move => move.pieceId !== selectedPiece.id);
+                gameState.plans[gameState.turnIndex].push({
+                    pieceId: selectedPiece.id,
+                    from: [...gameState.selectedSquare],
+                    to: [...gameState.selectedSquare],
+                    pieceType: selectedPiece.type,
+                    contents: getPieceContents(selectedPiece),
+                    siegeCancel: true,
+                    siegeId: siege.id
+                });
+                gameState.selectedSquare = null;
+                gameState.validMoves = [];
+                hintTextEl.innerText = "Cancel Siege queued for this round.";
+                renderBoard();
+                return;
+            }
+            siege.attackers = siege.attackers.filter(entry => entry.pieceId !== selectedPiece.id);
+            if (!siege.attackers.length) {
+                gameState.sieges = gameState.sieges.filter(entry => entry.id !== siege.id);
+            }
+            logAction(`🏳️ Player ${gameState.turnIndex + 1} cancelled a siege at ${coordsToNotation(...siege.towerSquare)}.`);
+            gameState.selectedSquare = null;
+            gameState.validMoves = [];
+            hintTextEl.innerText = "Siege cancelled.";
+            renderBoard();
+        };
 
         function queueUnmergePlan(sourcePiece, heldPiece, destination, targetPiece) {
             const currentPlans = gameState.plans[gameState.turnIndex];
@@ -438,33 +440,51 @@
 
         function handleSquareClick(r, c) {
             if (gameState.phase !== 'PLANNING') return;
+            pieceTooltip.classList.add('hidden');
+            if (gameState.selectedSquare && gameState.validMoves.some(m => m[0] === r && m[1] === c)) {
+                handleSquareAction(r, c);
+                return;
+            }
             const activePlayerId = gameState.turnIndex + 1;
             const clickedPiece = gameState.board[r][c];
             if (clickedPiece && !isEliminatedPiece(clickedPiece) && clickedPiece.player === activePlayerId) {
-                if (gameState.lockedPieceIds.has(clickedPiece.id)) {
-                    hintTextEl.innerText = "This piece is already committed to a merge for this turn.";
-                    gameState.selectedSquare = null;
-                    gameState.validMoves = [];
-                    renderBoard();
-                    return;
-                }
-
-                gameState.selectedSquare = [r, c];
-                gameState.validMoves = getValidMovesForPiece(r, c);
-                gameState.selectedHeldPiece = null;
-                hintTextEl.innerText = clickedPiece.type === 'r'
-                    ? "Towers (Rooks) are unmovable fortresses. Choose a movable unit from the list if this is a stack."
-                    : `Selected ${PLAYERS[activePlayerId - 1].name} ${getPieceLabel(clickedPiece.type)} at ${coordsToNotation(r, c)}. Right-click an adjacent target square to act.`;
-                showPieceTooltip(r, c, boardEl.children[r * 16 + c]);
-                renderBoard();
+                selectBoardPiece(r, c, clickedPiece);
             } else {
-                pieceTooltip.classList.add('hidden');
                 gameState.selectedSquare = null;
                 gameState.selectedHeldPiece = null;
                 gameState.validMoves = [];
-                hintTextEl.innerText = "Left-click one of your pieces to select it, then right-click a target square to act.";
+                hintTextEl.innerText = "Click or tap one of your pieces to select it, then an adjacent target square to act.";
                 renderBoard();
             }
+        }
+
+        function handleSquarePopup(r, c) {
+            if (gameState.phase !== 'PLANNING') return;
+            const piece = gameState.board[r][c];
+            if (!piece || isEliminatedPiece(piece) || piece.player !== gameState.turnIndex + 1) return;
+            selectBoardPiece(r, c, piece);
+            if (!gameState.selectedSquare) return;
+            showPieceTooltip(r, c, boardEl.children[r * 16 + c]);
+        }
+
+        function selectBoardPiece(r, c, clickedPiece) {
+            if (gameState.lockedPieceIds.has(clickedPiece.id)) {
+                pieceTooltip.classList.add('hidden');
+                hintTextEl.innerText = "This piece is already committed to a merge for this turn.";
+                gameState.selectedSquare = null;
+                gameState.selectedHeldPiece = null;
+                gameState.validMoves = [];
+                renderBoard();
+                return;
+            }
+
+            gameState.selectedSquare = [r, c];
+            gameState.validMoves = getValidMovesForPiece(r, c);
+            gameState.selectedHeldPiece = null;
+            hintTextEl.innerText = clickedPiece.type === 'r'
+                ? "Towers (Rooks) are unmovable. Right-click or long-press to choose a movable unit from the stack."
+                : `Selected ${PLAYERS[clickedPiece.player - 1].name} ${getPieceLabel(clickedPiece.type)} at ${coordsToNotation(r, c)}. Click or tap an adjacent target to act; right-click or long-press for the unit list.`;
+            renderBoard();
         }
 
         function handleSquareAction(r, c) {
@@ -474,7 +494,7 @@
             const activePlayerId = gameState.turnIndex + 1;
             const clickedPiece = gameState.board[r][c];
             if (!gameState.selectedSquare || !gameState.validMoves.some(m => m[0] === r && m[1] === c)) {
-                hintTextEl.innerText = "Select one of your pieces with left-click before right-clicking a target square.";
+                hintTextEl.innerText = "Click or tap one of your pieces before choosing an adjacent target square.";
                 return;
             }
 

@@ -6,6 +6,8 @@ PaxNonCerta is a 4-player simultaneous chess battlefield.
 
 Open `PaxNonCerta.html` directly in a modern browser. No installation, server, or build step is required.
 
+Click or tap to select pieces and their destinations, or to place pieces in custom setup. Right-click a piece to open its unit list; on mobile, hold it for half a second instead.
+
 ## Game modes
 
 The main menu offers:

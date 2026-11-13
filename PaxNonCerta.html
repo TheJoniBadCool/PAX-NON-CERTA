@@ -129,7 +129,7 @@
                 <div id="piece-tooltip" class="piece-tooltip hidden"></div>
             </div>
             <div id="hint-text" style="margin-top: 0.5rem; font-size: 0.8rem; color: var(--text-muted); text-align: center;">
-                Left-click a piece to select it or choose a unit from its list, then right-click an adjacent square to queue a 1-step move. You can move multiple pieces per turn!
+                Click or tap a piece to select it, then an adjacent square to queue a 1-step move. Right-click or long-press a piece to open its unit list. You can move multiple pieces per turn!
             </div>
             <div style="font-size: 0.7rem; color: var(--text-muted); text-align: center; margin-top: 0.25rem;">
                 <span style="color: #22c55e;">━ Green: move</span> ·
@@ -254,7 +254,7 @@
                 <h3>Place Starting Pieces</h3>
             </div>
             <div class="modal-body custom-setup-body">
-                <div id="custom-setup-status">Select a player and piece, then right-click a board square to place it. Same-player pieces stack.</div>
+                <div id="custom-setup-status">Select a player and piece, then click or tap a board square to place it. Same-player pieces stack.</div>
                 <div id="custom-player-list" class="custom-player-list"></div>
                 <div class="custom-piece-list">
                     <button class="custom-piece-option selected" data-piece-type="p">Pawn</button>
@@ -299,7 +299,7 @@
                 </div>
                 <div class="rule-box">
                     <h4>4. Same-Player Merging</h4>
-                    Move onto one of your own pieces to choose <strong>Merge</strong> or <strong>Cancel</strong>. Accepted merges commit the involved pieces for the turn, and multiple pieces can merge into one stack. If two or more same-player pieces plan the same destination, they merge automatically. Towers take priority; otherwise the result follows Tower, Pawn, Horse, Bishop, King, Queen precedence. Same-player paths never intercept each other. Left-click a piece or stack to open its unit list; selecting no individual unit selects the whole stack. Select a movable unit, then right-click an adjacent square to unmerge it. Selecting another same-player piece prompts for transfer confirmation.
+                    Move onto one of your own pieces to choose <strong>Merge</strong> or <strong>Cancel</strong>. Accepted merges commit the involved pieces for the turn, and multiple pieces can merge into one stack. If two or more same-player pieces plan the same destination, they merge automatically. Towers take priority; otherwise the result follows Tower, Pawn, Horse, Bishop, King, Queen precedence. Same-player paths never intercept each other. Click or tap a piece to select the whole stack. Right-click or long-press it to open its unit list. Select a movable unit, then click or tap an adjacent square to unmerge it. Choosing an adjacent same-player piece prompts for transfer confirmation.
                 </div>
                 <div class="rule-box">
                     <h4>5. Simultaneous Resolution & Collisions</h4>

@@ -217,6 +217,9 @@
         }
 
         .square {
+            -webkit-touch-callout: none;
+            user-select: none;
+            touch-action: manipulation;
             position: relative;
             display: flex;
             align-items: center;

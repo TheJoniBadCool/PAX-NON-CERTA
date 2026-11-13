@@ -32,10 +32,8 @@
                             square.appendChild(badge);
                         }
                     }
-                    square.addEventListener('contextmenu', event => {
-                        event.preventDefault();
-                        placeCustomPiece(r, c);
-                    });
+                    square.addEventListener('click', () => placeCustomPiece(r, c));
+                    square.addEventListener('contextmenu', event => event.preventDefault());
                     customSetupBoardEl.appendChild(square);
                 }
             }

@@ -1,3 +1,66 @@
+function bindBoardInteractions() {
+    let pressTimer = null;
+    let press = null;
+    let suppressClick = false;
+
+    function cancelPress() {
+        clearTimeout(pressTimer);
+        pressTimer = null;
+        press = null;
+    }
+
+    function getSquare(event) {
+        const square = event.target.closest('.square');
+        return square && square.parentElement === boardEl ? square : null;
+    }
+
+    boardEl.addEventListener('click', event => {
+        if (suppressClick) {
+            event.preventDefault();
+            event.stopPropagation();
+            return;
+        }
+        const square = getSquare(event);
+        if (!square) return;
+        const index = Array.prototype.indexOf.call(boardEl.children, square);
+        handleSquareClick(Math.floor(index / 16), index % 16);
+    });
+    boardEl.addEventListener('contextmenu', event => {
+        event.preventDefault();
+        const square = getSquare(event);
+        if (!square || suppressClick) return;
+        if (press) suppressClick = true;
+        cancelPress();
+        const index = Array.prototype.indexOf.call(boardEl.children, square);
+        handleSquarePopup(Math.floor(index / 16), index % 16);
+    });
+    boardEl.addEventListener('pointerdown', event => {
+        const alreadyPressing = press !== null;
+        cancelPress();
+        suppressClick = false;
+        if (alreadyPressing || !event.isPrimary || event.button !== 0 ||
+            !['touch', 'pen'].includes(event.pointerType)) return;
+        const square = getSquare(event);
+        if (!square) return;
+        const index = Array.prototype.indexOf.call(boardEl.children, square);
+        press = { id: event.pointerId, x: event.clientX, y: event.clientY };
+        pressTimer = setTimeout(() => {
+            suppressClick = true;
+            handleSquarePopup(Math.floor(index / 16), index % 16);
+        }, 500);
+    });
+    window.addEventListener('pointermove', event => {
+        if (press && press.id === event.pointerId &&
+            Math.hypot(event.clientX - press.x, event.clientY - press.y) > 10) {
+            suppressClick = true;
+            cancelPress();
+        }
+    });
+    ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(type => {
+        window.addEventListener(type, cancelPress);
+    });
+}
+
 function renderBoard() {
     boardEl.innerHTML = '';
     const activePlayerId = gameState.turnIndex + 1;
@@ -101,11 +164,6 @@ function renderBoard() {
                 }
             }
 
-            square.addEventListener('click', () => handleSquareClick(r, c));
-            square.addEventListener('contextmenu', (event) => {
-                event.preventDefault();
-                handleSquareAction(r, c);
-            });
             boardEl.appendChild(square);
         }
     }

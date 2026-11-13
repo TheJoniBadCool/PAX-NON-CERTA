@@ -30,7 +30,7 @@ chess rules.
 - Unselected players have no pieces and are marked eliminated from the start.
 - Setup can use either the default random corner positions or custom placement.
 - Custom placement is performed by one player before the game starts:
-  - The user selects a player and piece type, then right-clicks board squares to place pieces.
+  - The user selects a player and piece type, then clicks or taps board squares to place pieces.
   - Each selected player must have exactly one King.
   - All non-King piece types and quantities are unrestricted.
   - Same-player pieces may intentionally start in stacks.
@@ -59,14 +59,15 @@ chess rules.
 - The Rules button opens the in-game rules modal.
 - New Game and Play Again reopen player selection.
 - A privacy overlay asks players to pass the device between planning turns.
-- During gameplay, left-clicking a friendly piece or stack opens its unit list
-  and selects the whole stack by default. Selecting a movable unit from the
-  list changes the selection to that unit.
-- During gameplay, right-clicking an adjacent valid destination performs the
-  selected move, merge, transfer, or unmerge action. Right-clicking an invalid
-  destination does not change the current selection.
-- Custom setup keeps its existing right-click placement interaction.
-- Right-clicking a friendly piece with held pieces opens the held-piece tooltip.
+- During gameplay, clicking or tapping a friendly piece selects the whole stack.
+- Clicking or tapping an adjacent valid destination performs the selected move,
+  merge, transfer, or unmerge action, taking priority over selecting that piece.
+- Right-clicking a friendly piece opens its unit list without queuing an action.
+  On touchscreens, holding a piece for 500 ms opens the same popup. Selecting a
+  movable unit from the list changes the selection to that unit.
+- Long presses must not also trigger a tap action; dragging, scrolling, or
+  cancelling the pointer cancels the pending long press.
+- Custom setup uses click or tap for placement; right-click does not place pieces.
 
 ### Turn and planning model
 
@@ -296,8 +297,8 @@ clarification rather than guessing.
   targeted by another move.
 - Two plans must not silently reference a piece that no longer exists.
 - A stale selection must be cleared if the selected source changes or disappears.
-- Left-clicking a board square must not queue a move; only right-clicking a
-  valid destination may perform the selected action.
+- Clicking or tapping a valid destination queues the selected action.
+  Right-click and long press only open unit lists, never queue actions.
 - A single-piece list must behave like a stack list: if no individual unit is
   selected, the whole piece remains selected.
 
