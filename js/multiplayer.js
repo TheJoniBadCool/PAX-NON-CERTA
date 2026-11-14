@@ -1,8 +1,7 @@
-// Online multiplayer over PeerJS (WebRTC). The room creator's browser is the authority:
+// Online multiplayer over Supabase. The room creator's browser is the authority:
 // it runs the normal game logic and dice, clients only plan their own colour and mirror
 // the host's board, battle window and log.
 const Multiplayer = (() => {
-    const PEER_PREFIX = 'paxnoncerta-';
     const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
     const ICONS = ['🔴', '🔵', '🟢', '🟡'];
     const SYNC_DELAY_MS = 20;
@@ -15,7 +14,6 @@ const Multiplayer = (() => {
         roster: [null, null, null, null], // what the UI shows: { name, connected } | null
         code: '',
         name: '',
-        token: '',
         myIndex: 0,
         count: 2,
         started: false,
@@ -24,7 +22,9 @@ const Multiplayer = (() => {
         syncTimer: null,
         battleTimer: null,
         logTimer: null,
-        retryTimer: null
+        retryTimer: null,
+        pendingCommit: null,
+        pendingTimer: null
     };
 
     const $ = id => document.getElementById(id);
@@ -140,7 +140,7 @@ const Multiplayer = (() => {
 
     function openHostPeer(attempt) {
         m.code = randomCode();
-        const peer = new Peer(PEER_PREFIX + m.code);
+        const peer = new PaxRelay(m.code);
         m.peer = peer;
         peer.on('open', () => {
             m.myIndex = 0;
@@ -158,9 +158,10 @@ const Multiplayer = (() => {
                 return;
             }
             if (!m.started && connectView.classList.contains('hidden') === false) {
+                peer.destroy();
                 $('btn-mp-create').disabled = false;
                 m.role = null;
-                setStatus(`Could not create room (${error.type}). Check your connection.`, true);
+                setStatus(`Could not create room: ${error.message || error.type}`, true);
             } else {
                 toast(`Network problem: ${error.type}`);
             }
@@ -178,8 +179,7 @@ const Multiplayer = (() => {
     }
 
     function rejectConnection(conn, reason) {
-        conn.send({ type: 'reject', reason });
-        setTimeout(() => conn.close(), 300);
+        conn.send({ type: 'reject', reason }).then(() => conn.close());
     }
 
     function onHostMessage(conn, message) {
@@ -191,6 +191,7 @@ const Multiplayer = (() => {
         const index = conn._slot;
         if (index === undefined || !m.slots[index] || m.slots[index].conn !== conn) return;
         if (message.type === 'commit') {
+            if (message.gameId !== m.gameId || message.round !== gameState.round) return;
             const plan = sanitizePlan(index, message.plan);
             if (!plan) {
                 conn.send({ type: 'notice', text: 'Your plan was rejected by the host. Please re-plan.' });
@@ -199,14 +200,16 @@ const Multiplayer = (() => {
             }
             hostSetCommit(index, true, plan);
         } else if (message.type === 'unlock') {
+            if (message.gameId !== m.gameId || message.round !== gameState.round) return;
             hostSetCommit(index, false);
         } else if (message.type === 'armour') {
+            if (message.gameId !== m.gameId || message.round !== gameState.round) return;
             handleArmourRequest(index, message.unitId);
         }
     }
 
     function handleJoin(conn, message) {
-        const token = String(message.token || '').slice(0, 64);
+        const token = conn.remoteUserId;
         const name = cleanName(message.name, 'Player');
         if (!token) return;
         let index = m.slots.findIndex(slot => slot && slot.token === token);
@@ -506,9 +509,6 @@ const Multiplayer = (() => {
         m.role = 'client';
         m.code = code;
         m.joined = false;
-        const storageKey = `paxnoncerta-token-${code}`;
-        m.token = sessionStorage.getItem(storageKey) || randomToken();
-        sessionStorage.setItem(storageKey, m.token);
         $('btn-mp-join').disabled = true;
         connectToHost();
     }
@@ -517,12 +517,12 @@ const Multiplayer = (() => {
         clearTimeout(m.retryTimer);
         if (m.peer && !m.peer.destroyed) m.peer.destroy();
         setStatus('Connecting…');
-        const peer = new Peer();
+        const peer = new PaxRelay();
         m.peer = peer;
         peer.on('open', () => {
-            const conn = peer.connect(PEER_PREFIX + m.code, { reliable: true });
+            const conn = peer.connect(m.code);
             m.conn = conn;
-            conn.on('open', () => conn.send({ type: 'join', token: m.token, name: m.name }));
+            conn.on('open', () => conn.send({ type: 'join', name: m.name }));
             conn.on('data', onClientMessage);
             conn.on('close', onClientConnectionLost);
             conn.on('error', onClientConnectionLost);
@@ -531,15 +531,17 @@ const Multiplayer = (() => {
             if (error.type === 'peer-unavailable') {
                 onClientConnectionLost('Room not found or host offline.');
             } else {
-                onClientConnectionLost(`Network problem (${error.type}).`);
+                onClientConnectionLost(error.message || `Network problem (${error.type}).`);
             }
         });
     }
 
     function onClientConnectionLost(reason) {
         if (m.role !== 'client') return;
+        clearPendingCommit();
         clearTimeout(m.retryTimer);
         if (!m.joined) {
+            if (m.peer) m.peer.destroy();
             m.role = null;
             $('btn-mp-join').disabled = false;
             setStatus(typeof reason === 'string' ? reason : 'Could not connect to the room.', true);
@@ -566,11 +568,14 @@ const Multiplayer = (() => {
         } else if (message.type === 'anim') {
             animatePlannedMovements(message.moves);
         } else if (message.type === 'notice') {
+            clearPendingCommit();
             toast(message.text);
         }
     }
 
     function applySync(message) {
+        if (m.pendingCommit !== null && message.committed &&
+            message.committed[message.you] === m.pendingCommit) clearPendingCommit();
         m.code = message.code;
         m.roster = message.roster;
         m.count = message.count;
@@ -671,25 +676,65 @@ const Multiplayer = (() => {
         btnMergeConfirm.innerText = 'Merge';
     }
 
-    function toggleCommit() {
+    function clearPendingCommit() {
+        clearTimeout(m.pendingTimer);
+        m.pendingTimer = null;
+        m.pendingCommit = null;
+        if (m.started) refreshControls();
+    }
+
+    async function toggleCommit() {
         const me = m.myIndex;
-        if (gameState.eliminated[me]) return;
+        if (gameState.eliminated[me] || m.pendingCommit !== null) return;
+        if (!['PLANNING', 'COMMITTED'].includes(gameState.phase)) return;
+        const locked = gameState.phase === 'PLANNING';
+        const gameId = m.gameId;
+        const round = gameState.round;
+        const plan = JSON.parse(JSON.stringify(gameState.plans[me]));
+        m.pendingCommit = locked;
+        clearTransientUi();
+        refreshControls();
         if (isHost()) {
-            if (gameState.phase === 'PLANNING') hostSetCommit(me, true, gameState.plans[me]);
-            else if (gameState.phase === 'COMMITTED') hostSetCommit(me, false);
+            try {
+                await m.peer.rpc('pax_host_turn', {
+                    p_code: m.code, p_game: gameId, p_round: round,
+                    p_plan: plan, p_locked: locked
+                });
+                if (m.started && m.gameId === gameId && gameState.round === round &&
+                    gameState.phase === (locked ? 'PLANNING' : 'COMMITTED')) {
+                    hostSetCommit(me, locked, locked ? plan : null);
+                }
+            } catch (error) {
+                console.error('Could not save host turn:', error);
+                toast(`Could not save your plan: ${error.message}`);
+            } finally {
+                clearPendingCommit();
+            }
             return;
         }
-        if (!['PLANNING', 'COMMITTED'].includes(gameState.phase) || !m.conn || !m.conn.open) return;
-        if (gameState.phase === 'PLANNING') {
+        if (!m.conn || !m.conn.open) {
+            clearPendingCommit();
+            toast('Not connected to the room.');
+            return;
+        }
+        if (locked) {
             clearTransientUi();
-            m.conn.send({ type: 'commit', plan: gameState.plans[me] });
+            await m.conn.send({ type: 'commit', plan, gameId, round });
         } else {
-            m.conn.send({ type: 'unlock' });
+            await m.conn.send({ type: 'unlock', gameId, round });
+        }
+        if (m.pendingCommit !== null) {
+            m.pendingTimer = setTimeout(() => {
+                clearPendingCommit();
+                toast('The host did not acknowledge your plan. Check your connection and try again.');
+            }, 15000);
         }
     }
 
     function requestArmourUpgrade(unitId) {
-        if (m.conn && m.conn.open) m.conn.send({ type: 'armour', unitId });
+        if (m.conn && m.conn.open) {
+            m.conn.send({ type: 'armour', unitId, gameId: m.gameId, round: gameState.round });
+        }
     }
 
     function getRosterEntry(index) {
@@ -727,7 +772,7 @@ const Multiplayer = (() => {
         }
         const me = m.myIndex;
         const canAct = ['PLANNING', 'COMMITTED'].includes(gameState.phase) && !gameState.eliminated[me];
-        btnFinishPlan.disabled = !canAct;
+        btnFinishPlan.disabled = !canAct || m.pendingCommit !== null;
         const canUnlock = gameState.phase === 'COMMITTED' && !gameState.eliminated[me];
         $('commit-plan-icon').innerText = canUnlock ? '↶' : '✓';
         $('commit-plan-label').innerText = canUnlock ? 'Unlock Plan' : 'Commit Plans';
@@ -781,12 +826,13 @@ const Multiplayer = (() => {
     $('btn-menu').addEventListener('click', leaveToMenu);
     btnForceSkip.addEventListener('click', forceSkipDisconnected);
     initializeHostObservers();
-    // Close promptly so the host sees the disconnect instead of waiting for an ICE timeout.
+    // Close promptly when possible; the relay also expires missed heartbeats.
     window.addEventListener('pagehide', () => { if (m.peer && !m.peer.destroyed) m.peer.destroy(); });
 
     return {
         showMainMenu,
         isHost,
+        isPendingCommit: () => m.pendingCommit !== null,
         toggleCommit,
         requestArmourUpgrade,
         onBoardRendered,

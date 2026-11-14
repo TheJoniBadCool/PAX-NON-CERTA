@@ -326,10 +326,15 @@
             renderAllSavedSetups();
         }
 
+        function canEditPlans() {
+            return gameState.phase === 'PLANNING' &&
+                (!gameState.multiplayer || !Multiplayer.isPendingCommit());
+        }
+
         function showPieceTooltip(r, c, square) {
             const piece = gameState.board[r][c];
             if (!piece) return;
-            if (isEliminatedPiece(piece) || piece.player !== gameState.turnIndex + 1 || gameState.phase !== 'PLANNING') {
+            if (isEliminatedPiece(piece) || piece.player !== gameState.turnIndex + 1 || !canEditPlans()) {
                 pieceTooltip.classList.add('hidden');
                 hintTextEl.innerText = "You can only unmerge or transfer your own pieces during your turn.";
                 return;
@@ -365,6 +370,7 @@
             pieceTooltip.querySelectorAll('.held-piece-button').forEach(button => {
                 button.addEventListener('click', (event) => {
                     event.stopPropagation();
+                    if (!canEditPlans()) return;
                     const heldIndex = Number(button.dataset.heldIndex);
                     const heldUnit = getPieceContents(piece)[heldIndex];
                     if (heldUnit.type === 'r' || !canMoveHeldUnit(heldUnit)) {
@@ -393,6 +399,7 @@
             pieceTooltip.querySelectorAll('.armor-upgrade-button').forEach(button => {
                 button.addEventListener('click', (event) => {
                     event.stopPropagation();
+                    if (!canEditPlans()) return;
                     const unit = contents[Number(button.dataset.armourIndex)];
                     if (gameState.multiplayer && !Multiplayer.isHost()) {
                         Multiplayer.requestArmourUpgrade(unit.id);
@@ -408,7 +415,7 @@
         }
 
         btnCancelSiege.onclick = () => {
-            if (gameState.phase !== 'PLANNING' || !gameState.selectedSquare) return;
+            if (!canEditPlans() || !gameState.selectedSquare) return;
             const selectedPiece = gameState.board[gameState.selectedSquare[0]][gameState.selectedSquare[1]];
             const siege = selectedPiece ? getSiegeForAttacker(selectedPiece.id) : null;
             const attacker = siege && siege.attackers.find(entry => entry.pieceId === selectedPiece.id);
@@ -475,7 +482,7 @@
         }
 
         function handleSquareClick(r, c) {
-            if (gameState.phase !== 'PLANNING') return;
+            if (!canEditPlans()) return;
             pieceTooltip.classList.add('hidden');
             if (gameState.selectedSquare && gameState.validMoves.some(m => m[0] === r && m[1] === c)) {
                 handleSquareAction(r, c);
@@ -498,7 +505,7 @@
         }
 
         function handleSquarePopup(r, c) {
-            if (gameState.phase !== 'PLANNING') return;
+            if (!canEditPlans()) return;
             const piece = gameState.board[r][c];
             if (!piece || isEliminatedPiece(piece) || piece.player !== gameState.turnIndex + 1) return;
             selectBoardPiece(r, c, piece);
@@ -531,7 +538,7 @@
         }
 
         function handleSquareAction(r, c) {
-            if (gameState.phase !== 'PLANNING') return;
+            if (!canEditPlans()) return;
             pieceTooltip.classList.add('hidden');
 
             const activePlayerId = gameState.turnIndex + 1;
@@ -671,7 +678,7 @@
         }
 
         btnClearPlan.addEventListener('click', () => {
-            if (gameState.phase !== 'PLANNING') return;
+            if (!canEditPlans()) return;
             gameState.plans[gameState.turnIndex] = [];
             gameState.lockedPieceIds = new Set();
             gameState.pendingMerge = null;
@@ -687,7 +694,7 @@
         });
 
         btnSallyOut.addEventListener('click', () => {
-            if (gameState.phase !== 'PLANNING' || !gameState.selectedSquare) return;
+            if (!canEditPlans() || !gameState.selectedSquare) return;
             const tower = gameState.board[gameState.selectedSquare[0]][gameState.selectedSquare[1]];
             const siege = tower ? getSiegeAtSquare(gameState.selectedSquare) : null;
             if (!tower || !siege || tower.player !== gameState.turnIndex + 1 ||
@@ -713,6 +720,7 @@
         });
 
         btnMergeConfirm.addEventListener('click', () => {
+            if (!canEditPlans()) return;
             if (gameState.pendingTransfer) {
                 const { sourcePiece, heldPiece } = gameState.pendingTransfer;
                 const unit = getPieceContents(sourcePiece).find(candidate => candidate.id === heldPiece.unitId);

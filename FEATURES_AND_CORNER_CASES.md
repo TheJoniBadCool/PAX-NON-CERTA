@@ -255,7 +255,7 @@ chess rules.
 
 - The page opens on a main menu with **Hotseat** (all behavior above, unchanged)
   and **Multiplayer**.
-- Multiplayer uses PeerJS/WebRTC with the host-as-authority model. The room
+- Multiplayer uses Supabase with the host-as-authority model. The room
   creator's browser runs all rules, dice, and resolution; other browsers plan
   their own colour and mirror the host's board, combat log, and battle window.
   The app is static and can be hosted on GitHub Pages.
@@ -411,8 +411,9 @@ clarification rather than guessing.
 - Browser reload is not expected to restore an in-progress game.
 - Randomness is intentionally non-deterministic; reproducible replays are not
   currently supported.
-- The game has no dedicated server, persistence, accounts, or AI opponents.
-  Hotseat is client-only; multiplayer is peer-to-peer through the host browser.
+- The game has no dedicated game server, permanent accounts, or AI opponents.
+  Hotseat is client-only; multiplayer uses anonymous Supabase sessions and a
+  database relay, while gameplay remains authoritative in the host browser.
 - Multiplayer: a locked-in plan cannot be edited; unlock first. A reload of a
   client restores their locked plan from the host; an unlocked plan is lost.
 - Multiplayer: a client that unlocks just as the last player locks in loses the
