@@ -6,7 +6,7 @@ function getReadySiegeAssault(piece, from, to) {
         attacker.sourceSquare[0] === from[0] && attacker.sourceSquare[1] === from[1] &&
         siege.towerSquare[0] === to[0] && siege.towerSquare[1] === to[1] &&
         tower && isTowerPiece(tower) &&
-        getPieceContents(piece).some(unit => getUnitType(unit) === 'p') &&
+        getCombatContents(piece).some(unit => getUnitType(unit) === 'p') &&
         isAdjacentSquare(from, to) && isTowerGateMove(from, to)
         ? siege
         : null;
@@ -19,7 +19,7 @@ function isValidSallyOutPlan(piece, from, to, player, siegeId) {
         piece.player === player &&
         from[0] === siege.towerSquare[0] && from[1] === siege.towerSquare[1] &&
         to[0] === siege.towerSquare[0] && to[1] === siege.towerSquare[1] &&
-        getPieceContents(piece).some(unit => getUnitType(unit) !== 'r'));
+        getCombatContents(piece).some(unit => getUnitType(unit) !== 'r'));
 }
 
 function registerSiegeStarts(allIntendedMoves) {
@@ -31,7 +31,7 @@ function registerSiegeStarts(allIntendedMoves) {
             target.player === move.player || !isTowerPiece(target)) {
             return;
         }
-        if (!getPieceContents(source).some(unit => getUnitType(unit) === 'p')) {
+        if (!getCombatContents(source).some(unit => getUnitType(unit) === 'p')) {
             move.invalid = true;
             return;
         }
@@ -94,12 +94,13 @@ function applySiegeRoundProgress() {
         if (previousTowerTimer <= 0) {
             const tower = gameState.board[siege.towerSquare[0]][siege.towerSquare[1]];
             const nonTowerUnits = tower
-                ? getPieceContents(tower).filter(unit => getUnitType(unit) !== 'r')
+                ? getCombatContents(tower).filter(unit => getUnitType(unit) !== 'r')
                 : [];
             if (nonTowerUnits.length) {
                 const casualty = nonTowerUnits[Math.floor(Math.random() * nonTowerUnits.length)];
                 tower.contents = getPieceContents(tower).filter(unit => unit.id !== casualty.id);
                 tower.type = getMergedPieceType(tower.contents);
+                recordDeadPieces(gameState, [casualty]);
                 logAction(`🏰 <b>SIEGE</b> at ${coordsToNotation(...siege.towerSquare)}: ${getUnitName(casualty)} was lost to the siege.`);
             }
         }
@@ -124,9 +125,14 @@ function rejectInvalidTowerAttacks(allIntendedMoves) {
             return;
         }
         const target = gameState.board[move.to[0]][move.to[1]];
+        if (!canUnitsTarget(move.contents, target, move.player)) {
+            move.invalid = true;
+            logAction(`Prisoner attack by P${move.player} rejected: prisoners may only move or merge.`);
+            return;
+        }
         if (!target || target.player === move.player || !isTowerPiece(target)) return;
 
-        if (move.isUnmerge || !move.contents.some(unit => getUnitType(unit) === 'p')) {
+        if (move.isUnmerge || !move.contents.some(unit => !isPrisoner(unit) && getUnitType(unit) === 'p')) {
             move.invalid = true;
             logAction(`🚫 Player ${move.player}'s attack on the Tower at ${coordsToNotation(...move.to)} was rejected: a whole stack containing a Pawn is required.`);
         }

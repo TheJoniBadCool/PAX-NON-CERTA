@@ -50,11 +50,12 @@ function isValidSavedSetup(setup) {
         return false;
     }
     return setup.activePlayers.every((isSelected, playerIndex) => {
-        const kingCount = pieces
+        const units = pieces
             .filter(piece => piece.player === playerIndex + 1)
-            .flatMap(piece => piece.contents)
-            .filter(unit => unit.type === 'k').length;
-        return isSelected ? kingCount === 1 : kingCount === 0;
+            .flatMap(piece => piece.contents);
+        const kingCount = units.filter(unit => unit.type === 'k').length;
+        return isSelected ? kingCount === 1 && units.some(unit => unit.type === 'q') &&
+            units.some(unit => unit.type === 'r') : kingCount === 0;
     });
 }
 

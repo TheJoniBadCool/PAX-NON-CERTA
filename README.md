@@ -10,7 +10,21 @@ Click or tap to select pieces and their destinations, or to place pieces in cust
 
 Each tower has one randomly chosen, in-bounds cardinal gate, shown by an arrow. Merges, transfers, unmerges, and sieges must use that adjacent square. Towers must start at least two squares apart in every direction, including diagonals; older custom setups that violate this rule must be reset before playing.
 
-Each player's corner card shows their status and retreating units. Use **Commit Plans** or **Reset Plans** below the board. The time-of-day clock above the board advances once per completed round, cycling through dawn, day, dusk, and night. It is decorative and does not affect gameplay.
+Choose each player's name in the Hotseat player-selection screen, or use **Names** above the board to edit names during a game. In Multiplayer, each player can edit only their own name; the updated name is shared with the room. Each player's corner card shows their status and retreating units. Use **Commit Plans** or **Reset Plans** below the board. The compact, two-column private objective checklist above the board replaces the time-of-day clock and shows only the current player's objectives and score.
+
+The compact battle panel shows players side by side, with win odds and small unit icons. Hover over units and stat badges for names, casualty chances, and bonus details; zero bonuses are omitted. Tap **ⓘ** for battle rules or expand **Rolls** after fighting to inspect the dice results.
+
+Defeated units either route as before or are captured. The battle winner chooses **Prisoner** or **Execute** for each capture; winner casualties and automatic Tower conquest are unchanged. Prisoners keep their original color and artwork, with captor-colored chains. They move, unmerge, or transfer only on odd rounds and may merge into friendly stacks (including Towers through their gates). They cannot attack, contribute no combat bonuses, and never die or route in battle: an attacking winner captures them, including prisoners held in a defeated mixed stack. Recapturing your own original units restores them to normal service.
+
+The prisoner chain badge appears at the top-right of the board square. Click a prisoner-containing piece (or right-click/long-press) for icon-only **Execute** (skull) and **Release** (white flag) controls; hover for labels. Reset plans involving that piece before using them. Release returns units to their original player through 3-round re-entry without routed penalties, waiting if no square is free; an eliminated original player's units stay stationary. Prisoners remain alive for death objectives until executed. In multiplayer, capture choices belong to the winner, not necessarily the host, and resolution waits for their decisions.
+
+## Objectives
+
+Players start at 0 points with randomly targeted rewards: +4 for an enemy's defeat, +3 for an enemy King's death, +2 for a specific enemy Queen's death, and +1 for controlling a specific enemy castle. Penalties are -4 for losing your King and -3 for each starting castle lost. Each castle keeps its original identity and starting-square label through captures. Losing a conquered castle removes its reward; reclaiming your own castle removes its penalty. Objectives do not accumulate points repeatedly. Retreating units count as alive.
+
+Scores are checked after the entire round, including siege casualties and retreat re-entry. Players at -10 or below are permanently defeated together, then enemy-defeat rewards are applied. Reach 10 or more points to win; simultaneous winners share victory. King death alone does not eliminate a player, and the last remaining player must still reach 10. If everyone is defeated, the match is a draw.
+
+Custom setups require exactly one King, at least one Queen, and at least one Tower per selected player. Hotseat objectives are cleared and hidden during device handoffs and resolution. Multiplayer guests receive only their own objective list; the authoritative host holds all lists, just as it holds all plans.
 
 ## Game modes
 
@@ -18,8 +32,9 @@ The main menu offers:
 
 - **Hotseat** – one device, pass it between players; each player sees only their own planned moves.
 - **Multiplayer** – one browser per player. One player creates a room and shares the 5-letter code; others join, the creator picks 2–4 players and starts. Everyone plans in secret and locks in (a locked plan can be unlocked until the last player locks in); then the round resolves: move, merge, battles. Cancel Siege is a planned action resolved with movement, and a simultaneous Sally Out then fights the cancelling catapult.
-  - The creator's browser is the authority (dice, resolution, battle buttons) and must stay open. Others can reload and rejoin with the same code.
+  - The creator's browser is the authority (dice, resolution, Start Battle/Proceed buttons) and must stay open. Each winner controls their own capture choices. Others can reload and rejoin with the same code.
   - Uses the Supabase project configured below as a relay. Pending plans are visible to their player and the host, not other guests.
+  - For custom starting positions, the host selects **Custom placement → Place Pieces / Load Setup**, places all players' pieces or loads a saved setup, then clicks **Use Placement** to return to the lobby and **Start Game** when everyone is connected. Saved setups must use the same players as the room; changing the player count clears the selected placement. **Back to Lobby** discards unconfirmed edits. Guests receive the host's starting board, including stacks and unit levels; the room stays open during editing.
 
 ## Free hosting (GitHub Pages)
 
@@ -80,6 +95,7 @@ deleted; follow Supabase's guidance for cleaning up old anonymous users.
 - `PaxNonCerta.html` - page structure and game controls
 - `styles.css` - all presentation styles
 - `js/game-state.js` - centralized mutable game state
+- `js/objective-rules.js` - random objectives, reversible scoring, and score-based outcomes
 - `js/game.js` - game rules, rendering, input handling, and collision resolution
 
-The project intentionally uses classic scripts instead of a bundler so the existing double-click workflow remains unchanged. New features should add state to `GameState` and keep UI or rule logic in `game.js` rather than adding more global variables.
+The project intentionally uses classic scripts instead of a bundler so the existing double-click workflow remains unchanged. New features should add state to `GameState`, keep DOM-independent rules in the corresponding rule scripts, and integrate UI and round flow through `status-ui.js` and `game.js` rather than adding more mutable global variables.

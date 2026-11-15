@@ -135,7 +135,7 @@ Validation scenarios:
 
 **Status:** Complete.
 
-When a player loses its last King after complete round resolution:
+When a player reaches -10 objective points after complete round resolution:
 
 - Mark the player eliminated.
 - Render every remaining stack owned by that player as gray while preserving its
@@ -147,7 +147,7 @@ When a player loses its last King after complete round resolution:
 - Gray styling is also applied in movement animations and battle displays.
 - If a gray stack wins a battle, it remains gray; if it loses, it is removed
   normally.
-- Gray units must not count as alive Kings for player victory/elimination.
+- King presence does not determine victory or elimination; objective scores do.
 - Eliminated players must still be skipped during future planning.
 
 Recommended representation:
@@ -163,8 +163,9 @@ Recommended representation:
 
 Validation scenarios:
 
-- Player loses King but has multiple separate stacks.
-- King is lost inside a merged stack while non-King units remain.
+- Player reaches -10 but has multiple separate stacks.
+- King is lost inside a merged stack while non-King units remain; elimination
+  occurs only if the player's score reaches -10.
 - Gray stack is attacked and loses.
 - Gray stack is attacked and wins.
 - Gray stack is targeted by multiple players.
@@ -291,7 +292,7 @@ Validation scenarios:
 - Preserve unit `{ id, player, type, name }` records in every new board object.
 - Recalculate displayed stack type after every contents change.
 - Never create an empty stack.
-- Keep King detection based on unit contents and gray status.
+- Keep King-death objectives based on unit identity in board contents and retreat queues.
 - Keep battle overlays dismissible and resolution able to continue.
 - Keep all player and gray rendering paths safe.
 - Update `FEATURES_AND_CORNER_CASES.md` when each feature is approved.

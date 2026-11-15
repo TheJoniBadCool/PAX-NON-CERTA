@@ -66,6 +66,9 @@ function isEliminatedPiece(piece) {
 }
 
 function getPieceClass(piece) {
+    const unit = getPieceContents(piece).find(entry => entry.type === piece.type && !isPrisoner(entry)) ||
+        getPieceContents(piece).find(entry => entry.type === piece.type);
+    if (unit && isPrisoner(unit)) return getUnitDisplayClass(unit, piece.player);
     const player = PLAYERS[piece.player - 1];
     return `${player ? player.class : ''}${isEliminatedPiece(piece) ? ' piece-eliminated' : ''}`;
 }

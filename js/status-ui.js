@@ -1,3 +1,5 @@
+const PLAYER_ICONS = ['🔴', '🔵', '🟢', '🟡'];
+
 function renderRetreatTable() {
     gameState.retreating.forEach((entries, index) => {
         const player = PLAYERS[index];
@@ -5,13 +7,27 @@ function renderRetreatTable() {
             ? entries.map(entry => `
                 <div class="retreat-entry">
                     <span class="retreat-units">${entry.contents.map(unit =>
-                        `<span class="retreat-unit ${player.class}" title="${getUnitName(unit)}">${PIECE_SVGS[getUnitType(unit)]}<span class="retreat-timer">(${Math.max(entry.reentryRound - gameState.round, 0)})</span></span>`
+                        `<span class="retreat-unit ${player.class}" title="${escapeHtml(`${getUnitName(unit)}${getRoutedStacks(unit) ? ` · ${getRoutedStats(unit, entry.reentryRound)} after return` : ''}`)}">${PIECE_SVGS[getUnitType(unit)]}<span class="retreat-timer">(${Math.max(entry.reentryRound - gameState.round, 0)})</span></span>`
                     ).join('')}</span>
                 </div>
             `).join('')
             : '<span class="retreat-empty">—</span>';
         document.getElementById(`retreat-p${player.id}`).innerHTML =
             `<span class="retreat-flag" aria-hidden="true">⚑</span><span class="retreat-entries">${text}</span>`;
+    });
+    renderDeadPieces();
+}
+
+function renderDeadPieces() {
+    gameState.deadPieces.forEach((units, index) => {
+        const player = PLAYERS[index];
+        const text = units.length
+            ? units.map(unit =>
+                `<span class="dead-unit ${player.class}" title="${escapeHtml(getUnitName(unit))}">${PIECE_SVGS[getUnitType(unit)]}</span>`
+            ).join('')
+            : '<span class="retreat-empty">—</span>';
+        document.getElementById(`dead-p${player.id}`).innerHTML =
+            `<span class="dead-flag" aria-hidden="true">💀</span><span class="dead-units">${text}</span>`;
     });
 }
 
@@ -34,16 +50,36 @@ function showPrivacyOverlay() {
 }
 
 function updateRoundDisplay() {
-    const timeOfDay = ['Dawn', 'Day', 'Dusk', 'Night'][(gameState.round - 1) % 4];
     roundTagEl.innerText = `Round ${gameState.round}`;
-    dayClockEl.setAttribute('aria-label', `Round ${gameState.round}: ${timeOfDay}`);
-    dayClockHandEl.style.transform = `rotate(${(gameState.round - 1) * 90}deg)`;
+    renderObjectives();
+}
+
+function renderObjectives() {
+    const panel = document.getElementById('objectives-panel');
+    const visible = gameState.multiplayer || gameState.phase === 'PLANNING';
+    panel.classList.toggle('hidden', !visible);
+    const rows = document.getElementById('objectives-list');
+    rows.innerHTML = '';
+    document.getElementById('objectives-score').innerText = '';
+    if (!visible) return;
+    const index = gameState.turnIndex;
+    document.getElementById('objectives-title').innerText = `${PLAYERS[index].name} objectives`;
+    document.getElementById('objectives-score').innerText = `${gameState.scores[index]} pts | Win: 10 | Defeat: -10`;
+    rows.innerHTML = gameState.objectives[index].map(objective => `
+        <li class="objective-item${objective.completed ? ' objective-completed' : ''}">
+            <input type="checkbox" disabled ${objective.completed ? 'checked' : ''} aria-label="${escapeHtml(objective.label)}">
+            <span class="${objective.points < 0 ? 'objective-penalty' : 'objective-reward'}">${objective.points > 0 ? '+' : ''}${objective.points}</span>
+            <span class="objective-label">${escapeHtml(getObjectiveLabel(objective))}</span>
+        </li>
+    `).join('');
 }
 
 function updatePlayerCards() {
     for (let i = 0; i < 4; i++) {
         const card = document.getElementById(`card-p${i + 1}`);
         const badge = document.getElementById(`badge-p${i + 1}`);
+        card.querySelector('.player-name').innerText =
+            `${PLAYER_ICONS[i]} ${PLAYERS[i].name} (Player ${PLAYERS[i].id})`;
 
         if (gameState.eliminated[i]) {
             card.className = `player-card player-p${i + 1} eliminated`;

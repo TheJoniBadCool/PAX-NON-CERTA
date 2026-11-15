@@ -120,18 +120,45 @@ function renderBoard() {
                 pieceWrapper.style.display = 'flex';
                 pieceWrapper.style.alignItems = 'center';
                 pieceWrapper.style.justifyContent = 'center';
-                pieceWrapper.className = getPieceClass(piece);
-                pieceWrapper.title = getPieceContents(piece).map(getUnitName).join(', ');
+                const contents = getPieceContents(piece);
+                const displayedUnit = contents.find(unit => unit.type === piece.type && !isPrisoner(unit)) ||
+                    contents.find(unit => unit.type === piece.type) || contents[0];
+                pieceWrapper.className = getUnitDisplayClass(displayedUnit, piece.player);
+                const routedUnits = contents.filter(unit => getRoutedStacks(unit) > 0);
+                pieceWrapper.title = contents.map(unit => {
+                    const routed = getRoutedStats(unit);
+                    return `${unit.castleLabel || getUnitName(unit)}${isPrisoner(unit) ? ` · ${getUnitStats(unit)}` : routed ? ` · ${routed}` : ''}`;
+                }).join(', ');
                 const attackerSiege = getSiegeForAttacker(piece.id);
                 pieceWrapper.innerHTML = attackerSiege ? PIECE_SVGS.catapult : PIECE_SVGS[piece.type];
-                if (isPawnRestTurn() && pieceContainsPawn(piece)) {
+                const prisoners = contents.filter(isPrisoner);
+                if (prisoners.length) {
+                    const chains = document.createElement('div');
+                    chains.className = 'prisoner-board-badge';
+                    chains.style.color = PLAYERS[piece.player - 1].color;
+                    chains.innerHTML = `${PRISONER_CHAIN_SVG}${prisoners.length > 1 ? prisoners.length : ''}`;
+                    chains.title = prisoners.map(unit => `${getUnitName(unit)} · ${getUnitStats(unit)}`).join('; ');
+                    square.appendChild(chains);
+                }
+                if (isPawnRestTurn() && !canMoveWholePiece(piece)) {
                     const pawnRestBadge = document.createElement('div');
                     pawnRestBadge.className = 'pawn-rest-badge';
                     pawnRestBadge.innerText = 'zzz';
-                    pawnRestBadge.title = 'Pawn resting this round';
+                    pawnRestBadge.title = 'Pawn or prisoner resting this round';
                     square.appendChild(pawnRestBadge);
                 }
-                const pieceCount = getPieceContents(piece).length;
+                if (routedUnits.length) {
+                    const recoveryBadge = document.createElement('div');
+                    const roundsRemaining = Math.max(...routedUnits.map(unit =>
+                        unit.routedUntilRound - gameState.round));
+                    recoveryBadge.className = 'routed-recovery-badge';
+                    recoveryBadge.innerHTML = `<span class="recovery-cross" aria-hidden="true">+</span><span aria-hidden="true">${roundsRemaining}</span>`;
+                    recoveryBadge.title = `Routed recovery: ${roundsRemaining} rounds remaining (${routedUnits.length}/${contents.length} units affected). ${routedUnits.map(unit => `${getUnitName(unit)} · ${getRoutedStats(unit)}`).join('; ')}`;
+                    recoveryBadge.setAttribute('role', 'img');
+                    recoveryBadge.setAttribute('aria-label', recoveryBadge.title);
+                    square.appendChild(recoveryBadge);
+                }
+                const pieceCount = contents.length;
                 if (pieceCount > 1) {
                     const countBadge = document.createElement('div');
                     const pendingCount = getPendingHeldIndices(piece, currentPlans).size;

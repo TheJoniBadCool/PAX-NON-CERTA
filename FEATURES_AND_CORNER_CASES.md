@@ -32,7 +32,8 @@ chess rules.
 - Custom placement is performed by one player before the game starts:
   - The user selects a player and piece type, then clicks or taps board squares to place pieces.
   - Each selected player must have exactly one King.
-  - All non-King piece types and quantities are unrestricted.
+  - At least one Queen and one Tower are also required for attainable objectives.
+  - Other non-King piece types and quantities are unrestricted.
   - Same-player pieces may intentionally start in stacks.
   - Different players may not share a starting square.
   - Custom pieces may be placed anywhere on the 16x16 board.
@@ -48,10 +49,14 @@ chess rules.
 - Pieces use inline SVG artwork and player-specific colors.
 - On even-numbered rounds, every piece containing a Pawn displays a `zzz` marker
   to indicate that the Pawn is resting.
+- Pieces containing Routed units display a red health cross and a recovery
+  round counter in the bottom-left corner. Mixed stacks show the longest active
+  cooldown; tooltips list affected units, their penalties, and individual timers.
+  The badge disappears when all units recover and does not intercept clicks.
 - Pieces belonging to an eliminated player are rendered gray across the board,
   movement animations, and battle displays.
 - The left panel shows the current phase, current player, planning controls,
-  player statuses, and a four-part time-of-day clock.
+  player statuses, and a private objective checklist above the board.
 - The center panel shows the board, planned-move arrows, movement animation,
   collision overlay, merge prompt, and piece tooltip.
 - A collision overlay shows the involved candidate stacks visually.
@@ -90,9 +95,8 @@ chess rules.
   - Blue: held-piece transfer.
 - Planned movement is animated before resolution.
 - The round number increments after resolution.
-- The clock is decorative and advances once per completed round, cycling through
-  Dawn, Day, Dusk, and Night. Round 1 starts at Dawn; starting a new game resets
-  the clock. Multiplayer clients display the host's current round.
+- The clock is disabled. The objective checklist shows only the current player's
+  objectives and score, clearing its contents during hotseat handoff and resolution.
 
 ### Movement rules
 
@@ -216,7 +220,8 @@ chess rules.
   battle.
 - Enemy collision groups show every involved candidate after same-player
   consolidation.
-- Every involved candidate always fights; there is no flee choice.
+- Every involved fighting candidate participates; there is no flee choice.
+  Prisoners do not fight or contribute to league/bonus calculations.
 - Fighting candidates are selected by weighted random survival.
 - If any candidate contains a Pawn, Tower, or Horse, the battle uses the
   standard league:
@@ -236,18 +241,74 @@ chess rules.
 - The survivor is placed at its intended destination.
 - Collision results and ordinary moves are written to the combat log.
 - Battle cards show the source of each percentage bonus, raw and effective
-  strength, and winner/defeated casualty percentages. The result panel shows
+  strength, and winner casualty/defeated capture percentages. The result panel shows
   the winner-selection roll and every casualty roll as percentages.
+- Defeated lone Queens/Kings use 60%/75% base casualty weights, before the usual
+  win-probability, pursuit, experience, and siege modifiers. Winners and royals
+  sharing their candidate with any other unit retain their normal base weights.
+- Every fleeing survivor gains one Routed stack, capped at 3. Each stack gives
+  -20% battle strength and +15 percentage points casualty risk, for winners and
+  losers alike. A candidate's strength penalty is the average of its units'
+  penalties, applied to raw strength before the 1.35 odds curve. The casualty
+  penalty is added after other modifiers and capped at 100%; Towers stay immune.
+- Routed persists throughout retreat and for 3 playable rounds after re-entry:
+  the return round and the next two rounds. Another retreat before expiry adds
+  a stack and refreshes this cooldown after the new return. A retreat after
+  expiry starts again at one stack.
+- Routed stacks and expiry rounds belong to individual units, surviving merges,
+  splits, transfers, and multiplayer snapshots. Unaffected allies do not inherit
+  casualty penalties. Battle cards, unit lists, and retreat tooltips show the
+  penalties and cooldown. Survivor experience gains are unchanged.
+
+### Captures and prisoners
+
+- Defeated non-Tower casualty rolls produce captures, not deaths; routing odds
+  and routed penalties are unchanged. Winner casualties still die.
+- Siege defenders previously forced to die are now captured. Tower conquest
+  remains automatic and Towers remain ordinary stationary defenses.
+- The battle winner chooses Execute or Prisoner per captured unit before Proceed.
+  Choices in multiplayer belong to that player's authenticated connection; the
+  host still controls Start Battle and Proceed. Pending choices survive reconnect.
+- Prisoners preserve unit IDs, names, artwork, and original colors, with chains
+  in their current captor's color. The owning stack belongs to the captor.
+- Prisoners only move, unmerge, and transfer on odd rounds. Mixed stacks carrying
+  prisoners also rest on even rounds, with existing ready-assault/Sally exceptions.
+  They can merge into friendly Towers through gates.
+- Prisoners cannot initiate attacks, count toward any combat strength, bonus,
+  league, royal escort protection, or experience gain. Mixed stacks can fight
+  using only their normal units. Prisoners never suffer battle/siege casualties
+  or route, and all prisoners from defeated stacks are captured by the winner.
+- Prisoner-only stacks have zero win odds. A single fighting player captures
+  them automatically without battle/casualty rolls or experience gains.
+  Opposing prisoner-only destination
+  conflicts without fighting units, and prisoner-only swaps, cancel their moves.
+- Recapturing original friendly units automatically restores normal service.
+- The owner can execute or release prisoners from the piece popup during
+  planning, including on even rounds. Plans involving that piece must first be
+  reset; multiplayer locked-in players cannot change prisoners.
+- Release returns units through 3-round re-entry to the original owner without
+  routed penalties. Blocked releases wait another round rather than dying.
+  Released units of eliminated players remain stationary.
+- Prisoners and released units awaiting re-entry count as alive for objectives;
+  only execution or actual winner/siege casualties award death objectives.
 
 ### Elimination and victory
 
-- A player is eliminated when no stack containing that player's King remains.
-- A King inside a stack counts as alive.
+- Each player starts at 0 with random enemy targets for +4 defeat, +3 King death,
+  +2 specific Queen death, and +1 control of a specific starting castle.
+- Penalties are -4 for the player's King death and -3 per starting castle lost.
+- Castle identity survives capture. Castle reward and penalty checkmarks reflect
+  current ownership, so loss and recapture reverse the associated points.
+- Kings and Queens in stacks, prisoner custody, or retreat queues count as alive.
+- Scores are recomputed after the entire round, including siege casualties and
+  retreat re-entry. All players at -10 or below are permanently eliminated
+  together, then enemy-defeat rewards are applied.
+- King death alone does not eliminate a player.
 - Eliminated players are skipped during future planning.
 - Remaining pieces owned by eliminated players are gray and stationary, but may
   still be attacked and included in collision battles.
-- When one or fewer non-eliminated players remain, the game enters `GAME_OVER`.
-- The remaining player is shown as the winner.
+- The game enters `GAME_OVER` when a non-eliminated player reaches 10 or more
+  points. Simultaneous winners share victory; a lone survivor must still reach 10.
 - If no active player remains, the UI shows a draw.
 - The game-over modal can start another game through player selection.
 
@@ -267,8 +328,8 @@ chess rules.
   arrows; other players only see a "Locked in" status. A player can unlock a
   locked plan until the last non-eliminated player locks in, at which point the
   round resolves immediately in the usual order (move, merge, battles).
-- Only the room creator can press Start Battle and Proceed; other players see
-  the same battle window read-only.
+- Only the room creator can press Start Battle and Proceed; the battle winner
+  can decide captured units' fates from their own battle window.
 - **Cancel Siege** is a planned action in multiplayer (hotseat still cancels
   immediately). It replaces any other plan for that catapult, so the besieging
   stack does nothing else that round, and is applied during the movement phase.
@@ -302,12 +363,12 @@ clarification rather than guessing.
 - Random generation must still create exactly 12 pieces per selected player.
 - Every generated unit must have exactly one stable name, and names must be
   unique within each player and piece type.
-- Custom setup must require exactly one King for every selected player, allow
-  arbitrary non-King quantities, and preserve unique stable unit names.
+- Custom setup must require exactly one King, at least one Queen and one Tower
+  for every selected player, and preserve unique stable unit names.
 - Custom setup must allow same-player stacks, reject cross-player overlap, and
   allow placements outside the default corner zones.
 - Custom setup Reset must clear every placement, and Confirm Placement must not
-  start until every selected player has a King.
+  start until every selected player has a King, Queen and Tower.
 - Restarting during a prior game must not retain old plans, stacks, overlays,
   eliminations, or log entries.
 
@@ -390,11 +451,11 @@ clarification rather than guessing.
 
 - A King can be moved, merged, unmerged, transferred, or survive a battle without
   losing King presence.
-- A King inside a stack must keep the owning player alive.
+- A King inside a stack or retreat queue must not trigger a King-death objective.
 - A player must be eliminated only after the complete resolution phase.
 - Removing the last non-King unit from a stack must not eliminate its player.
-- Removing or losing the King from a stack must eliminate the player even if other
-  units remain in that stack.
+- Losing the King checks King-death objectives but must not eliminate the player
+  unless the end-of-round score reaches -10.
 - A stack with no contents must never remain on the board.
 - Eliminating a player must immediately gray all of that player's remaining
   pieces and prevent all movement, unmerge, and transfer interactions for them.

@@ -19,6 +19,7 @@
         <div class="header-actions">
             <button id="btn-toggle-combat-log" class="btn btn-secondary log-toggle" type="button"
                 aria-controls="combat-log-panel" aria-expanded="false" aria-label="Show combat log">📜 Show Log</button>
+            <button id="btn-edit-names" class="btn btn-secondary hidden" type="button">👤 Names</button>
             <button id="btn-menu" class="btn btn-secondary">🏠 Menu</button>
             <button id="btn-rules" class="btn btn-secondary">📖 Rules</button>
             <button id="btn-restart" class="btn btn-primary">🔄 New Game</button>
@@ -34,14 +35,16 @@
                         <span class="player-name">🔴 Player 1 (Red)</span>
                         <span id="badge-p1" class="status-badge">Planning</span>
                         <div id="retreat-p1" class="retreat-row" aria-label="Red retreating units"></div>
+                        <div id="dead-p1" class="dead-row" aria-label="Red dead pieces"></div>
                     </div>
                     <div class="board-top-controls">
-                        <div id="day-clock" class="day-clock" role="img" aria-label="Round 1: Dawn">
-                            <span class="day-clock-divider day-clock-divider-horizontal" aria-hidden="true"></span>
-                            <span class="day-clock-divider day-clock-divider-vertical" aria-hidden="true"></span>
-                            <span id="day-clock-hand" class="day-clock-hand" aria-hidden="true"></span>
-                            <span class="day-clock-center" aria-hidden="true">☀</span>
-                        </div>
+                        <section id="objectives-panel" class="objectives-panel hidden" aria-labelledby="objectives-title">
+                            <h2 id="objectives-title">Your objectives</h2>
+                            <div id="objectives-score" aria-live="polite"></div>
+                            <div class="objectives-scroll">
+                                <ul id="objectives-list" class="objectives-list" aria-label="Private objective checklist"></ul>
+                            </div>
+                        </section>
                         <div class="siege-actions">
                             <button id="btn-force-skip" class="btn btn-amber hidden">⏭️ Skip Disconnected Players</button>
                         </div>
@@ -50,6 +53,7 @@
                         <span class="player-name">🔵 Player 2 (Blue)</span>
                         <span id="badge-p2" class="status-badge">Waiting</span>
                         <div id="retreat-p2" class="retreat-row" aria-label="Blue retreating units"></div>
+                        <div id="dead-p2" class="dead-row" aria-label="Blue dead pieces"></div>
                     </div>
                 </div>
             <div class="board-wrapper">
@@ -79,21 +83,30 @@
                         <div id="battle-window-header" class="battle-window-header">
                             <div>
                                 <div class="clash-box animate-clash">⚔️</div>
-                                <h2 style="font-size: 1.25rem; color: #f59e0b;">Battle</h2>
+                                <h2 style="font-size: 1rem; color: #f59e0b;">Battle</h2>
                             </div>
-                            <span class="battle-drag-hint">Drag to move</span>
+                            <span class="battle-drag-hint" title="Drag to move" aria-label="Drag to move">⠿</span>
                         </div>
                         <div id="battle-candidates" class="battle-candidates"></div>
-                        <div class="battle-explanation">
-                            Odds use raw strength raised to 1.35: counted stack units, +20% per unit above the strongest opponent,
-                            King +10%, Queen/Bishop +5%, XP/armour +5% per level, then stationary Tower defence ×3.
-                            XP/armour also reduce casualties by 5% per level; winners receive 50% casualty protection.
-                        </div>
+                        <details class="battle-explanation">
+                            <summary title="Odds use raw strength raised to 1.35: counted stack units, +20% per unit above the strongest opponent, King +10%, Queen/Bishop +5%, XP/armour +5% per level, then stationary Tower defence ×3. XP/armour also reduce casualties by 5% per level; winners receive 50% casualty protection." aria-label="Battle rules">ⓘ</summary>
+                            <div>
+                                Odds use raw strength raised to 1.35: counted stack units, +20% per unit above the strongest opponent,
+                                King +10%, Queen/Bishop +5%, XP/armour +5% per level, then stationary Tower defence ×3.
+                                XP/armour also reduce casualties by 5% per level; winners receive 50% casualty protection.
+                                Defeated lone Queens/Kings use 60%/75% base casualty risk before battle modifiers.
+                                Defeated casualties are captured: the winner chooses Prisoner or Execute. Prisoners never fight or route.
+                                Each retreat adds Routed: -20% strength and +15 percentage points casualty risk,
+                                up to 3 stacks. Strength penalties are averaged across a stack before the odds curve.
+                                Routed lasts 3 playable rounds after return; another retreat refreshes the timer.
+                            </div>
+                        </details>
                         <div id="clash-result" class="battle-status">Ready</div>
                         <div id="battle-rolls" class="battle-rolls"></div>
+                        <div id="capture-choices" class="capture-choices"></div>
                         <div class="battle-actions">
-                            <button id="btn-start-battle" class="btn btn-amber">Start Battle</button>
-                            <button id="btn-proceed-battle" class="btn btn-primary hidden">Proceed</button>
+                            <button id="btn-start-battle" class="btn btn-amber" title="Start Battle">▶ Start</button>
+                            <button id="btn-proceed-battle" class="btn btn-primary hidden" title="Proceed to the next battle or finish resolution">Proceed →</button>
                         </div>
                     </div>
                 </div>
@@ -118,6 +131,7 @@
                         <span class="player-name">🟡 Player 4 (Yellow)</span>
                         <span id="badge-p4" class="status-badge">Waiting</span>
                         <div id="retreat-p4" class="retreat-row" aria-label="Yellow retreating units"></div>
+                        <div id="dead-p4" class="dead-row" aria-label="Yellow dead pieces"></div>
                     </div>
                     <div class="plan-actions">
                         <button id="btn-finish-plan" class="plan-action plan-commit" type="button" aria-label="Commit Plans">
@@ -133,6 +147,7 @@
                         <span class="player-name">🟢 Player 3 (Green)</span>
                         <span id="badge-p3" class="status-badge">Waiting</span>
                         <div id="retreat-p3" class="retreat-row" aria-label="Green retreating units"></div>
+                        <div id="dead-p3" class="dead-row" aria-label="Green dead pieces"></div>
                     </div>
                 </div>
             </div>
@@ -177,6 +192,20 @@
         </div>
     </div>
 
+    <div id="player-names-modal" class="modal-overlay hidden">
+        <div class="modal-card">
+            <div class="modal-header"><h3>Edit Player Names</h3></div>
+            <div class="modal-body">
+                <p id="player-names-help">Choose the names shown throughout the game.</p>
+                <div id="player-names-editor" class="player-names-editor"></div>
+            </div>
+            <div class="name-editor-actions">
+                <button id="btn-cancel-names" class="btn btn-secondary" type="button">Cancel</button>
+                <button id="btn-save-names" class="btn btn-primary" type="button">Save Names</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Multiplayer Modal (connect + lobby) -->
     <div id="mp-modal" class="modal-overlay hidden">
         <div class="modal-card menu-card">
@@ -204,6 +233,16 @@
                         <label><input type="radio" name="mp-progression" value="zero" checked> All level 0</label>
                         <label><input type="radio" name="mp-progression" value="random"> Random levels 1-3</label>
                     </div>
+                    <label class="mp-field">Starting position
+                        <select id="mp-setup-mode">
+                            <option value="random">Default random corner positions</option>
+                            <option value="custom">Custom placement</option>
+                        </select>
+                    </label>
+                    <div id="mp-custom-options" class="hidden">
+                        <button id="btn-mp-setup" class="btn btn-secondary">Place Pieces / Load Setup</button>
+                        <div id="mp-setup-status" class="mp-status"></div>
+                    </div>
                     <button id="btn-mp-start" class="btn btn-primary" disabled>▶ Start Game</button>
                 </div>
                 <div id="mp-guest-wait" class="hidden mp-status">Waiting for the host to start the game…</div>
@@ -222,22 +261,22 @@
             <div class="modal-body">
                 Select which players will participate in this game. Choose at least two.
                 <div id="player-selection-list" class="player-selection-list">
-                    <label class="player-selection-option" style="border-color: var(--p1-red);">
-                        <input type="checkbox" data-player-id="1" checked>
-                        <span style="color: var(--p1-red);">🔴 Red</span>
-                    </label>
-                    <label class="player-selection-option" style="border-color: var(--p2-blue);">
-                        <input type="checkbox" data-player-id="2" checked>
-                        <span style="color: var(--p2-blue);">🔵 Blue</span>
-                    </label>
-                    <label class="player-selection-option" style="border-color: var(--p3-green);">
-                        <input type="checkbox" data-player-id="3" checked>
-                        <span style="color: var(--p3-green);">🟢 Green</span>
-                    </label>
-                    <label class="player-selection-option" style="border-color: var(--p4-yellow);">
-                        <input type="checkbox" data-player-id="4" checked>
-                        <span style="color: var(--p4-yellow);">🟡 Yellow</span>
-                    </label>
+                    <div class="player-selection-option" style="border-color: var(--p1-red);">
+                        <label><input type="checkbox" data-player-id="1" checked><span style="color: var(--p1-red);">🔴 Red</span></label>
+                        <input class="player-name-input" data-player-name="1" type="text" maxlength="16" value="Red" aria-label="Player 1 name">
+                    </div>
+                    <div class="player-selection-option" style="border-color: var(--p2-blue);">
+                        <label><input type="checkbox" data-player-id="2" checked><span style="color: var(--p2-blue);">🔵 Blue</span></label>
+                        <input class="player-name-input" data-player-name="2" type="text" maxlength="16" value="Blue" aria-label="Player 2 name">
+                    </div>
+                    <div class="player-selection-option" style="border-color: var(--p3-green);">
+                        <label><input type="checkbox" data-player-id="3" checked><span style="color: var(--p3-green);">🟢 Green</span></label>
+                        <input class="player-name-input" data-player-name="3" type="text" maxlength="16" value="Green" aria-label="Player 3 name">
+                    </div>
+                    <div class="player-selection-option" style="border-color: var(--p4-yellow);">
+                        <label><input type="checkbox" data-player-id="4" checked><span style="color: var(--p4-yellow);">🟡 Yellow</span></label>
+                        <input class="player-name-input" data-player-name="4" type="text" maxlength="16" value="Yellow" aria-label="Player 4 name">
+                    </div>
                 </div>
                 <div id="player-selection-error" style="color: #f87171; font-size: 0.8rem; min-height: 1.1rem;"></div>
                 <div class="setup-option">
@@ -279,6 +318,7 @@
                 <div id="custom-setup-board" class="custom-setup-board"></div>
             </div>
             <div class="custom-setup-actions">
+                <button id="btn-custom-setup-back" class="btn btn-secondary hidden">Back to Lobby</button>
                 <button id="btn-reset-custom-setup" class="btn btn-secondary">Reset</button>
                 <button id="btn-save-custom-setup" class="btn btn-secondary">Save Setup</button>
                 <button id="btn-load-custom-setup" class="btn btn-secondary">Load Setup</button>
@@ -323,14 +363,17 @@
                     • <strong>Swap Interception:</strong> Piece A moves to S2 while Piece B moves to S1 (crossing paths).<br>
                     • <strong>Stationary Collision:</strong> Piece A moves into Piece B which stayed stationary.<br>
                     Same-player candidates at a destination become one stack before fighting. All opposing stacks then fight using weighted odds: counted units provide stack strength, a side receives a 20% bonus for each counted unit it has above the strongest opposing stack, and the final strength is curved to make larger stacks more influential without removing randomness. King, Queen, Bishop morale, experience, armour, and stationary Tower bonuses are also shown on the battle cards.
+                    A defeated Queen or King fighting alone has a base capture risk of 60% or 75%, respectively, before the usual battle modifiers; prisoners do not count as escorts. Defeated casualties are <strong>captured</strong> instead of dying: the winning player chooses <strong>Prisoner</strong> or <strong>Execute</strong> for each captured unit before proceeding. Winner casualties still die. Other surviving losers retreat for 3 rounds. Every retreat adds one <strong>Routed</strong> stack to each fleeing unit (maximum 3): -20% battle strength and +15 percentage points casualty/capture risk per stack. Routed lasts for the re-entry round and the next two rounds, then expires. Merging, splitting, and transferring do not reset penalties.
+                    <br><strong>Prisoners:</strong> Keep their original artwork and color, with chains in their captor's color. They belong to the captor, move/unmerge/transfer only on odd rounds, and can merge into friendly stacks, including Towers through their gates. Prisoner-only stacks cannot attack, always lose when attacked, and all their units are captured, never routed or killed by battle. In mixed stacks they provide no battle bonuses, suffer no casualties, and follow the winner's custody. Recapturing your original units restores them to normal service. Conflicting moves between prisoner-only stacks are cancelled if neither side can fight.
+                    <br>Click a prisoner-containing piece to open its unit list, then use <strong>Execute</strong> or <strong>Release</strong>. Reset queued plans involving that piece first. Release returns units to their original player through the 3-round re-entry system without routed penalties; if no square is free, they wait rather than die. Released units of defeated players remain stationary. Prisoners count as alive for objectives until executed.
                 </div>
                 <div class="rule-box">
                     <h4>6. Sieges</h4>
-                    A Tower attack requires at least one attacking Pawn and starts a siege instead of an immediate battle; new sieges may be deployed only on odd-numbered rounds. The attacker remains on its source square as a catapult, with an assault timer of 3 rounds; when it reaches 0, it may launch at the adjacent Tower even on an even-numbered round. The besieged Tower displays a 6-round timer and crossed marks. After the Tower timer reaches 0, it loses one random non-Tower unit each round. Defenders cannot move, transfer, merge, or unmerge units out of the Tower square while it is under siege. The full defending non-Tower stack may instead choose <strong>Sally Out</strong> at any time, including on an even-numbered round, to battle the catapult; casualties disappear, surviving defenders return inside the Tower, and the siege continues if the catapult survives. Counterattacks exclude the Tower.
+                    A Tower attack requires at least one attacking non-prisoner Pawn and starts a siege instead of an immediate battle; new sieges may be deployed only on odd-numbered rounds. The attacker remains on its source square as a catapult, with an assault timer of 3 rounds; when it reaches 0, it may launch at the adjacent Tower even on an even-numbered round. The besieged Tower displays a 6-round timer and crossed marks. After the Tower timer reaches 0, it loses one random non-prisoner, non-Tower unit each round. Defenders cannot move, transfer, merge, or unmerge units out of the Tower square while it is under siege. Defending non-Tower units may instead choose <strong>Sally Out</strong> if at least one can fight, including on even rounds. Defeated casualties are captured; surviving defenders return inside the Tower, and the siege continues if the catapult survives. Counterattacks exclude the Tower. Tower conquest remains automatic; non-Tower siege defenders are captured instead of forcibly killed.
                 </div>
                 <div class="rule-box">
-                    <h4>7. King Elimination</h4>
-                    Capturing a player's King eliminates that player. Last remaining player wins!
+                    <h4>7. Objectives and Victory</h4>
+                    Your private checklist awards +4 for a target enemy's defeat, +3 for a target enemy King's death, +2 for a target enemy Queen's death, and +1 for controlling a specific enemy castle. Targets are randomly chosen at match start. Lose 4 points if your King dies and 3 for each starting castle you lose. Castle points reverse when ownership changes back; retreating units are still alive. Scores are checked after the whole round, including siege casualties and retreat re-entry. Players reaching -10 points are permanently defeated together, then enemy-defeat rewards are awarded. Reach 10 points to win; simultaneous winners share victory. Losing your King alone does not eliminate you, and being the last player does not automatically win. If everyone is defeated, the match is a draw.
                 </div>
             </div>
             <button id="btn-ack-rules" class="btn btn-primary">Got It!</button>
@@ -342,7 +385,7 @@
         <div class="modal-card" style="text-align: center;">
             <div style="font-size: 3rem; margin-bottom: 0.5rem;">🏆</div>
             <h2 id="gameover-title" style="font-size: 1.5rem;">Player Wins!</h2>
-            <p id="gameover-desc" style="font-size: 0.9rem; color: var(--text-muted);">All opponent Kings have been eliminated!</p>
+            <p id="gameover-desc" style="font-size: 0.9rem; color: var(--text-muted);">Objective score reached.</p>
             <button id="btn-gameover-restart" class="btn btn-primary" style="margin-top: 1rem; padding: 0.75rem;">Play Again</button>
         </div>
     </div>
@@ -356,6 +399,7 @@
     <script src="js/constants.js"></script>
     <script src="js/models.js"></script>
     <script src="js/game-state.js"></script>
+    <script src="js/objective-rules.js"></script>
     <script src="js/setup-utils.js"></script>
     <script src="js/board-utils.js"></script>
     <script src="js/battle-rules.js"></script>
@@ -367,6 +411,7 @@
     <script src="js/movement-rules.js"></script>
     <script src="js/siege-rules.js"></script>
     <script src="js/retreat-rules.js"></script>
+    <script src="js/prisoner-rules.js"></script>
     <script src="js/planning-rules.js"></script>
     <script src="js/plan-renderer.js"></script>
     <script src="js/board-setup.js"></script>

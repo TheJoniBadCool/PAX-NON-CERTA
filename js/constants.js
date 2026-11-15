@@ -10,10 +10,10 @@ const PIECE_SVGS = {
 };
 
 const PLAYERS = [
-    { id: 1, name: 'Red', color: '#ef4444', class: 'piece-p1', zone: [0, 0, 3, 3] },
-    { id: 2, name: 'Blue', color: '#3b82f6', class: 'piece-p2', zone: [0, 12, 3, 15] },
-    { id: 3, name: 'Green', color: '#10b981', class: 'piece-p3', zone: [12, 12, 15, 15] },
-    { id: 4, name: 'Yellow', color: '#eab308', class: 'piece-p4', zone: [12, 0, 15, 3] }
+    { id: 1, name: 'Red', colorName: 'Red', color: '#ef4444', class: 'piece-p1', zone: [0, 0, 3, 3] },
+    { id: 2, name: 'Blue', colorName: 'Blue', color: '#3b82f6', class: 'piece-p2', zone: [0, 12, 3, 15] },
+    { id: 3, name: 'Green', colorName: 'Green', color: '#10b981', class: 'piece-p3', zone: [12, 12, 15, 15] },
+    { id: 4, name: 'Yellow', colorName: 'Yellow', color: '#eab308', class: 'piece-p4', zone: [12, 0, 15, 3] }
 ];
 const PLAYER_CODES = ['A', 'B', 'C', 'D'];
 
@@ -21,5 +21,10 @@ const CASUALTY_WEIGHTS = { k: 0.5, q: 0.1, b: 0.15, n: 0.2, p: 0.25, r: 0 };
 const STACK_ADVANTAGE_RATE = 0.20;
 const BATTLE_ODDS_CURVE = 1.35;
 const WINNER_CASUALTY_FACTOR = 0.5;
+const LONE_ROYAL_CASUALTY_WEIGHTS = { q: 0.60, k: 0.75 };
+const ROUTED_STRENGTH_PENALTY = 0.20;
+const ROUTED_CASUALTY_PENALTY = 0.15;
+const ROUTED_MAX_STACKS = 3;
+const ROUTED_COOLDOWN_ROUNDS = 3;
 const SAVED_SETUP_STORAGE_KEY = 'paxnoncerta-custom-setups';
 const LEGACY_SAVED_SETUP_STORAGE_KEY = 'chesssim-custom-setups';

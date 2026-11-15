@@ -3,6 +3,10 @@ const { GLib } = imports.gi;
 const decoder = new TextDecoder();
 const [, bytes] = GLib.file_get_contents('js/multiplayer.js');
 const source = decoder.decode(bytes);
+function readSource(path) {
+    const [, contents] = GLib.file_get_contents(path);
+    return decoder.decode(contents);
+}
 
 function assert(condition, message) {
     if (!condition) throw new Error(message);
@@ -64,37 +68,73 @@ class PaxRelay {
 
 const state = {
     board: [], eliminated: [false, false, true, true], plans: [[], [], [], []],
-    committed: [false, false, false, false], phase: 'PLANNING', round: 1
+    committed: [false, false, false, false], phase: 'PLANNING', round: 1,
+    objectives: [
+        [{ label: 'Host secret', points: 4 }],
+        [{ label: 'Guest secret', points: 3 }], [], []
+    ],
+    scores: [0, 0, 0, 0]
 };
 let resolutions = 0;
+let captureRequest;
+let prisonerRequest;
+let starts = 0;
 const ctx = {
     document, PaxRelay,
     crypto: { getRandomValues: bytes => bytes.fill(1) },
     window: { addEventListener() {} },
     MutationObserver: class { observe() {} },
     setTimeout: () => 1, clearTimeout() {}, console: { error() {} },
-    PLAYERS: [1, 2, 3, 4].map(id => ({ name: `Player ${id}`, color: 'red' })),
+    PLAYERS: [1, 2, 3, 4].map(id => ({
+        name: `Player ${id}`, colorName: `Color ${id}`, color: 'red'
+    })),
     gameState: state,
+    customSetupStatusEl: element(),
     mainMenuModal: element(), playerSelectionModal: element(), customSetupModal: element(),
     clashOverlay: element(), battleLogEl: element(), battleCandidatesEl: element(),
     clashResult: element(), battleRollsEl: element(), battleTargetSquare: null,
     mergePrompt: element(), pieceTooltip: element(), btnMergeConfirm: element(),
     btnFinishPlan: element(), btnRestart: element(), activePlayerDescEl: element(),
     hintTextEl: element(), btnStartBattle: element(), btnProceedBattle: element(),
-    startNewGame() {
-        state.board = Array.from({ length: 16 }, () => Array(16).fill(null));
-        state.board[0][0] = { id: 'guest-piece', player: 2, type: 'p' };
+    startNewGame(players, board) {
+        starts++;
+        state.activePlayers = players;
+        state.board = board ? JSON.parse(JSON.stringify(board)) :
+            Array.from({ length: 16 }, () => Array(16).fill(null));
+        if (!board) state.board[0][0] = { id: 'guest-piece', player: 2, type: 'p' };
         state.plans = [[], [], [], []];
         state.eliminated = [false, false, true, true];
     },
     updatePlayerCards() {}, renderBoard() {}, logAction() {}, showPlayerSelection() {},
+    showCustomSetup(players, board) {
+        state.activePlayers = players;
+        state.customSetupBoard = board || Array.from({ length: 16 }, () => Array(16).fill(null));
+        ctx.customSetupModal.classList.remove('hidden');
+    },
     isTowerGateMove: () => true, canMoveWholePiece: () => true,
     getPieceContents: () => [{ id: 'unit', type: 'p' }],
+    canUnitsTarget: () => true, isPrisoner: () => false,
+    renderCaptureChoices() {},
+    decideCapture(player, captureId, unitId, fate) {
+        captureRequest = { player, captureId, unitId, fate };
+        return player === 2;
+    },
+    managePrisoner(player, unitId, action) {
+        prisonerRequest = { player, unitId, action };
+        return player === 2;
+    },
     resolveAllMoves() { resolutions++; state.phase = 'RESOLVING'; return Promise.resolve(); }
 };
+Object.assign(ctx, new Function(`${readSource('js/setup-utils.js')}
+    return { isValidSavedSetup, cloneSetupBoard };`)());
+Object.assign(ctx, new Function('ctx', `with (ctx) {
+    ${readSource('js/board-utils.js')}
+    return { towersAreSpaced };
+}`)({ getPieceContents: piece => piece.contents, getUnitType: unit => unit.type }));
 
 async function run() {
     const multiplayer = new Function('ctx', `with (ctx) { ${source}\n return Multiplayer; }`)(ctx);
+    ctx.Multiplayer = multiplayer;
     document.getElementById('mp-name').value = 'Host';
     document.getElementById('btn-mp-create').handlers.click();
     await Promise.resolve();
@@ -102,8 +142,104 @@ async function run() {
     const guest = new FakeConnection('guest-id');
     relay.handlers.connection(guest);
     guest.emit('data', { type: 'join', name: 'Guest' });
+    const setupMode = document.getElementById('mp-setup-mode');
+    setupMode.value = 'custom';
+    setupMode.handlers.change();
+    assert(!document.getElementById('mp-custom-options').classList.contains('hidden'),
+        'Custom placement controls must be visible');
+    document.getElementById('btn-mp-start').handlers.click();
+    assert(multiplayer.isEditingSetup() && starts === 0 && !state.multiplayer,
+        'Starting without custom placement must open the editor, not start a match');
+    multiplayer.confirmSetup();
+    assert(multiplayer.isEditingSetup() && ctx.customSetupStatusEl.innerText.includes('Invalid'),
+        'Incomplete placement must be rejected');
+    assert(multiplayer.setupMatchesRoom([true, true, false, false]) &&
+        !multiplayer.setupMatchesRoom([true, false, true, false]) &&
+        !multiplayer.setupMatchesRoom([true, true, true, false]),
+        'Saved setups must match the room colors, not just the count');
+    const custom = state.customSetupBoard;
+    custom[0][0] = { id: 'guest-piece', player: 2, type: 'p',
+        contents: [{ id: 'unit', player: 2, type: 'p', experience: 2, armour: 1 }] };
+    for (const player of [1, 2]) {
+        ['k', 'q', 'r'].forEach((type, column) => {
+            custom[player * 4][column] = { id: `p${player}-${type}`, player, type,
+                contents: [{ id: `p${player}-${type}-unit`, player, type }] };
+        });
+    }
+    const saved = [{ activePlayers: [true, true, true, false], board: custom }];
+    ctx.getSavedSetups = () => saved;
+    ctx.playerSelectionError = element();
+    const loadSavedSetup = new Function('ctx', `with (ctx) {
+        ${readSource('js/setup-actions.js')}
+        return loadSavedSetup;
+    }`)(ctx);
+    // A valid three-player setup is incompatible with a two-player room.
+    const third = JSON.parse(JSON.stringify(custom));
+    ['k', 'q', 'r'].forEach((type, column) => {
+        third[12][column] = { player: 3, type, contents: [{ player: 3, type }] };
+    });
+    saved[0].board = third;
+    loadSavedSetup(0);
+    assert(state.customSetupBoard === custom && ctx.customSetupStatusEl.innerText.includes('same players'),
+        'Loading an incompatible saved setup must leave the draft intact');
+    saved[0] = { activePlayers: [true, true, false, false], board: custom };
+    loadSavedSetup(0);
+    assert(state.customSetupBoard !== custom && state.customSetupBoard[0][0].id === 'guest-piece',
+        'Compatible saved setups must load as independent drafts');
+    const draft = state.customSetupBoard;
+    draft[4][0].contents.push({ player: 1, type: 'k' });
+    multiplayer.confirmSetup();
+    assert(multiplayer.isEditingSetup(), 'Duplicate Kings must prevent confirmation');
+    draft[4][0].contents.pop();
+    draft[4][1].contents.push({ id: 'stack-pawn', player: 1, type: 'p' });
+    draft[4][3] = { player: 1, type: 'r', contents: [{ player: 1, type: 'r' }] };
+    multiplayer.confirmSetup();
+    assert(multiplayer.isEditingSetup(), 'Too-close towers must prevent confirmation');
+    draft[4][3] = null;
+    multiplayer.confirmSetup();
+    assert(!multiplayer.isEditingSetup() && starts === 0,
+        'Confirming placement must return to the lobby without starting');
+    document.getElementById('btn-mp-setup').handlers.click();
+    state.customSetupBoard[0][0] = null;
+    document.getElementById('btn-custom-setup-back').handlers.click();
+    assert(!multiplayer.isEditingSetup(), 'Back to lobby must exit the editor');
+    guest.close();
+    document.getElementById('btn-mp-start').handlers.click();
+    assert(starts === 0, 'A custom match must wait for connected players');
+    guest.open = true;
+    relay.handlers.connection(guest);
+    guest.emit('data', { type: 'join', name: 'Guest' });
     document.getElementById('btn-mp-start').handlers.click();
     assert(state.multiplayer && state.round === 1, 'Host should start a multiplayer game');
+    assert(starts === 1 && state.board[0][0].id === 'guest-piece' &&
+        state.board[0][0].contents[0].experience === 2,
+        'Starting must use the confirmed custom board, not discarded edits');
+    const sync = guest.sent.filter(message => message.type === 'sync' && message.game).pop();
+    assert(sync.game.board[0][0].id === 'guest-piece' &&
+        sync.game.board[4][1].contents.length === 2,
+        'Guests must receive the authoritative custom starting board and stacks');
+    assert(sync.game.objectives[1][0].label === 'Guest secret', 'Guest must receive its objectives');
+    assert(sync.game.objectives[0].length === 0 &&
+        !JSON.stringify(sync).includes('Host secret'), 'Snapshots must not leak another player objective');
+    multiplayer.renameMyPlayer('Host Captain');
+    assert(ctx.PLAYERS[0].name === 'Host Captain' &&
+        guest.sent.filter(message => message.type === 'sync').pop().roster[0].name === 'Host Captain',
+        'The host name must be propagated to the room');
+    guest.emit('data', { type: 'rename', name: 'Guest Captain' });
+    assert(ctx.PLAYERS[1].name === 'Guest Captain' &&
+        guest.sent.filter(message => message.type === 'sync').pop().roster[1].name === 'Guest Captain',
+        'A guest rename must be accepted for its own room slot and synchronized');
+    guest.emit('data', { type: 'capture-choice', gameId: 1, round: 2,
+        captureId: 'stale', unitId: 'unit', fate: 'execute' });
+    assert(!captureRequest, 'Stale capture choices must be rejected');
+    guest.emit('data', { type: 'capture-choice', gameId: 1, round: 1,
+        player: 1, captureId: 'battle', unitId: 'unit', fate: 'keep' });
+    assert(captureRequest.player === 2 && captureRequest.captureId === 'battle',
+        'Capture authority must use the authenticated slot, not a submitted player');
+    guest.emit('data', { type: 'prisoner-action', gameId: 1, round: 1,
+        player: 1, unitId: 'unit', action: 'release' });
+    assert(prisonerRequest.player === 2 && prisonerRequest.action === 'release',
+        'Prisoner actions must use authenticated ownership');
 
     guest.emit('data', { type: 'commit', gameId: 1, round: 2, plan: [] });
     assert(!state.committed[1], 'A stale or future turn must be ignored');
@@ -120,6 +256,17 @@ async function run() {
     assert(state.plans[1][0].contents[0].id === 'unit', 'Host must rebuild submitted unit contents');
     guest.emit('data', { type: 'commit', gameId: 1, round: 1, plan: guestPlan });
     assert(resolutions === 1, 'Repeated commitments must not restart resolution');
+    state.phase = 'GAME_OVER';
+    multiplayer.onNewGameRequested();
+    document.getElementById('mp-count').handlers.change({ target: { value: '3' } });
+    assert(document.getElementById('mp-setup-status').innerText.includes('before starting'),
+        'Changing player count must clear the confirmed placement');
+    setupMode.value = 'random';
+    setupMode.handlers.change();
+    document.getElementById('mp-count').handlers.change({ target: { value: '2' } });
+    document.getElementById('btn-mp-start').handlers.click();
+    assert(starts === 2 && state.board[4][0] === null,
+        'Default random mode must not reuse a previously confirmed custom board');
     print('Multiplayer turn checks passed');
 }
 

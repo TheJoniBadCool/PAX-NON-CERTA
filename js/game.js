@@ -10,9 +10,12 @@
         const btnCancelSiege = document.getElementById('btn-cancel-siege');
         const btnSallyOut = document.getElementById('btn-sally-out');
         const btnRestart = document.getElementById('btn-restart');
+        const btnEditNames = document.getElementById('btn-edit-names');
         const playerSelectionModal = document.getElementById('player-selection-modal');
         const playerSelectionError = document.getElementById('player-selection-error');
         const btnStartSelectedGame = document.getElementById('btn-start-selected-game');
+        const playerNamesModal = document.getElementById('player-names-modal');
+        const playerNamesEditor = document.getElementById('player-names-editor');
         const customSetupModal = document.getElementById('custom-setup-modal');
         const customSetupBoardEl = document.getElementById('custom-setup-board');
         const customSetupStatusEl = document.getElementById('custom-setup-status');
@@ -53,8 +56,6 @@
         const combatLogPanel = document.getElementById('combat-log-panel');
         const btnToggleCombatLog = document.getElementById('btn-toggle-combat-log');
         const roundTagEl = document.getElementById('round-tag');
-        const dayClockEl = document.getElementById('day-clock');
-        const dayClockHandEl = document.getElementById('day-clock-hand');
         const hintTextEl = document.getElementById('hint-text');
         let battleTargetSquare = null;
         btnToggleCombatLog.addEventListener('click', () => {
@@ -115,7 +116,7 @@
                     const siege = gameState.sieges.find(entry => entry.id === move.siegeId);
                     const tower = siege && gameState.board[siege.towerSquare[0]][siege.towerSquare[1]];
                     if (!siege || !tower || tower.id !== move.pieceId ||
-                        !getPieceContents(tower).some(unit => getUnitType(unit) !== 'r')) {
+                        !getCombatContents(tower).some(unit => getUnitType(unit) !== 'r')) {
                         move.invalid = true;
                         return null;
                     }
@@ -221,9 +222,9 @@
             animationLayer.innerHTML = '';
 
             for (const move of allMoves) {
-                if (move.siegeStart || move.sallyOut || move.siegeCancel) continue;
+                if (move.invalid || move.siegeStart || move.sallyOut || move.siegeCancel) continue;
                 const sourcePiece = move.isUnmerge
-                    ? { player: move.player, type: move.pieceType }
+                    ? { player: move.player, type: move.pieceType, contents: move.contents }
                     : gameState.board[move.from[0]][move.from[1]];
                 if (!sourcePiece) continue;
 
@@ -240,6 +241,8 @@
                 token.style.top = `${move.from[0] * 6.25}%`;
                 token.style.boxShadow = `0 0 14px ${colors[kind]}`;
                 token.innerHTML = PIECE_SVGS[sourcePiece.type];
+                const captive = getPieceContents(sourcePiece).find(isPrisoner);
+                if (captive) token.innerHTML += prisonerChain(captive);
                 animationLayer.appendChild(token);
 
                 await new Promise(resolve => requestAnimationFrame(() => {
@@ -255,6 +258,7 @@
 
         function startNewGame(selectedPlayers, customBoard = null) {
             gameState.activePlayers = selectedPlayers;
+            btnEditNames.classList.remove('hidden');
             initBoard(customBoard);
             gameState.turnIndex = gameState.activePlayers.findIndex(isSelected => isSelected);
             gameState.round = 1;
@@ -267,8 +271,12 @@
             gameState.selectedHeldPiece = null;
             gameState.pendingTransfer = null;
             gameState.retreating = [[], [], [], []];
+            gameState.deadPieces = [[], [], [], []];
             gameState.sieges = [];
+            gameState.pendingCapture = null;
+            renderCaptureChoices();
             gameState.nextUnitSequence = [1, 1, 1, 1];
+            initializeObjectives();
             btnMergeConfirm.innerText = 'Merge';
 
             battleLogEl.innerHTML = `
@@ -295,7 +303,12 @@
             gameState.nextUnitSequence = [1, 1, 1, 1];
             gameState.customSetupPlayer = selectedPlayers.findIndex(Boolean);
             gameState.customSetupType = 'p';
-            customSetupStatusEl.innerText = 'Select a player and piece, then click or tap a board square to place it. Every selected player needs exactly one King.';
+            document.querySelectorAll('.custom-piece-option').forEach(button =>
+                button.classList.toggle('selected', button.dataset.pieceType === 'p'));
+            const multiplayerSetup = Multiplayer.isEditingSetup();
+            document.getElementById('btn-custom-setup-back').classList.toggle('hidden', !multiplayerSetup);
+            btnConfirmCustomSetup.innerText = multiplayerSetup ? 'Use Placement' : 'Confirm Placement';
+            customSetupStatusEl.innerText = 'Every selected player needs exactly one King, at least one Queen and one Tower. Click or tap the board to place pieces.';
             renderCustomSetupPlayers();
             renderCustomSetupBoard();
             playerSelectionModal.classList.add('hidden');
@@ -309,10 +322,24 @@
                 return;
             }
             const missingKing = gameState.activePlayers.findIndex((isSelected, index) =>
-                isSelected && !gameState.customSetupBoard.flat().some(piece =>
-                    piece && piece.player === index + 1 && getPieceContents(piece).some(unit => unit.type === 'k')));
+                isSelected && gameState.customSetupBoard.flat()
+                    .filter(piece => piece && piece.player === index + 1)
+                    .flatMap(getPieceContents).filter(unit => unit.type === 'k').length !== 1);
             if (missingKing !== -1) {
                 customSetupStatusEl.innerText = `${PLAYERS[missingKing].name} must have exactly one King.`;
+                return;
+            }
+            const missingObjectiveUnits = gameState.activePlayers.findIndex((isSelected, index) => {
+                const units = gameState.customSetupBoard.flat().filter(piece => piece && piece.player === index + 1)
+                    .flatMap(getPieceContents);
+                return isSelected && (!units.some(unit => unit.type === 'q') || !units.some(unit => unit.type === 'r'));
+            });
+            if (missingObjectiveUnits !== -1) {
+                customSetupStatusEl.innerText = `${PLAYERS[missingObjectiveUnits].name} needs at least one Queen and one Tower for objectives.`;
+                return;
+            }
+            if (Multiplayer.isEditingSetup()) {
+                Multiplayer.confirmSetup();
                 return;
             }
             customSetupModal.classList.add('hidden');
@@ -321,9 +348,55 @@
 
         function showPlayerSelection() {
             playerSelectionError.innerText = '';
+            document.querySelectorAll('.player-name-input').forEach(input => {
+                input.value = PLAYERS[Number(input.dataset.playerName) - 1].name;
+            });
+            btnEditNames.classList.add('hidden');
             customSetupModal.classList.add('hidden');
             playerSelectionModal.classList.remove('hidden');
             renderAllSavedSetups();
+        }
+
+        function cleanPlayerName(value, index) {
+            return String(value || '').replace(/[<>]/g, '').trim().slice(0, 16) || PLAYERS[index].colorName;
+        }
+
+        function showPlayerNamesEditor() {
+            playerNamesEditor.innerHTML = '';
+            const indices = gameState.multiplayer ? [Multiplayer.getMyIndex()] : [0, 1, 2, 3];
+            document.getElementById('player-names-help').innerText = gameState.multiplayer
+                ? 'Change the name shown for you in this room.'
+                : 'Choose the names shown throughout the game.';
+            indices.forEach(index => {
+                const label = document.createElement('label');
+                label.style.color = PLAYERS[index].color;
+                label.innerText = `Player ${index + 1} (${PLAYERS[index].colorName})`;
+                const input = document.createElement('input');
+                input.type = 'text';
+                input.maxLength = 16;
+                input.dataset.playerNameEditor = String(index + 1);
+                input.value = PLAYERS[index].name;
+                input.setAttribute('aria-label', `Player ${index + 1} name`);
+                label.appendChild(input);
+                playerNamesEditor.appendChild(label);
+            });
+            playerNamesModal.classList.remove('hidden');
+            playerNamesEditor.querySelector('input').focus();
+        }
+
+        function savePlayerNames() {
+            playerNamesEditor.querySelectorAll('input').forEach(input => {
+                const index = Number(input.dataset.playerNameEditor) - 1;
+                const name = cleanPlayerName(input.value, index);
+                if (gameState.multiplayer) {
+                    Multiplayer.renameMyPlayer(name);
+                } else {
+                    PLAYERS[index].name = name;
+                }
+            });
+            playerNamesModal.classList.add('hidden');
+            updatePlayerCards();
+            renderBoard();
         }
 
         function canEditPlans() {
@@ -344,21 +417,22 @@
             const contents = getPieceContents(piece);
             const siege = getSiegeAtSquare([r, c]);
             btnCancelSiege.hidden = !getSiegeForAttacker(piece.id);
-            btnSallyOut.hidden = !(siege && contents.some(unit => getUnitType(unit) !== 'r'));
+            btnSallyOut.hidden = !(siege && contents.some(unit => !isPrisoner(unit) && getUnitType(unit) !== 'r'));
             pieceTooltipUnits.innerHTML = contents
                 .map((unit, index) => `<span class="held-piece-entry">
-                    <button class="held-piece-button ${PLAYERS[piece.player - 1].class}${pendingIndices.has(index) ? ' pending' : ''}${unit.type === 'r' ? ' disabled' : ''}" data-held-index="${index}" title="${getUnitName(unit)}: ${unit.type === 'r' ? 'Tower' : 'Unmerge'}" aria-label="${getUnitName(unit)}">${PIECE_SVGS[unit.type]}</button>
-                    <span class="unit-levels" title="${getUnitName(unit)} · Experience ${getUnitLevel(unit, 'experience')} · Armour ${getUnitLevel(unit, 'armour')}">
-                        <span class="experience-level">${['0', 'I', 'II', 'III'][getUnitLevel(unit, 'experience')]}</span> 🛡️${getUnitLevel(unit, 'armour')}
-                    </span>
-                    ${contents.some(other => other.type === 'r') && getUnitLevel(unit, 'armour') < 3 ? `<button class="armor-upgrade-button" data-armour-index="${index}" title="Upgrade armour">🛡️</button>` : ''}
+                    <button class="held-piece-button ${getUnitDisplayClass(unit, piece.player)}${pendingIndices.has(index) ? ' pending' : ''}${unit.type === 'r' ? ' disabled' : ''}" data-held-index="${index}" title="${getUnitName(unit)}: ${unit.type === 'r' ? 'Tower' : 'Unmerge'}" aria-label="${getUnitName(unit)}">${PIECE_SVGS[unit.type]}${prisonerChain(unit)}</button>
+                    ${!isPrisoner(unit) ? `<span class="unit-levels" title="${escapeHtml(`${getUnitName(unit)} · ${getUnitStats(unit)}`)}">
+                        <span class="experience-level">${['0', 'I', 'II', 'III'][getUnitLevel(unit, 'experience')]}</span> 🛡️${getUnitLevel(unit, 'armour')}${getRoutedStacks(unit) ? ` · ⚑${getRoutedStacks(unit)} (${unit.routedUntilRound - gameState.round})` : ''}
+                    </span>` : ''}
+                    ${!isPrisoner(unit) && contents.some(other => other.type === 'r') && getUnitLevel(unit, 'armour') < 3 ? `<button class="armor-upgrade-button" data-armour-index="${index}" title="Upgrade armour">🛡️</button>` : ''}
+                    ${isPrisoner(unit) ? `<button class="prisoner-action-button" data-prisoner-index="${index}" data-action="execute" title="Execute ${escapeHtml(getUnitName(unit))}" aria-label="Execute ${escapeHtml(getUnitName(unit))}">${PRISONER_EXECUTE_SVG}</button><button class="prisoner-action-button" data-prisoner-index="${index}" data-action="release" title="Release ${escapeHtml(getUnitName(unit))}" aria-label="Release ${escapeHtml(getUnitName(unit))}">${PRISONER_RELEASE_SVG}</button>` : ''}
                 </span>`)
                 .join('');
             if (isPawnRestTurn()) {
                 pieceTooltip.querySelectorAll('.held-piece-button').forEach((button, index) => {
                     if (!canMoveHeldUnit(contents[index])) {
                         button.disabled = true;
-                        button.title = `${getUnitName(contents[index])}: Pawns cannot move on even-numbered rounds`;
+                        button.title = `${getUnitName(contents[index])}: Pawns and prisoners cannot move on even-numbered rounds`;
                     }
                 });
             }
@@ -376,7 +450,7 @@
                     if (heldUnit.type === 'r' || !canMoveHeldUnit(heldUnit)) {
                         hintTextEl.innerText = heldUnit.type === 'r'
                             ? "Towers are unmovable and cannot be unmerged or transferred."
-                            : "Pawns cannot be moved, unmerged, or transferred on even-numbered rounds.";
+                            : "Pawns and prisoners cannot be moved, unmerged, or transferred on even-numbered rounds.";
                         return;
                     }
                     gameState.selectedHeldPiece = {
@@ -390,11 +464,29 @@
                     pieceTooltip.classList.add('hidden');
                     gameState.selectedSquare = [r, c];
                     gameState.validMoves = getAdjacentMoves(r, c)
-                        .filter(destination => isTowerGateMove([r, c], destination));
+                        .filter(destination => isTowerGateMove([r, c], destination) &&
+                            canUnitsTarget([heldUnit], gameState.board[destination[0]][destination[1]], piece.player));
                     hintTextEl.innerText = `Selected a held ${getPieceLabel(gameState.selectedHeldPiece.type)}. Pick an adjacent square or your piece to transfer it.`;
                     renderBoard();
                 });
-
+            });
+            pieceTooltip.querySelectorAll('.prisoner-action-button').forEach(button => {
+                button.addEventListener('click', event => {
+                    event.stopPropagation();
+                    if (!canEditPlans()) return;
+                    const unit = contents[Number(button.dataset.prisonerIndex)];
+                    if (gameState.multiplayer && !Multiplayer.isHost()) {
+                        Multiplayer.requestPrisonerAction(unit.id, button.dataset.action);
+                    } else if (!managePrisoner(piece.player, unit.id, button.dataset.action)) {
+                        hintTextEl.innerText = "Prisoner action rejected. Reset this piece's queued plans first.";
+                        return;
+                    }
+                    pieceTooltip.classList.add('hidden');
+                    gameState.selectedSquare = null;
+                    gameState.selectedHeldPiece = null;
+                    gameState.validMoves = [];
+                    renderBoard();
+                });
             });
             pieceTooltip.querySelectorAll('.armor-upgrade-button').forEach(button => {
                 button.addEventListener('click', (event) => {
@@ -467,12 +559,7 @@
                 to: destination,
                 pieceType: heldPiece.type,
                 unitId: heldPiece.unitId,
-                contents: [{
-                    id: heldPiece.unitId,
-                    player: sourcePiece.player,
-                    type: heldPiece.type,
-                    name: heldPiece.name
-                }],
+                contents: [{ ...getPieceContents(sourcePiece)[heldPiece.heldIndex] }],
                 isUnmerge: true,
                 sourcePieceId: sourcePiece.id,
                 heldIndex: heldPiece.heldIndex,
@@ -492,7 +579,8 @@
             const clickedPiece = gameState.board[r][c];
             if (clickedPiece && !isEliminatedPiece(clickedPiece) && clickedPiece.player === activePlayerId) {
                 selectBoardPiece(r, c, clickedPiece);
-                if (gameState.selectedSquare && (getSiegeForAttacker(clickedPiece.id) || getSiegeAtSquare([r, c]))) {
+                if (gameState.selectedSquare && (getSiegeForAttacker(clickedPiece.id) || getSiegeAtSquare([r, c]) ||
+                    getPieceContents(clickedPiece).some(isPrisoner))) {
                     showPieceTooltip(r, c, boardEl.children[r * 16 + c]);
                 }
             } else {
@@ -532,7 +620,7 @@
                     ? "Towers are unmovable. On even-numbered rounds, non-pawn units in this stack may still be moved separately."
                     : "Towers (Rooks) are unmovable. Right-click or long-press to choose a movable unit from the stack.")
                 : !canMoveWholePiece(clickedPiece)
-                ? "Pawn-containing stacks cannot move on even-numbered rounds. Right-click or long-press to move a non-pawn unit separately."
+                ? "Stacks containing Pawns or prisoners cannot move on even rounds. Right-click or long-press to move a non-pawn, non-prisoner unit separately."
                 : `Selected ${PLAYERS[clickedPiece.player - 1].name} ${getPieceLabel(clickedPiece.type)} at ${coordsToNotation(r, c)}. Click or tap an adjacent target to act; right-click or long-press for the unit list.`;
             renderBoard();
         }
@@ -560,7 +648,7 @@
                 const heldUnit = getPieceContents(sourcePiece).find(unit =>
                     unit.id === gameState.selectedHeldPiece.unitId);
                 if (!heldUnit || !canMoveHeldUnit(heldUnit)) {
-                    hintTextEl.innerText = "Pawns cannot be moved, unmerged, or transferred on even-numbered rounds.";
+                    hintTextEl.innerText = "Pawns and prisoners cannot be moved, unmerged, or transferred on even-numbered rounds.";
                     return;
                 }
                 if (getSiegeAtSquare(gameState.selectedHeldPiece.from)) {
@@ -633,13 +721,13 @@
             }
 
             if (!canMoveWholePiece(pieceToMove)) {
-                hintTextEl.innerText = "Pawn-containing stacks cannot move, merge, or attack on even-numbered rounds, except for a ready siege assault.";
+                hintTextEl.innerText = "Stacks containing Pawns or prisoners cannot move, merge, or attack on even rounds, except for a ready siege assault.";
                 return;
             }
 
             if (targetPiece && targetPiece.player !== activePlayerId &&
                 isTowerPiece(targetPiece) &&
-                !getPieceContents(pieceToMove).some(unit => getUnitType(unit) === 'p')) {
+                !getCombatContents(pieceToMove).some(unit => getUnitType(unit) === 'p')) {
                 hintTextEl.innerText = "A Tower can only be attacked by a stack containing a Pawn.";
                 return;
             }
@@ -698,7 +786,7 @@
             const tower = gameState.board[gameState.selectedSquare[0]][gameState.selectedSquare[1]];
             const siege = tower ? getSiegeAtSquare(gameState.selectedSquare) : null;
             if (!tower || !siege || tower.player !== gameState.turnIndex + 1 ||
-                !getPieceContents(tower).some(unit => getUnitType(unit) !== 'r')) {
+                !getCombatContents(tower).some(unit => getUnitType(unit) !== 'r')) {
                 return;
             }
             const currentPlans = gameState.plans[gameState.turnIndex];
@@ -725,7 +813,7 @@
                 const { sourcePiece, heldPiece } = gameState.pendingTransfer;
                 const unit = getPieceContents(sourcePiece).find(candidate => candidate.id === heldPiece.unitId);
                 if (!unit || !canMoveHeldUnit(unit)) {
-                    hintTextEl.innerText = "Pawns cannot be moved, unmerged, or transferred on even-numbered rounds.";
+                    hintTextEl.innerText = "Pawns and prisoners cannot be moved, unmerged, or transferred on even-numbered rounds.";
                     gameState.pendingTransfer = null;
                     mergePrompt.classList.add('hidden');
                     btnMergeConfirm.innerText = 'Merge';
@@ -750,7 +838,7 @@
 
             const { from, to, movingPiece, targetPiece } = gameState.pendingMerge;
             if (!canMoveWholePiece(movingPiece)) {
-                hintTextEl.innerText = "Pawn-containing stacks cannot move or merge on even-numbered rounds.";
+                hintTextEl.innerText = "Stacks containing Pawns or prisoners cannot move or merge on even rounds.";
                 gameState.pendingMerge = null;
                 mergePrompt.classList.add('hidden');
                 btnMergeConfirm.innerText = 'Merge';
@@ -873,6 +961,7 @@
             }
 
             rejectInvalidTowerAttacks(allIntendedMoves);
+            rejectPrisonerMoveConflicts(allIntendedMoves);
 
             // Remove the selected held unit from its source stack before
             // resolving its destination.
@@ -906,12 +995,7 @@
                     continue;
                 }
                 move.pieceType = heldUnit.type;
-                move.contents = [{
-                    id: heldUnit.id,
-                    player: move.player,
-                    type: heldUnit.type,
-                    name: heldUnit.name
-                }];
+                move.contents = [{ ...heldUnit, player: move.player }];
 
                 if (sourceContents.length === 0) {
                     gameState.board[move.from[0]][move.from[1]] = null;
@@ -934,7 +1018,7 @@
                 .filter(move => move.siegeAssault && !move.invalid)
                 .forEach(move => {
                     const source = gameState.board[move.from[0]][move.from[1]];
-                    if (!source || !getPieceContents(source).some(unit => getUnitType(unit) === 'p')) {
+                    if (!source || !getCombatContents(source).some(unit => getUnitType(unit) === 'p')) {
                         move.invalid = true;
                         logAction(`🚫 Player ${move.player}'s assault was cancelled: the catapult stack no longer contains a Pawn.`);
                     }
@@ -1015,6 +1099,7 @@
                 // to defend against an attack on its original square.
                 const occupantIsMoving = stationaryOccupant && allIntendedMoves.some(m =>
                     m.from[0] === r && m.from[1] === c &&
+                    !m.invalid && !m.siegeStart && !m.sallyOut && !m.siegeCancel &&
                     !m.isUnmerge &&
                     m.pieceId === stationaryOccupant.id &&
                     !interceptionSourceIds.has(m.pieceId)
@@ -1101,28 +1186,27 @@
                 renderBoard();
             }
 
-            // Check King eliminations & victory status
-            checkPlayerEliminations();
-            renderBoard();
-
             // Reset planned moves for next turn
             gameState.plans = [[], [], [], []];
             applySiegeRoundProgress();
             gameState.round++;
             updateRoundDisplay();
             processRetreatsAtRoundStart();
+            const { winners, draw } = resolveObjectiveRound();
+            renderBoard();
 
             // Count active players remaining
             const activePlayers = gameState.eliminated.map((elim, idx) => elim ? null : idx).filter(v => v !== null);
 
-            if (activePlayers.length <= 1) {
+            if (winners.length || draw) {
                 gameState.phase = 'GAME_OVER';
-                const winnerIdx = activePlayers[0];
-                const winnerName = winnerIdx !== undefined ? `${PLAYERS[winnerIdx].name} (Player ${winnerIdx + 1})` : "Nobody (Draw)";
-                
-                document.getElementById('gameover-title').innerText = winnerIdx !== undefined ? `${winnerName} Wins!` : "Draw!";
-                document.getElementById('gameover-desc').innerText = "All opposing Kings have been captured!";
+                const winnerNames = winners.map(index => PLAYERS[index].name).join(' & ');
+                document.getElementById('gameover-title').innerText = draw ? 'Draw!' :
+                    `${winnerNames} ${winners.length === 1 ? 'Wins' : 'Win'}!`;
+                document.getElementById('gameover-desc').innerText = draw ? 'All players reached -10 points and were defeated.' :
+                    winners.map(index => `${PLAYERS[index].name}: ${gameState.scores[index]} points`).join(' · ');
                 document.getElementById('gameover-modal').classList.remove('hidden');
+                updatePlayerCards();
                 if (gameState.multiplayer) Multiplayer.onGameOver();
             } else if (gameState.multiplayer) {
                 Multiplayer.beginNextRound();
@@ -1236,29 +1320,33 @@
                 renderBattleCandidates(group);
                 battleRollsEl.innerHTML = '';
                 const activeCandidateData = getBattleCandidateData(group);
+                const captureOnly = activeCandidateData.filter(entry => entry.combatContents.length).length === 1 &&
+                    activeCandidateData.some(entry => !entry.combatContents.length);
                 clashResult.innerText = "Ready";
                 clashResult.style.color = "#f59e0b";
                 btnStartBattle.classList.remove('hidden');
                 btnProceedBattle.classList.add('hidden');
 
                 btnStartBattle.onclick = () => {
+                    btnStartBattle.onclick = null;
                     btnStartBattle.classList.add('hidden');
                     clashResult.innerText = "Fighting...";
 
                     setTimeout(() => {
-                        const roll = Math.random();
+                        const roll = captureOnly ? 0 : Math.random();
                         let accumulatedProbability = 0;
                         let survivorIdx = activeCandidateData.length - 1;
                         for (let idx = 0; idx < activeCandidateData.length; idx++) {
                             accumulatedProbability += activeCandidateData[idx].probability;
-                            if (roll <= accumulatedProbability) {
+                            if (activeCandidateData[idx].probability > 0 && roll < accumulatedProbability) {
                                 survivorIdx = idx;
                                 break;
                             }
                         }
                         const survivor = group.candidates[survivorIdx];
                         const battleRolls = [
-                            `Winner roll ${(roll * 100).toFixed(2)}% selected P${survivor.player} ${PLAYERS[survivor.player - 1].name}`
+                            captureOnly ? `Unopposed prisoner capture by P${survivor.player}; no battle roll.` :
+                                `Winner roll ${(roll * 100).toFixed(2)}% selected P${survivor.player} ${PLAYERS[survivor.player - 1].name}`
                         ];
                         group.survivor = survivor;
                         const candidateDataById = new Map(activeCandidateData.map(entry => [entry.candidate.pieceId, entry]));
@@ -1266,14 +1354,16 @@
                         const towerDefender = group.candidates.some(candidate =>
                             candidate.isStationary &&
                             getPieceContents(candidate).some(unit => getUnitType(unit) === 'r') &&
-                            getPieceContents(candidate).some(unit => getUnitType(unit) !== 'r')
+                            getCombatContents(candidate).some(unit => getUnitType(unit) !== 'r')
                         );
                         const towerSiege = group.candidates.some(candidate =>
                             candidate.isStationary &&
                             getPieceContents(candidate).some(unit => getUnitType(unit) === 'r')
                         );
                         const candidateResults = new Map();
-                        const winnerResult = resolveCandidateCasualties(
+                        const winnerResult = captureOnly ? {
+                            survivors: getPieceContents(survivor), casualties: [], captured: []
+                        } : resolveCandidateCasualties(
                             survivor,
                             winnerData ? winnerData.probability : 0,
                             false,
@@ -1368,6 +1458,10 @@
                             }
                         }
                         retreatEntries.forEach(entry => queueRetreat(entry.player, entry.contents, destination));
+                        recordDeadPieces(gameState, [...candidateResults.values()].flatMap(result => result.casualties));
+                        const capturedUnits = [...candidateResults.values()].flatMap(result => result.captured);
+                        beginCaptureChoices(survivor.player, capturedUnits, destination);
+                        renderCaptureChoices();
                         renderRetreatTable();
                         const retreatedUnitIds = new Set(
                             retreatEntries.flatMap(entry => entry.contents.map(unit => unit.id))
@@ -1378,22 +1472,30 @@
                         const retreatCount = retreatEntries.reduce((n, entry) => n + entry.contents.length, 0);
                         const casualtyCount = [...candidateResults.values()]
                             .reduce((count, result) => count + result.casualties.length, 0);
-                        clashResult.innerText = `${survivorPlayer.name} wins · 💀${casualtyCount} · ↩️${retreatCount}`;
+                        clashResult.innerText = `${survivorPlayer.name} wins · 💀${casualtyCount} · ⛓${capturedUnits.length} · ↩️${retreatCount}`;
                         clashResult.style.color = survivorPlayer.color;
-                        battleRollsEl.innerHTML = `
-                            <div class="battle-roll-section"><strong>Rolls</strong><br>
-                                ${battleRolls.map(rollEntry => `<div>${rollEntry}</div>`).join('')}
-                            </div>`;
+                        renderBattleRolls(battleRolls);
 
                         const candDesc = group.candidates.map(c =>
                             `P${c.player} ${getPieceLabel(c.pieceType)}`
                         ).join(' vs ');
-                        logAction(`⚔️ <b>COLLISION RESULT</b> (${candDesc}): <b>P${survivor.player} (${survivorPlayer.name})</b> survived · 💀 ${casualtyCount} casualties · ↩️ ${retreatEntries.reduce((n, entry) => n + entry.contents.length, 0)} retreating.`);
+                        logAction(`⚔️ <b>COLLISION RESULT</b> (${candDesc}): <b>P${survivor.player} (${survivorPlayer.name})</b> survived · 💀 ${casualtyCount} casualties · ⛓ ${capturedUnits.length} captured · ↩️ ${retreatEntries.reduce((n, entry) => n + entry.contents.length, 0)} retreating.`);
                         btnProceedBattle.classList.remove('hidden');
-                    }, 1000);
+                    }, captureOnly ? 0 : 1000);
                 };
 
                 btnProceedBattle.onclick = () => {
+                    if (gameState.pendingCapture) return;
+                    if (group.type === 'SWAP' && group.survivor) {
+                        const winner = group.survivor;
+                        const piece = gameState.board[winner.to[0]][winner.to[1]];
+                        group.survivor = piece && piece.player === winner.player ? {
+                            ...winner,
+                            pieceId: piece.id,
+                            pieceType: piece.type,
+                            contents: getPieceContents(piece)
+                        } : null;
+                    }
                     clashOverlay.classList.add('hidden');
                     clearBattleTarget();
                     battleCandidatesEl.innerHTML = '';
@@ -1402,6 +1504,7 @@
                     btnProceedBattle.onclick = null;
                     resolve();
                 };
+                if (captureOnly) btnStartBattle.onclick();
             });
         }
 
@@ -1418,6 +1521,8 @@
                     return;
                 }
                 const activeCandidateData = getBattleCandidateData(group);
+                const captureOnly = activeCandidateData.filter(entry => entry.combatContents.length).length === 1 &&
+                    activeCandidateData.some(entry => !entry.combatContents.length);
                 clashOverlay.classList.remove('hidden');
                 setBattleTarget(group);
                 renderBattleCandidates(group);
@@ -1428,15 +1533,16 @@
                 btnProceedBattle.classList.add('hidden');
 
                 btnStartBattle.onclick = () => {
+                    btnStartBattle.onclick = null;
                     btnStartBattle.classList.add('hidden');
                     clashResult.innerText = "Fighting...";
                     setTimeout(() => {
-                        const roll = Math.random();
+                        const roll = captureOnly ? 0 : Math.random();
                         let accumulatedProbability = 0;
                         let survivorIdx = activeCandidateData.length - 1;
                         for (let idx = 0; idx < activeCandidateData.length; idx++) {
                             accumulatedProbability += activeCandidateData[idx].probability;
-                            if (roll <= accumulatedProbability) {
+                            if (activeCandidateData[idx].probability > 0 && roll < accumulatedProbability) {
                                 survivorIdx = idx;
                                 break;
                             }
@@ -1447,11 +1553,14 @@
                             activeCandidateData.map(entry => [entry.candidate.pieceId, entry])
                         );
                         const battleRolls = [
-                            `Winner roll ${(roll * 100).toFixed(2)}% selected P${survivor.player} ${PLAYERS[survivor.player - 1].name}`
+                            captureOnly ? `Unopposed prisoner capture by P${survivor.player}; no battle roll.` :
+                                `Winner roll ${(roll * 100).toFixed(2)}% selected P${survivor.player} ${PLAYERS[survivor.player - 1].name}`
                         ];
                         const candidateResults = new Map();
                         const winnerData = candidateDataById.get(survivor.pieceId);
-                        candidateResults.set(survivor.pieceId, resolveCandidateCasualties(
+                        candidateResults.set(survivor.pieceId, captureOnly ? {
+                            survivors: getPieceContents(survivor), casualties: [], captured: []
+                        } : resolveCandidateCasualties(
                             survivor,
                             winnerData ? winnerData.probability : 0,
                             false,
@@ -1518,23 +1627,26 @@
                         }
 
                         retreatEntries.forEach(entry => queueRetreat(entry.player, entry.contents, group.targetSquare));
+                        recordDeadPieces(gameState, [...candidateResults.values()].flatMap(result => result.casualties));
+                        const capturedUnits = [...candidateResults.values()].flatMap(result => result.captured);
+                        beginCaptureChoices(survivor.player, capturedUnits,
+                            survivor.isSallyAttacker ? survivor.from : group.targetSquare);
+                        renderCaptureChoices();
                         renderBattleCandidates(group, candidateResults);
                         const casualtyCount = [...candidateResults.values()]
                             .reduce((count, result) => count + result.casualties.length, 0);
                         const winnerPlayer = PLAYERS[survivor.player - 1];
-                        clashResult.innerText = `${winnerPlayer.name} wins Sally Out · 💀${casualtyCount}`;
+                        clashResult.innerText = `${winnerPlayer.name} wins Sally Out · 💀${casualtyCount} · ⛓${capturedUnits.length}`;
                         clashResult.style.color = winnerPlayer.color;
-                        battleRollsEl.innerHTML = `
-                            <div class="battle-roll-section"><strong>Rolls</strong><br>
-                                ${battleRolls.map(rollEntry => `<div>${rollEntry}</div>`).join('')}
-                            </div>`;
+                        renderBattleRolls(battleRolls);
                         logAction(`⚔️ <b>SALLY OUT</b> at ${coordsToNotation(...group.targetSquare)}: ` +
                             `<b>P${survivor.player} (${winnerPlayer.name})</b> won · 💀 ${casualtyCount} casualties.`);
                         btnProceedBattle.classList.remove('hidden');
-                    }, 1000);
+                    }, captureOnly ? 0 : 1000);
                 };
 
                 btnProceedBattle.onclick = () => {
+                    if (gameState.pendingCapture) return;
                     clashOverlay.classList.add('hidden');
                     clearBattleTarget();
                     battleCandidatesEl.innerHTML = '';
@@ -1544,33 +1656,19 @@
                     syncSieges();
                     resolve();
                 };
+                if (captureOnly) btnStartBattle.onclick();
             });
-        }
-
-        function checkPlayerEliminations() {
-            const kingAlive = [false, false, false, false];
-
-            for (let r = 0; r < 16; r++) {
-                for (let c = 0; c < 16; c++) {
-                    const piece = gameState.board[r][c];
-                    if (piece && getPieceContents(piece).some(unit => unit.type === 'k')) {
-                        kingAlive[piece.player - 1] = true;
-                    }
-                }
-            }
-
-            for (let p = 0; p < 4; p++) {
-                if (!kingAlive[p] && !gameState.eliminated[p]) {
-                    gameState.eliminated[p] = true;
-                    logAction(`👑💥 <b>PLAYER ELIMINATED!</b> ${PLAYERS[p].name} (Player ${p + 1}) lost their King!`);
-                }
-            }
         }
 
         // Modal triggers
         btnRules.addEventListener('click', () => {
             document.getElementById('rules-modal').classList.remove('hidden');
         });
+        btnEditNames.addEventListener('click', showPlayerNamesEditor);
+        document.getElementById('btn-cancel-names').addEventListener('click', () => {
+            playerNamesModal.classList.add('hidden');
+        });
+        document.getElementById('btn-save-names').addEventListener('click', savePlayerNames);
         document.getElementById('btn-close-rules').addEventListener('click', () => {
             document.getElementById('rules-modal').classList.add('hidden');
         });
@@ -1591,7 +1689,7 @@
         btnResetCustomSetup.addEventListener('click', () => {
             gameState.customSetupBoard = createEmptySetupBoard();
             gameState.nextUnitSequence = [1, 1, 1, 1];
-            customSetupStatusEl.innerText = 'Placement reset. Every selected player needs exactly one King.';
+            customSetupStatusEl.innerText = 'Placement reset. Every selected player needs exactly one King, at least one Queen and one Tower.';
             renderCustomSetupBoard();
         });
         btnSaveCustomSetup.addEventListener('click', saveCustomSetup);
@@ -1602,11 +1700,15 @@
         btnConfirmCustomSetup.addEventListener('click', confirmCustomSetup);
         btnStartSelectedGame.addEventListener('click', () => {
             const selectedPlayers = [...document.querySelectorAll('#player-selection-list input')]
-                .map(input => input.checked);
+                .filter(input => input.type === 'checkbox').map(input => input.checked);
             if (selectedPlayers.filter(Boolean).length < 2) {
                 playerSelectionError.innerText = 'Select at least two players to start.';
                 return;
             }
+            document.querySelectorAll('.player-name-input').forEach(input => {
+                const index = Number(input.dataset.playerName) - 1;
+                PLAYERS[index].name = cleanPlayerName(input.value, index);
+            });
             gameState.progressionMode = document.querySelector('input[name="progression-mode"]:checked').value;
             const setupMode = document.querySelector('input[name="setup-mode"]:checked').value;
             if (setupMode === 'custom') {

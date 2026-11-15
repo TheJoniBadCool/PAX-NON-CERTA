@@ -18,6 +18,7 @@ class GameState {
         this.selectedHeldPiece = null;
         this.pendingTransfer = null;
         this.retreating = [[], [], [], []];
+        this.deadPieces = [[], [], [], []];
         this.sieges = [];
         this.progressionMode = 'zero';
         this.nextUnitSequence = [1, 1, 1, 1];
@@ -26,5 +27,14 @@ class GameState {
         this.customSetupType = 'p';
         this.multiplayer = false;
         this.committed = [false, false, false, false];
+        this.objectives = [[], [], [], []];
+        this.scores = [0, 0, 0, 0];
+        this.pendingCapture = null;
     }
+}
+
+function recordDeadPieces(gameState, units) {
+    units.forEach(unit => {
+        gameState.deadPieces[(unit.originalPlayer || unit.player) - 1].push({ ...unit });
+    });
 }

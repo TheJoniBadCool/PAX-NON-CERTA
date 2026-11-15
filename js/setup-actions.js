@@ -54,6 +54,10 @@ function loadSavedSetup(index) {
         customSetupStatusEl.innerText = 'This saved setup is invalid or incomplete.';
         return;
     }
+    if (Multiplayer.isEditingSetup() && !Multiplayer.setupMatchesRoom(setup.activePlayers)) {
+        customSetupStatusEl.innerText = 'This saved setup must use the same players as the room. Change the lobby player count or choose another setup.';
+        return;
+    }
     showCustomSetup(setup.activePlayers, cloneSetupBoard(setup.board));
 }
 
@@ -76,7 +80,7 @@ function saveCustomSetup() {
         board: cloneSetupBoard(gameState.customSetupBoard)
     };
     if (!isValidSavedSetup(setup)) {
-        customSetupStatusEl.innerText = 'Every selected player must have exactly one King before saving.';
+        customSetupStatusEl.innerText = 'Every selected player needs exactly one King, at least one Queen and one Tower before saving.';
         return;
     }
     const name = window.prompt('Name this custom setup:', '');

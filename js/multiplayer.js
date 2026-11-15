@@ -16,6 +16,8 @@ const Multiplayer = (() => {
         name: '',
         myIndex: 0,
         count: 2,
+        setupBoard: null,
+        editingSetup: false,
         started: false,
         gameId: 0,
         joined: false,
@@ -34,6 +36,7 @@ const Multiplayer = (() => {
     const lobbyView = $('mp-lobby-view');
     const statusEl = $('mp-status');
     const gameOverModal = $('gameover-modal');
+    const playerNamesModal = $('player-names-modal');
     const btnForceSkip = $('btn-force-skip');
     const btnGameOverRestart = $('btn-gameover-restart');
 
@@ -70,7 +73,7 @@ const Multiplayer = (() => {
     }
 
     function hideAllModals() {
-        [mainMenuModal, mpModal, gameOverModal, playerSelectionModal, customSetupModal]
+        [mainMenuModal, mpModal, gameOverModal, playerSelectionModal, customSetupModal, playerNamesModal]
             .forEach(modal => modal.classList.add('hidden'));
     }
 
@@ -107,7 +110,7 @@ const Multiplayer = (() => {
             row.style.borderColor = PLAYERS[i].color;
             const label = document.createElement('span');
             label.style.color = PLAYERS[i].color;
-            label.innerText = `${ICONS[i]} ${PLAYERS[i].name}`;
+            label.innerText = `${ICONS[i]} ${PLAYERS[i].colorName}`;
             const who = document.createElement('span');
             if (i >= m.count) {
                 who.innerText = 'not in this match';
@@ -124,9 +127,46 @@ const Multiplayer = (() => {
         $('mp-guest-wait').classList.toggle('hidden', isHost());
         if (isHost()) {
             $('mp-count').value = String(m.count);
+            $('mp-custom-options').classList.toggle('hidden', $('mp-setup-mode').value !== 'custom');
+            $('mp-setup-status').innerText = m.setupBoard
+                ? 'Custom placement ready. You can edit it before starting.'
+                : 'Place pieces or load a saved setup before starting.';
             const ready = m.roster.slice(0, m.count).every(entry => entry && entry.connected);
             $('btn-mp-start').disabled = !ready;
         }
+    }
+
+    function setupMatchesRoom(activePlayers) {
+        return Array.isArray(activePlayers) && activePlayers.length === 4 &&
+            activePlayers.every((selected, index) => selected === (index < m.count));
+    }
+
+    function editCustomSetup() {
+        if (!isHost() || m.started) return;
+        m.editingSetup = true;
+        gameState.progressionMode = document.querySelector('input[name="mp-progression"]:checked').value;
+        mpModal.classList.add('hidden');
+        showCustomSetup([0, 1, 2, 3].map(i => i < m.count),
+            m.setupBoard ? cloneSetupBoard(m.setupBoard) : null);
+    }
+
+    function confirmSetup() {
+        if (!isHost() || m.started || !m.editingSetup) return;
+        const setup = { activePlayers: gameState.activePlayers, board: gameState.customSetupBoard };
+        if (!setupMatchesRoom(setup.activePlayers) || !isValidSavedSetup(setup) ||
+            !towersAreSpaced(setup.board)) {
+            customSetupStatusEl.innerText = 'Invalid placement. Match the room players and give each one a King, Queen and spaced Tower.';
+            return;
+        }
+        m.setupBoard = cloneSetupBoard(setup.board);
+        m.editingSetup = false;
+        showLobby();
+    }
+
+    function cancelSetup() {
+        if (!m.editingSetup) return;
+        m.editingSetup = false;
+        showLobby();
     }
 
     // ---------- Host ----------
@@ -202,9 +242,28 @@ const Multiplayer = (() => {
         } else if (message.type === 'unlock') {
             if (message.gameId !== m.gameId || message.round !== gameState.round) return;
             hostSetCommit(index, false);
+        } else if (message.type === 'rename') {
+            const name = cleanName(message.name, PLAYERS[index].colorName);
+            m.slots[index].name = name;
+            if (index === 0) m.name = name;
+            m.roster = rosterFromSlots();
+            PLAYERS[index].name = name;
+            if (m.started) updatePlayerCards(); else renderLobby();
+            broadcastSync();
         } else if (message.type === 'armour') {
             if (message.gameId !== m.gameId || message.round !== gameState.round) return;
             handleArmourRequest(index, message.unitId);
+        } else if (message.type === 'capture-choice' || message.type === 'prisoner-action') {
+            if (message.gameId !== m.gameId || message.round !== gameState.round) return;
+            const accepted = message.type === 'capture-choice'
+                ? decideCapture(index + 1, message.captureId, message.unitId, message.fate)
+                : managePrisoner(index + 1, message.unitId, message.action);
+            if (!accepted) {
+                send(conn, { type: 'notice', text: 'Prisoner action rejected. Check ownership, battle state, and queued plans.' });
+            }
+            renderCaptureChoices();
+            renderBoard();
+            syncNow();
         }
     }
 
@@ -268,6 +327,8 @@ const Multiplayer = (() => {
                 if (entry.sourcePieceId !== piece.id) return null;
                 const heldUnit = getPieceContents(piece).find(unit => unit.id === entry.unitId);
                 if (!heldUnit || !canMoveHeldUnit(heldUnit)) return null;
+                clean.contents = [heldUnit];
+                clean.pieceType = heldUnit.type;
             } else {
                 if (entry.pieceId !== piece.id) return null;
                 if (entry.siegeAssault) {
@@ -281,6 +342,9 @@ const Multiplayer = (() => {
                 clean.pieceType = piece.type;
                 clean.contents = getPieceContents(piece);
             }
+            const target = gameState.board[entry.to[0]][entry.to[1]];
+            if (!canUnitsTarget(clean.contents, target, index + 1)) return null;
+            if (clean.contents.every(isPrisoner) && (entry.siegeAssault || entry.sallyOut || entry.siegeCancel)) return null;
             result.push(clean);
         }
         return result;
@@ -293,7 +357,7 @@ const Multiplayer = (() => {
                 if (!piece || piece.player !== index + 1) continue;
                 const contents = getPieceContents(piece);
                 const unit = contents.find(candidate => candidate.id === unitId);
-                if (!unit || !contents.some(other => other.type === 'r') || getUnitLevel(unit, 'armour') >= 3) continue;
+                if (!unit || isPrisoner(unit) || !contents.some(other => other.type === 'r') || getUnitLevel(unit, 'armour') >= 3) continue;
                 unit.armour = getUnitLevel(unit, 'armour') + 1;
                 logAction(`🛡️ <b>${getUnitName(unit)}</b> armour upgraded to ${unit.armour}.`);
                 renderBoard();
@@ -303,14 +367,23 @@ const Multiplayer = (() => {
     }
 
     function startMatch() {
+        if (!isHost() || m.started) return;
         const needed = m.roster.slice(0, m.count);
         if (!needed.every(entry => entry && entry.connected)) return;
+        m.roster.forEach((entry, index) => {
+            PLAYERS[index].name = entry ? cleanName(entry.name, PLAYERS[index].colorName) : PLAYERS[index].colorName;
+        });
+        const custom = $('mp-setup-mode').value === 'custom';
+        if (custom && !m.setupBoard) {
+            editCustomSetup();
+            return;
+        }
         gameState.progressionMode = document.querySelector('input[name="mp-progression"]:checked').value;
         m.started = true;
         m.gameId++;
         gameState.multiplayer = true;
         gameState.committed = [false, false, false, false];
-        startNewGame([0, 1, 2, 3].map(i => i < m.count));
+        startNewGame([0, 1, 2, 3].map(i => i < m.count), custom ? m.setupBoard : null);
         gameState.turnIndex = m.myIndex;
         gameState.phase = 'PLANNING';
         hideAllModals();
@@ -380,6 +453,7 @@ const Multiplayer = (() => {
     function returnToLobby() {
         m.started = false;
         gameState.multiplayer = false;
+        $('btn-edit-names').classList.add('hidden');
         gameState.committed = [false, false, false, false];
         m.roster = rosterFromSlots();
         hideAllModals();
@@ -411,8 +485,12 @@ const Multiplayer = (() => {
                 phase: gameState.phase === 'COMMITTED' ? 'PLANNING' : gameState.phase,
                 sieges: gameState.sieges,
                 retreating: gameState.retreating,
+                deadPieces: gameState.deadPieces,
                 nextUnitSequence: gameState.nextUnitSequence,
                 progressionMode: gameState.progressionMode,
+                objectives: gameState.objectives.map((objectives, i) => i === index ? objectives : []),
+                scores: gameState.scores,
+                pendingCapture: gameState.pendingCapture,
                 gameOver: gameState.phase === 'GAME_OVER' ? {
                     title: $('gameover-title').innerText,
                     desc: $('gameover-desc').innerText
@@ -466,7 +544,8 @@ const Multiplayer = (() => {
             result: clashResult.innerText,
             color: clashResult.style.color,
             rolls: battleRollsEl.innerHTML,
-            target: battleTargetSquare
+            target: battleTargetSquare,
+            pendingCapture: gameState.pendingCapture
         };
     }
 
@@ -580,10 +659,15 @@ const Multiplayer = (() => {
         m.roster = message.roster;
         m.count = message.count;
         m.myIndex = message.you;
+        PLAYERS.forEach((player, index) => {
+            const entry = m.roster[index];
+            player.name = entry ? cleanName(entry.name, player.colorName) : player.colorName;
+        });
         if (!message.started) {
             const wasStarted = m.started;
             m.started = false;
             gameState.multiplayer = false;
+            $('btn-edit-names').classList.add('hidden');
             if (wasStarted) {
                 clashOverlay.classList.add('hidden');
                 clearBattleTarget();
@@ -596,6 +680,7 @@ const Multiplayer = (() => {
         const isNewGame = !m.started || message.gameId !== m.gameId;
         const isNewRound = isNewGame || game.round !== gameState.round;
         m.started = true;
+        $('btn-edit-names').classList.remove('hidden');
         m.gameId = message.gameId;
         if (isNewGame) {
             hideAllModals();
@@ -614,14 +699,19 @@ const Multiplayer = (() => {
             round: game.round,
             sieges: game.sieges,
             retreating: game.retreating,
+            deadPieces: game.deadPieces || [[], [], [], []],
             nextUnitSequence: game.nextUnitSequence,
             progressionMode: game.progressionMode,
+            objectives: game.objectives,
+            scores: game.scores,
             committed: message.committed,
+            pendingCapture: game.pendingCapture || null,
             turnIndex: message.you
         });
         gameState.phase = game.phase === 'PLANNING' && (message.committed[message.you] || game.eliminated[message.you])
             ? 'COMMITTED'
             : game.phase;
+        renderCaptureChoices();
         if (message.myPlan && !gameState.plans[message.you].length) gameState.plans[message.you] = message.myPlan;
         if (gameState.phase !== 'PLANNING') {
             gameState.selectedSquare = null;
@@ -645,6 +735,8 @@ const Multiplayer = (() => {
     }
 
     function applyBattle(message) {
+        gameState.pendingCapture = message.pendingCapture || null;
+        renderCaptureChoices();
         battleCandidatesEl.innerHTML = message.candidates;
         clashResult.innerText = message.result === 'Ready' ? 'Ready — the host starts the battle' : message.result;
         clashResult.style.color = message.color;
@@ -737,8 +829,45 @@ const Multiplayer = (() => {
         }
     }
 
+    function requestCaptureDecision(captureId, unitId, fate) {
+        if (!m.conn || !m.conn.open) {
+            toast('Not connected to the host. Capture decision was not sent.');
+            return;
+        }
+        m.conn.send({ type: 'capture-choice', captureId, unitId, fate, gameId: m.gameId, round: gameState.round });
+    }
+
+    function requestPrisonerAction(unitId, action) {
+        if (!m.conn || !m.conn.open) {
+            toast('Not connected to the host. Prisoner action was not sent.');
+            return;
+        }
+        m.conn.send({ type: 'prisoner-action', unitId, action, gameId: m.gameId, round: gameState.round });
+    }
+
     function getRosterEntry(index) {
         return m.roster[index];
+    }
+
+    function renameMyPlayer(value) {
+        const index = m.myIndex;
+        const name = cleanName(value, PLAYERS[index].colorName);
+        if (isHost()) {
+            if (!m.slots[index]) return;
+            PLAYERS[index].name = name;
+            m.name = name;
+            m.slots[index].name = name;
+            m.roster = rosterFromSlots();
+            if (m.started) updatePlayerCards(); else renderLobby();
+            broadcastSync();
+        } else if (m.conn && m.conn.open) {
+            PLAYERS[index].name = name;
+            m.name = name;
+            if (m.roster[index]) m.roster[index].name = name;
+            m.conn.send({ type: 'rename', name });
+        } else {
+            toast('Not connected to the host. Your name was not updated.');
+        }
     }
 
     function getBadge(index) {
@@ -768,7 +897,7 @@ const Multiplayer = (() => {
         for (let i = 0; i < 4; i++) {
             const label = $(`card-p${i + 1}`).firstElementChild;
             const entry = getRosterEntry(i);
-            label.innerText = `${ICONS[i]} ${entry ? entry.name : `Player ${i + 1}`} (${PLAYERS[i].name})`;
+            label.innerText = `${ICONS[i]} ${entry ? entry.name : `Player ${i + 1}`} (${PLAYERS[i].colorName})`;
         }
         const me = m.myIndex;
         const canAct = ['PLANNING', 'COMMITTED'].includes(gameState.phase) && !gameState.eliminated[me];
@@ -813,13 +942,21 @@ const Multiplayer = (() => {
     $('btn-mp-create').addEventListener('click', createRoom);
     $('btn-mp-join').addEventListener('click', joinRoom);
     $('btn-mp-start').addEventListener('click', startMatch);
+    $('btn-mp-setup').addEventListener('click', editCustomSetup);
+    $('mp-setup-mode').addEventListener('change', renderLobby);
+    $('btn-custom-setup-back').addEventListener('click', cancelSetup);
     $('btn-mp-back').addEventListener('click', () => {
         if (m.role) location.reload();
         else showMainMenu();
     });
     $('mp-count').addEventListener('change', event => {
         const highestOccupied = m.slots.reduce((max, slot, i) => slot ? i + 1 : max, 0);
-        m.count = Math.max(Number(event.target.value), highestOccupied, 2);
+        const count = Math.max(Number(event.target.value), highestOccupied, 2);
+        if (count !== m.count && m.setupBoard) {
+            m.setupBoard = null;
+            toast('Player count changed. Please configure custom placement again.');
+        }
+        m.count = count;
         renderLobby();
         broadcastSync();
     });
@@ -832,15 +969,22 @@ const Multiplayer = (() => {
     return {
         showMainMenu,
         isHost,
+        isEditingSetup: () => m.editingSetup,
+        setupMatchesRoom,
+        confirmSetup,
         isPendingCommit: () => m.pendingCommit !== null,
         toggleCommit,
         requestArmourUpgrade,
+        requestCaptureDecision,
+        requestPrisonerAction,
         onBoardRendered,
         broadcastResolutionStart,
         beginNextRound,
         onGameOver,
         onNewGameRequested,
         getBadge,
-        refreshControls
+        refreshControls,
+        getMyIndex: () => m.myIndex,
+        renameMyPlayer
     };
 })();

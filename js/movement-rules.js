@@ -18,11 +18,15 @@ function pieceContainsPawn(piece) {
 }
 
 function canMoveWholePiece(piece) {
-    return !isPawnRestTurn() || !pieceContainsPawn(piece);
+    return !isPawnRestTurn() || !getPieceContents(piece).some(unit => getUnitType(unit) === 'p' || isPrisoner(unit));
 }
 
 function canMoveHeldUnit(unit) {
-    return !isPawnRestTurn() || getUnitType(unit) !== 'p';
+    return !isPawnRestTurn() || (getUnitType(unit) !== 'p' && !isPrisoner(unit));
+}
+
+function canUnitsTarget(contents, target, player) {
+    return !target || target.player === player || contents.some(unit => !isPrisoner(unit));
 }
 
 // Universal 1-Square Movement Rule in all 8 directions
@@ -56,11 +60,13 @@ function getValidMovesForPiece(r, c) {
         if (tr >= 0 && tr < 16 && tc >= 0 && tc < 16) {
             if (!isTowerGateMove([r, c], [tr, tc])) continue;
             const targetPiece = gameState.board[tr][tc];
+            if (!canUnitsTarget(getPieceContents(piece), targetPiece, activePlayerId)) continue;
             if (targetPiece && targetPiece.player !== activePlayerId &&
                 isTowerPiece(targetPiece) &&
-                !getPieceContents(piece).some(unit => getUnitType(unit) === 'p')) {
+                !getCombatContents(piece).some(unit => getUnitType(unit) === 'p')) {
                 continue;
             }
+
             if (targetPiece && targetPiece.player === activePlayerId) {
                 const targetIsMovingAway = currentPlans.some(p => p.from[0] === tr && p.from[1] === tc);
                 if (!targetIsMovingAway || targetPiece.type === 'r') {
@@ -72,4 +78,37 @@ function getValidMovesForPiece(r, c) {
         }
     }
     return moves;
+}
+
+function rejectPrisonerMoveConflicts(moves) {
+    let changed;
+    do {
+        changed = false;
+        const active = moves.filter(move => !move.invalid && !move.siegeCancel && !move.sallyOut);
+        const prisoners = active.filter(move => move.contents.every(isPrisoner));
+        const reject = new Set();
+        prisoners.forEach(move => {
+            const target = gameState.board[move.to[0]][move.to[1]];
+            const movingTarget = target && active.some(other => !other.isUnmerge && other.pieceId === target.id);
+            const swaps = prisoners.filter(other => other !== move && other.player !== move.player &&
+                other.to[0] === move.from[0] && other.to[1] === move.from[1] &&
+                move.to[0] === other.from[0] && move.to[1] === other.from[1]);
+            swaps.forEach(other => { reject.add(move); reject.add(other); });
+            const opponents = prisoners.filter(other => other !== move && other.player !== move.player &&
+                other.to[0] === move.to[0] && other.to[1] === move.to[1]);
+            const combatArrival = active.some(other => other.to[0] === move.to[0] &&
+                other.to[1] === move.to[1] && other.contents.some(unit => !isPrisoner(unit)));
+            const stationaryCombat = target && !movingTarget && !isPrisonerOnly(target);
+            if (!combatArrival && !stationaryCombat && (opponents.length ||
+                target && !movingTarget && target.player !== move.player && isPrisonerOnly(target))) {
+                reject.add(move);
+                opponents.forEach(other => reject.add(other));
+            }
+        });
+        reject.forEach(move => {
+            move.invalid = true;
+            changed = true;
+            logAction(`Prisoner move by P${move.player} cancelled: prisoners cannot fight each other.`);
+        });
+    } while (changed);
 }
