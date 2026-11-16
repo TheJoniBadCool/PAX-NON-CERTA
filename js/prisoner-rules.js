@@ -65,8 +65,8 @@ function managePrisoner(player, unitId, action) {
     if (!['PLANNING', 'COMMITTED'].includes(gameState.phase) || gameState.eliminated[player - 1] ||
         gameState.multiplayer && gameState.committed[player - 1] ||
         !['execute', 'release'].includes(action)) return false;
-    for (let r = 0; r < 16; r++) {
-        for (let c = 0; c < 16; c++) {
+    for (let r = 0; r < gameState.boardSize; r++) {
+        for (let c = 0; c < gameState.boardSize; c++) {
             const piece = gameState.board[r][c];
             if (!piece || piece.player !== player) continue;
             const contents = getPieceContents(piece);
@@ -130,7 +130,7 @@ function resolvePrisonerPlans() {
                 const restored = restorePrisoner(unit);
                 queueRetreat(restored.player, [restored], [r, c], true);
             }
-            logAction(`${plan.prisonerAction === 'execute' ? '💀' : '🏳️'} <b>P${index + 1}</b> ${plan.prisonerAction === 'execute' ? 'executed' : 'released'} prisoner <b>${escapeHtml(getUnitName(unit))}</b> at ${coordsToNotation(r, c)}.`);
+            logAction(`${plan.prisonerAction === 'execute' ? '💀' : '🏳️'} <b>P${index + 1}</b> ${plan.prisonerAction === 'execute' ? 'executed' : 'released'} prisoner <b>${escapeHtml(getUnitName(unit))}</b> ${getBiome(r, c) === 'forest' ? 'in a forest' : `at ${coordsToNotation(r, c)}`}.`);
             count++;
         });
     }

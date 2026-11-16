@@ -10,12 +10,19 @@ const PIECE_SVGS = {
 };
 
 const PLAYERS = [
-    { id: 1, name: 'Red', colorName: 'Red', color: '#ef4444', class: 'piece-p1', zone: [0, 0, 3, 3] },
-    { id: 2, name: 'Blue', colorName: 'Blue', color: '#3b82f6', class: 'piece-p2', zone: [0, 12, 3, 15] },
-    { id: 3, name: 'Green', colorName: 'Green', color: '#10b981', class: 'piece-p3', zone: [12, 12, 15, 15] },
-    { id: 4, name: 'Yellow', colorName: 'Yellow', color: '#eab308', class: 'piece-p4', zone: [12, 0, 15, 3] }
+    { id: 1, name: 'Red', colorName: 'Red', color: '#ef4444', class: 'piece-p1' },
+    { id: 2, name: 'Blue', colorName: 'Blue', color: '#3b82f6', class: 'piece-p2' },
+    { id: 3, name: 'Green', colorName: 'Green', color: '#10b981', class: 'piece-p3' },
+    { id: 4, name: 'Yellow', colorName: 'Yellow', color: '#eab308', class: 'piece-p4' }
 ];
 const PLAYER_CODES = ['A', 'B', 'C', 'D'];
+const BOARD_SIZES = [10, 12, 14, 16];
+
+function getPlayerZone(playerIndex, boardSize = gameState.boardSize) {
+    const minRow = playerIndex >= 2 ? boardSize - 4 : 0;
+    const minColumn = playerIndex === 1 || playerIndex === 2 ? boardSize - 4 : 0;
+    return [minRow, minColumn, minRow + 3, minColumn + 3];
+}
 
 const CASUALTY_WEIGHTS = { k: 0.5, q: 0.1, b: 0.15, n: 0.2, p: 0.25, r: 0 };
 const STACK_ADVANTAGE_RATE = 0.20;

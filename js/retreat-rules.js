@@ -30,10 +30,10 @@ function processRetreatsAtRoundStart() {
         ready.forEach(entry => {
             const [br, bc] = entry.battleSquare;
             const nearby = [];
-            for (let r = Math.max(0, br - 3); r <= Math.min(15, br + 3); r++) {
-                for (let c = Math.max(0, bc - 3); c <= Math.min(15, bc + 3); c++) {
+            for (let r = Math.max(0, br - 3); r <= Math.min(gameState.boardSize - 1, br + 3); r++) {
+                for (let c = Math.max(0, bc - 3); c <= Math.min(gameState.boardSize - 1, bc + 3); c++) {
                     const distance = Math.max(Math.abs(r - br), Math.abs(c - bc));
-                    if (distance >= 1 && distance <= 3 && !gameState.board[r][c]) {
+                    if (distance >= 1 && distance <= 3 && !gameState.board[r][c] && isPassableSquare(r, c)) {
                         nearby.push([r, c]);
                     }
                 }
@@ -64,7 +64,7 @@ function processRetreatsAtRoundStart() {
                 contents,
                 isGray
             };
-            logAction(`↩️ P${entry.player} ${entry.released ? 'released units' : 'retreat'} re-entered at ${coordsToNotation(r, c)}.`);
+            logAction(`↩️ P${entry.player} ${entry.released ? 'released units' : 'retreat'} re-entered ${getBiome(r, c) === 'forest' ? 'in a forest' : `at ${coordsToNotation(r, c)}`}.`);
         });
     }
     renderRetreatTable();

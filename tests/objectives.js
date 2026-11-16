@@ -303,6 +303,32 @@ async function run() {
     start();
     assert(state.scores.every(score => score === 0));
     assert(state.objectives.flat().every(objective => !objective.completed), 'Restart clears progress');
+    state.biomes[3][3] = 'hill';
+    const defender = state.board[0][10];
+    const enemy = state.board[4][10];
+    const ally = state.board[0][9];
+    state.board[0][10] = state.board[4][10] = state.board[0][9] = null;
+    state.board[3][3] = defender;
+    state.board[2][3] = enemy;
+    state.board[3][2] = ally;
+    state.hillHeld = Array.from({ length: 16 }, () => Array(16).fill(null));
+    state.hillHeld[3][3] = { player: 1, ids: defender.contents.map(unit => unit.id) };
+    let displayedBattle;
+    context.renderBattleCandidates = group => { displayedBattle = group; };
+    api.processCollisionGroup({
+        type: 'TARGET', targetSquare: [3, 3], candidates: [
+            { player: 1, pieceId: defender.id, from: [3, 3], to: [3, 3],
+                pieceType: defender.type, contents: defender.contents, isStationary: true },
+            { player: 1, pieceId: ally.id, from: [3, 2], to: [3, 3],
+                pieceType: ally.type, contents: ally.contents },
+            { player: 2, pieceId: enemy.id, from: [2, 3], to: [3, 3],
+                pieceType: enemy.type, contents: enemy.contents }
+        ]
+    });
+    assert.equal(displayedBattle.candidates.find(candidate => candidate.player === 1).terrainBonus, 0.25,
+        'The held hill bonus must survive the real same-player merge');
+    assert.equal(displayedBattle.candidates.find(candidate => candidate.player === 2).terrainBonus, 0,
+        'Arriving attackers must not receive the hill bonus');
     console.log('Objective rules, capture, privacy and round-resolution checks passed');
 }
 run().catch(error => {

@@ -23,7 +23,7 @@ function bindBoardInteractions() {
         const square = getSquare(event);
         if (!square) return;
         const index = Array.prototype.indexOf.call(boardEl.children, square);
-        handleSquareClick(Math.floor(index / 16), index % 16);
+        handleSquareClick(Math.floor(index / gameState.boardSize), index % gameState.boardSize);
     });
     boardEl.addEventListener('contextmenu', event => {
         event.preventDefault();
@@ -32,7 +32,7 @@ function bindBoardInteractions() {
         if (press) suppressClick = true;
         cancelPress();
         const index = Array.prototype.indexOf.call(boardEl.children, square);
-        handleSquarePopup(Math.floor(index / 16), index % 16);
+        handleSquarePopup(Math.floor(index / gameState.boardSize), index % gameState.boardSize);
     });
     boardEl.addEventListener('pointerdown', event => {
         const alreadyPressing = press !== null;
@@ -46,7 +46,7 @@ function bindBoardInteractions() {
         press = { id: event.pointerId, x: event.clientX, y: event.clientY };
         pressTimer = setTimeout(() => {
             suppressClick = true;
-            handleSquarePopup(Math.floor(index / 16), index % 16);
+            handleSquarePopup(Math.floor(index / gameState.boardSize), index % gameState.boardSize);
         }, 500);
     });
     window.addEventListener('pointermove', event => {
@@ -63,21 +63,26 @@ function bindBoardInteractions() {
 
 function renderBoard() {
     boardEl.innerHTML = '';
+    boardEl.style.gridTemplateColumns = `repeat(${gameState.boardSize}, 1fr)`;
+    boardEl.style.gridTemplateRows = `repeat(${gameState.boardSize}, 1fr)`;
     const currentPlans = gameState.plans[gameState.turnIndex];
 
-    for (let r = 0; r < 16; r++) {
-        for (let c = 0; c < 16; c++) {
+    for (let r = 0; r < gameState.boardSize; r++) {
+        for (let c = 0; c < gameState.boardSize; c++) {
             const square = document.createElement('div');
             const isLight = (r + c) % 2 === 0;
+            const biome = getBiome(r, c);
 
-            let sqClass = `square ${isLight ? 'sq-light' : 'sq-dark'}`;
+            let sqClass = `square ${isLight ? 'sq-light' : 'sq-dark'} biome-${biome}`;
 
-            if (r <= 3 && c <= 3) sqClass += ' zone-p1';
-            else if (r <= 3 && c >= 12) sqClass += ' zone-p2';
-            else if (r >= 12 && c >= 12) sqClass += ' zone-p3';
-            else if (r >= 12 && c <= 3) sqClass += ' zone-p4';
+            const playerZone = PLAYERS.findIndex((player, index) => {
+                const [minR, minC, maxR, maxC] = getPlayerZone(index);
+                return r >= minR && r <= maxR && c >= minC && c <= maxC;
+            });
+            if (playerZone !== -1) sqClass += ` zone-p${playerZone + 1}`;
 
             square.className = sqClass;
+            square.title = `${biome[0].toUpperCase()}${biome.slice(1)} · ${coordsToNotation(r, c)}`;
 
             if (gameState.selectedSquare && gameState.selectedSquare[0] === r && gameState.selectedSquare[1] === c) {
                 square.classList.add('sq-selected');
@@ -105,7 +110,7 @@ function renderBoard() {
                 square.appendChild(plannedBadge);
             }
 
-            const piece = gameState.board[r][c];
+            const piece = getVisiblePiece(r, c);
             const siegeAtSquare = getSiegeAtSquare([r, c]);
             if (siegeAtSquare) {
                 const siegeMark = document.createElement('div');
@@ -122,6 +127,8 @@ function renderBoard() {
                 const pieceWrapper = document.createElement('div');
                 pieceWrapper.style.width = '100%';
                 pieceWrapper.style.height = '100%';
+                pieceWrapper.style.position = 'relative';
+                pieceWrapper.style.zIndex = '1';
                 pieceWrapper.style.display = 'flex';
                 pieceWrapper.style.alignItems = 'center';
                 pieceWrapper.style.justifyContent = 'center';

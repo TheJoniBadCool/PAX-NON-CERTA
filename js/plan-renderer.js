@@ -1,4 +1,5 @@
 function renderPlanArrows() {
+    planArrowsEl.setAttribute('viewBox', `0 0 ${gameState.boardSize} ${gameState.boardSize}`);
     const allMoves = getAllPlannedMoves();
     const colors = {
         green: '#22c55e',

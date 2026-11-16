@@ -6,7 +6,8 @@ function getAdjacentMoves(r, c) {
     ];
     return directions
         .map(([dr, dc]) => [r + dr, c + dc])
-        .filter(([tr, tc]) => tr >= 0 && tr < 16 && tc >= 0 && tc < 16);
+        .filter(([tr, tc]) => tr >= 0 && tr < gameState.boardSize &&
+            tc >= 0 && tc < gameState.boardSize);
 }
 
 function isPawnRestTurn() {
@@ -60,9 +61,10 @@ function getValidMovesForPiece(r, c) {
     for (const [dr, dc] of directions) {
         const tr = r + dr;
         const tc = c + dc;
-        if (tr >= 0 && tr < 16 && tc >= 0 && tc < 16) {
+        if (tr >= 0 && tr < gameState.boardSize && tc >= 0 && tc < gameState.boardSize) {
+            if (!isPassableSquare(tr, tc)) continue;
             if (!isTowerGateMove([r, c], [tr, tc])) continue;
-            const targetPiece = gameState.board[tr][tc];
+            const targetPiece = getVisiblePiece(tr, tc, activePlayerId);
             if (!canUnitsTarget(getPieceContents(piece), targetPiece, activePlayerId)) continue;
             if (targetPiece && targetPiece.player !== activePlayerId &&
                 isTowerPiece(targetPiece) &&

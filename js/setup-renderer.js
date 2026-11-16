@@ -16,8 +16,9 @@
 
         function renderCustomSetupBoard() {
             customSetupBoardEl.innerHTML = '';
-            for (let r = 0; r < 16; r++) {
-                for (let c = 0; c < 16; c++) {
+            customSetupBoardEl.style.gridTemplateColumns = `repeat(${gameState.boardSize}, 1fr)`;
+            for (let r = 0; r < gameState.boardSize; r++) {
+                for (let c = 0; c < gameState.boardSize; c++) {
                     const square = document.createElement('div');
                     square.className = `custom-setup-square ${(r + c) % 2 === 0 ? 'sq-light' : 'sq-dark'}`;
                     const piece = gameState.customSetupBoard[r][c];

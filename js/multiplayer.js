@@ -16,6 +16,7 @@ const Multiplayer = (() => {
         name: '',
         myIndex: 0,
         count: 2,
+        boardSize: 16,
         setupBoard: null,
         editingSetup: false,
         started: false,
@@ -127,6 +128,7 @@ const Multiplayer = (() => {
         $('mp-guest-wait').classList.toggle('hidden', isHost());
         if (isHost()) {
             $('mp-count').value = String(m.count);
+            $('mp-board-size').value = String(m.boardSize);
             $('mp-custom-options').classList.toggle('hidden', $('mp-setup-mode').value !== 'custom');
             $('mp-setup-status').innerText = m.setupBoard
                 ? 'Custom placement ready. You can edit it before starting.'
@@ -144,6 +146,7 @@ const Multiplayer = (() => {
     function editCustomSetup() {
         if (!isHost() || m.started) return;
         m.editingSetup = true;
+        gameState.boardSize = m.boardSize;
         gameState.progressionMode = document.querySelector('input[name="mp-progression"]:checked').value;
         mpModal.classList.add('hidden');
         showCustomSetup([0, 1, 2, 3].map(i => i < m.count),
@@ -152,13 +155,19 @@ const Multiplayer = (() => {
 
     function confirmSetup() {
         if (!isHost() || m.started || !m.editingSetup) return;
-        const setup = { activePlayers: gameState.activePlayers, board: gameState.customSetupBoard };
+        const setup = {
+            activePlayers: gameState.activePlayers,
+            boardSize: gameState.boardSize,
+            board: gameState.customSetupBoard
+        };
         if (!setupMatchesRoom(setup.activePlayers) || !isValidSavedSetup(setup) ||
             !towersAreSpaced(setup.board)) {
             customSetupStatusEl.innerText = 'Invalid placement. Match the room players and give each one a King, Queen and spaced Tower.';
             return;
         }
         m.setupBoard = cloneSetupBoard(setup.board);
+        m.boardSize = setup.board.length;
+        $('mp-board-size').value = String(m.boardSize);
         m.editingSetup = false;
         showLobby();
     }
@@ -310,7 +319,7 @@ const Multiplayer = (() => {
         if (!Array.isArray(plan) || plan.length > 64 || gameState.eliminated[index]) return null;
         if (!['PLANNING', 'COMMITTED'].includes(gameState.phase)) return null;
         const isSquare = square => Array.isArray(square) && square.length === 2 &&
-            square.every(value => Number.isInteger(value) && value >= 0 && value < 16);
+            square.every(value => Number.isInteger(value) && value >= 0 && value < gameState.boardSize);
         if (!plan.every(entry => entry && isSquare(entry.from) && isSquare(entry.to)) ||
             !validatePrisonerPlans(index + 1, plan)) return null;
         const result = [];
@@ -330,6 +339,7 @@ const Multiplayer = (() => {
             const plannedPiece = { ...piece, contents: plannedContents };
             const stationarySiegeAction = !entry.isUnmerge && (entry.sallyOut || entry.siegeCancel) &&
                 entry.from[0] === entry.to[0] && entry.from[1] === entry.to[1];
+            if (!stationarySiegeAction && !isPassableSquare(...entry.to)) return null;
             if (!stationarySiegeAction && !isTowerGateMove(entry.from, entry.to)) return null;
             const clean = { ...entry };
             if (entry.isUnmerge) {
@@ -351,7 +361,7 @@ const Multiplayer = (() => {
                 clean.pieceType = piece.type;
                 clean.contents = plannedContents;
             }
-            const target = gameState.board[entry.to[0]][entry.to[1]];
+            const target = getVisiblePiece(...entry.to, index + 1);
             if (!canUnitsTarget(clean.contents, target, index + 1)) return null;
             if (clean.contents.every(isPrisoner) && (entry.siegeAssault || entry.sallyOut || entry.siegeCancel)) return null;
             result.push(clean);
@@ -392,7 +402,7 @@ const Multiplayer = (() => {
         m.gameId++;
         gameState.multiplayer = true;
         gameState.committed = [false, false, false, false];
-        startNewGame([0, 1, 2, 3].map(i => i < m.count), custom ? m.setupBoard : null);
+        startNewGame([0, 1, 2, 3].map(i => i < m.count), custom ? m.setupBoard : null, m.boardSize);
         gameState.turnIndex = m.myIndex;
         gameState.phase = 'PLANNING';
         hideAllModals();
@@ -488,6 +498,8 @@ const Multiplayer = (() => {
         if (m.started) {
             message.game = {
                 board: gameState.board,
+                biomes: gameState.biomes,
+                hillHeld: gameState.hillHeld,
                 eliminated: gameState.eliminated,
                 activePlayers: gameState.activePlayers,
                 round: gameState.round,
@@ -497,6 +509,7 @@ const Multiplayer = (() => {
                 deadPieces: gameState.deadPieces,
                 nextUnitSequence: gameState.nextUnitSequence,
                 progressionMode: gameState.progressionMode,
+                boardSize: gameState.boardSize,
                 objectives: gameState.objectives.map((objectives, i) => i === index ? objectives : []),
                 scores: gameState.scores,
                 pendingCapture: gameState.pendingCapture,
@@ -703,6 +716,8 @@ const Multiplayer = (() => {
         }
         Object.assign(gameState, {
             board: game.board,
+            biomes: game.biomes,
+            hillHeld: game.hillHeld,
             eliminated: game.eliminated,
             activePlayers: game.activePlayers,
             round: game.round,
@@ -711,6 +726,7 @@ const Multiplayer = (() => {
             deadPieces: game.deadPieces || [[], [], [], []],
             nextUnitSequence: game.nextUnitSequence,
             progressionMode: game.progressionMode,
+            boardSize: game.boardSize,
             objectives: game.objectives,
             scores: game.scores,
             committed: message.committed,
@@ -960,6 +976,16 @@ const Multiplayer = (() => {
         m.count = count;
         renderLobby();
         broadcastSync();
+    });
+    $('mp-board-size').addEventListener('change', event => {
+        const boardSize = Number(event.target.value);
+        if (!BOARD_SIZES.includes(boardSize)) return;
+        if (boardSize !== m.boardSize && m.setupBoard) {
+            m.setupBoard = null;
+            toast('Board size changed. Please configure custom placement again.');
+        }
+        m.boardSize = boardSize;
+        renderLobby();
     });
     $('btn-menu').addEventListener('click', leaveToMenu);
     btnForceSkip.addEventListener('click', forceSkipDisconnected);

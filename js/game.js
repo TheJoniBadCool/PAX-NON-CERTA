@@ -73,8 +73,8 @@
 
             const boardRect = boardEl.parentElement.getBoundingClientRect();
             const [targetRow, targetColumn] = battleTargetSquare;
-            const targetX = ((targetColumn + 0.5) / 16) * 100;
-            const targetY = ((targetRow + 0.5) / 16) * 100;
+            const targetX = ((targetColumn + 0.5) / gameState.boardSize) * 100;
+            const targetY = ((targetRow + 0.5) / gameState.boardSize) * 100;
             const windowRect = battleWindow.getBoundingClientRect();
             const windowLeft = ((windowRect.left - boardRect.left) / boardRect.width) * 100;
             const windowRight = ((windowRect.right - boardRect.left) / boardRect.width) * 100;
@@ -223,6 +223,8 @@
 
             for (const move of allMoves) {
                 if (move.invalid || move.siegeStart || move.sallyOut || move.siegeCancel) continue;
+                if (move.player !== gameState.turnIndex + 1 &&
+                    (getBiome(...move.from) === 'forest' || getBiome(...move.to) === 'forest')) continue;
                 const sourcePiece = move.isUnmerge
                     ? { player: move.player, type: move.pieceType, contents: move.contents }
                     : gameState.board[move.from[0]][move.from[1]];
@@ -256,10 +258,10 @@
             }
         }
 
-        function startNewGame(selectedPlayers, customBoard = null) {
+        function startNewGame(selectedPlayers, customBoard = null, boardSize = gameState.boardSize) {
             gameState.activePlayers = selectedPlayers;
             btnEditNames.classList.remove('hidden');
-            initBoard(customBoard);
+            initBoard(customBoard, boardSize);
             gameState.turnIndex = gameState.activePlayers.findIndex(isSelected => isSelected);
             gameState.round = 1;
             gameState.phase = 'PLANNING';
@@ -281,7 +283,7 @@
 
             battleLogEl.innerHTML = `
                 <div class="log-item" style="color: var(--text-muted); text-align: center;">
-                    Match Initialized! Secretly plan multi-piece moves.
+                    Match Initialized! ${gameState.boardSize}x${gameState.boardSize} grid. Secretly plan multi-piece moves.
                 </div>
             `;
 
@@ -299,6 +301,7 @@
 
         function showCustomSetup(selectedPlayers, setupBoard = null) {
             gameState.activePlayers = selectedPlayers;
+            if (setupBoard) gameState.boardSize = setupBoard.length;
             gameState.customSetupBoard = setupBoard || createEmptySetupBoard();
             gameState.nextUnitSequence = [1, 1, 1, 1];
             gameState.customSetupPlayer = selectedPlayers.findIndex(Boolean);
@@ -348,6 +351,7 @@
 
         function showPlayerSelection() {
             playerSelectionError.innerText = '';
+            document.getElementById('board-size').value = String(gameState.boardSize);
             document.querySelectorAll('.player-name-input').forEach(input => {
                 input.value = PLAYERS[Number(input.dataset.playerName) - 1].name;
             });
@@ -466,8 +470,9 @@
                     pieceTooltip.classList.add('hidden');
                     gameState.selectedSquare = [r, c];
                     gameState.validMoves = getAdjacentMoves(r, c)
-                        .filter(destination => isTowerGateMove([r, c], destination) &&
-                            canUnitsTarget([heldUnit], gameState.board[destination[0]][destination[1]], piece.player));
+                        .filter(destination => isPassableSquare(...destination) &&
+                            isTowerGateMove([r, c], destination) &&
+                            canUnitsTarget([heldUnit], getVisiblePiece(...destination, piece.player), piece.player));
                     hintTextEl.innerText = `Selected a held ${getPieceLabel(gameState.selectedHeldPiece.type)}. Pick an adjacent square or your piece to transfer it.`;
                     renderBoard();
                 });
@@ -577,12 +582,12 @@
                 return;
             }
             const activePlayerId = gameState.turnIndex + 1;
-            const clickedPiece = gameState.board[r][c];
+            const clickedPiece = getVisiblePiece(r, c, activePlayerId);
             if (clickedPiece && !isEliminatedPiece(clickedPiece) && clickedPiece.player === activePlayerId) {
                 selectBoardPiece(r, c, clickedPiece);
                 if (gameState.selectedSquare && (getSiegeForAttacker(clickedPiece.id) || getSiegeAtSquare([r, c]) ||
                     getPieceContents(clickedPiece).some(isPrisoner))) {
-                    showPieceTooltip(r, c, boardEl.children[r * 16 + c]);
+                    showPieceTooltip(r, c, boardEl.children[r * gameState.boardSize + c]);
                 }
             } else {
                 gameState.selectedSquare = null;
@@ -599,7 +604,7 @@
             if (!piece || isEliminatedPiece(piece) || piece.player !== gameState.turnIndex + 1) return;
             selectBoardPiece(r, c, piece);
             if (!gameState.selectedSquare) return;
-            showPieceTooltip(r, c, boardEl.children[r * 16 + c]);
+            showPieceTooltip(r, c, boardEl.children[r * gameState.boardSize + c]);
         }
 
         function selectBoardPiece(r, c, clickedPiece) {
@@ -631,7 +636,7 @@
             pieceTooltip.classList.add('hidden');
 
             const activePlayerId = gameState.turnIndex + 1;
-            const clickedPiece = gameState.board[r][c];
+            const clickedPiece = getVisiblePiece(r, c, activePlayerId);
             if (!gameState.selectedSquare || !gameState.validMoves.some(m => m[0] === r && m[1] === c)) {
                 hintTextEl.innerText = "Click or tap one of your pieces before choosing an adjacent target square.";
                 return;
@@ -688,7 +693,7 @@
 
             const [fromR, fromC] = gameState.selectedSquare;
             const pieceToMove = gameState.board[fromR][fromC];
-            const targetPiece = gameState.board[r][c];
+            const targetPiece = getVisiblePiece(r, c, activePlayerId);
             const currentPlans = gameState.plans[gameState.turnIndex];
             if (!pieceToMove) {
                 gameState.selectedSquare = null;
@@ -940,6 +945,7 @@
                 if (gameState.multiplayer) Multiplayer.broadcastResolutionStart([]);
                 await wait(1000);
             }
+            const hillOccupants = snapshotHillOccupants();
             activePlayerDescEl.innerText = 'Animating all planned movements...';
 
             // Collect all proposed movements
@@ -1181,7 +1187,11 @@
             });
             simpleMoves.forEach(({ move, piece }) => {
                 gameState.board[move.to[0]][move.to[1]] = piece;
-                logAction(`<b>Player ${move.player} (${PLAYERS[move.player - 1].name})</b> moved ${getPieceLabel(move.pieceType)}: ${coordsToNotation(...move.from)} ➔ ${coordsToNotation(...move.to)}`);
+                if (getBiome(...move.from) === 'forest' || getBiome(...move.to) === 'forest') {
+                    logAction(`<b>Player ${move.player} (${PLAYERS[move.player - 1].name})</b> moved through a forest.`);
+                } else {
+                    logAction(`<b>Player ${move.player} (${PLAYERS[move.player - 1].name})</b> moved ${getPieceLabel(move.pieceType)}: ${coordsToNotation(...move.from)} ➔ ${coordsToNotation(...move.to)}`);
+                }
             });
 
             renderBoard();
@@ -1204,6 +1214,7 @@
             // Reset planned moves for next turn
             gameState.plans = [[], [], [], []];
             applySiegeRoundProgress();
+            updateHillHeld(hillOccupants, allIntendedMoves);
             gameState.round++;
             updateRoundDisplay();
             processRetreatsAtRoundStart();
@@ -1222,6 +1233,7 @@
                     winners.map(index => `${PLAYERS[index].name}: ${gameState.scores[index]} points`).join(' · ');
                 document.getElementById('gameover-modal').classList.remove('hidden');
                 updatePlayerCards();
+                renderBoard();
                 if (gameState.multiplayer) Multiplayer.onGameOver();
             } else if (gameState.multiplayer) {
                 Multiplayer.beginNextRound();
@@ -1271,7 +1283,9 @@
                             to: [targetR, targetC],
                             pieceType: getMergedPieceType(contents),
                             contents,
-                            isStationary: true
+                            isStationary: true,
+                            terrainBonus: Math.max(...candidates.map(candidate =>
+                                getDefenderTerrainBonus(candidate, group.targetSquare)))
                         };
                     });
 
@@ -1284,9 +1298,11 @@
                             type: survivor.pieceType,
                             contents: survivor.contents
                         };
-                        logAction(`🔗 <b>MERGE</b> at ${coordsToNotation(targetR, targetC)}: ` +
-                            `${survivor.contents.length} unit(s) consolidated for ` +
-                            `${PLAYERS[survivor.player - 1].name}.`);
+                        logAction(getBiome(targetR, targetC) === 'forest'
+                            ? `🔗 <b>MERGE</b> in a forest for ${PLAYERS[survivor.player - 1].name}.`
+                            : `🔗 <b>MERGE</b> at ${coordsToNotation(targetR, targetC)}: ` +
+                                `${survivor.contents.length} unit(s) consolidated for ` +
+                                `${PLAYERS[survivor.player - 1].name}.`);
                         resolve();
                         return;
                     }
@@ -1325,7 +1341,9 @@
                     const sourceLabels = group.candidates.map(candidate =>
                         `x${(candidate.contents || [candidate.pieceType]).length} ${getPieceLabel(candidate.pieceType)}`
                     ).join(' + ');
-                    logAction(`🔗 <b>MERGE</b> at ${coordsToNotation(targetR, targetC)}: ${sourceLabels} became a <b>${getPieceLabel(mergedType)} x${mergedContents.length}</b> for ${PLAYERS[mergedPlayer - 1].name}.`);
+                    logAction(getBiome(targetR, targetC) === 'forest'
+                        ? `🔗 <b>MERGE</b> in a forest for ${PLAYERS[mergedPlayer - 1].name}.`
+                        : `🔗 <b>MERGE</b> at ${coordsToNotation(targetR, targetC)}: ${sourceLabels} became a <b>${getPieceLabel(mergedType)} x${mergedContents.length}</b> for ${PLAYERS[mergedPlayer - 1].name}.`);
                     resolve();
                     return;
                 }
@@ -1725,6 +1743,7 @@
                 PLAYERS[index].name = cleanPlayerName(input.value, index);
             });
             gameState.progressionMode = document.querySelector('input[name="progression-mode"]:checked').value;
+            gameState.boardSize = Number(document.getElementById('board-size').value);
             const setupMode = document.querySelector('input[name="setup-mode"]:checked').value;
             if (setupMode === 'custom') {
                 playerSelectionModal.classList.add('hidden');

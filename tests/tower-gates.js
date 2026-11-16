@@ -58,7 +58,7 @@ for (let run = 0; run < 300; run++) {
         for (let c = 0; c < 16; c++) {
             const piece = gameState.board[r][c];
             if (!isTowerPiece(piece)) continue;
-            const [minR, minC, maxR, maxC] = PLAYERS[piece.player - 1].zone;
+            const [minR, minC, maxR, maxC] = getPlayerZone(piece.player - 1);
             assert(r >= minR && r <= maxR && c >= minC && c <= maxC,
                 'Castle stacks must remain in their player corner');
             const gate = getTowerGate(piece);
@@ -86,6 +86,7 @@ assert([[0, 1], [1, 0]].some(gate =>
     gate[1] === getTowerGate(gameState.board[0][0])[1]), 'Corner gate must point in bounds');
 
 gameState.board = emptyBoard();
+gameState.biomes = [];
 gameState.board[5][5] = makePiece(1, 'r', 'tower', [0, 1]);
 gameState.board[5][5].contents.push(createUnit(1, 'q', 'queen', 'queen'));
 gameState.turnIndex = 0;

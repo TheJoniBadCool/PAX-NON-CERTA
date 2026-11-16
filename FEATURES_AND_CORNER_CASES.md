@@ -11,7 +11,7 @@ chess rules.
 
 ### Game setup
 
-- The game uses a 16x16 board.
+- At game start, the host/player chooses a 10x10, 12x12, 14x14, or 16x16 board.
 - A new game starts with a player-selection modal.
 - At least two of four players must be selected.
 - Players are fixed to board corners:
@@ -34,15 +34,39 @@ chess rules.
   - Other non-King piece types and quantities are unrestricted.
   - Same-player pieces may intentionally start in stacks.
   - Different players may not share a starting square.
-  - Custom pieces may be placed anywhere on the 16x16 board.
+  - Custom pieces may be placed anywhere on the selected board.
   - Reset clears all custom placements; Confirm Placement starts the game.
 - A new game resets the board, round, plans, overlays, selections, merge state,
   and combat log.
 - Opening the page shows the player-selection modal.
 
+### Terrain
+
+- Each match generates multiple irregular terrain patches aiming for 10%
+  mountains, 20% hills, 20% forest, and the remaining plains, rounded to whole
+  squares. Patches aim to stay within six mountain or ten hill/forest squares,
+  measured with eight-direction adjacency; crowded custom setups can exceed
+  those limits. Hills tend to form near mountains. Castles start on plains; starting pieces and castle
+  gates are never mountains. Non-mountain, non-castle squares stay connected
+  using eight-direction movement. Crowded custom setups can reduce the ratios.
+- Mountains cannot be entered by whole stacks, unmerged units, or retreating
+  units. The host rejects multiplayer plans targeting mountains.
+- Enemy forest forces are hidden in the interface except in combat panels and
+  at game over.
+  Their planned destinations look empty; movement animations and log entries
+  do not reveal forest coordinates. Forest defenders who remain in place gain
+  25% strength when attacked. Hidden prisoner encounters use the normal
+  prisoner rules. Concealment is visual, not network secrecy.
+- A hill defender gains 25% strength if at least one of its combat units
+  remained on the hill throughout the previous round and stays to defend.
+  Reinforcements share the defender's bonus; arrivals alone and swap
+  interceptions do not. Terrain strength applies before the odds curve.
+- The authoritative multiplayer snapshot includes terrain and hill occupancy
+  history, including when a guest rejoins.
+
 ### Board and interface
 
-- The board is rendered as a 16x16 grid with alternating square colors.
+- The board and custom placement grid use a uniform square color.
 - Corner spawn zones are visually highlighted.
 - Pieces use inline SVG artwork and player-specific colors.
 - On even-numbered rounds, every piece containing a Pawn displays a `zzz` marker
@@ -100,7 +124,7 @@ chess rules.
 
 - Every movable piece moves exactly one square.
 - Movement is allowed in all eight directions.
-- Movement is bounded by the 16x16 board.
+- Movement is bounded by the selected board.
 - Current piece types are:
   - Pawn (`p`)
   - Tower/Rook (`r`)

@@ -53,10 +53,11 @@ function getBattleCandidateData(group) {
             bonus + (0.05 * getUnitLevel(unit, 'armour')), 0);
         const routedPenalty = contents.length ? contents.reduce((penalty, unit) =>
             penalty + getRoutedStacks(unit) * ROUTED_STRENGTH_PENALTY, 0) / contents.length : 0;
+        const terrainBonus = entry.candidate.terrainBonus || 0;
         const rawWeight = (
             stackSize * (1 + (STACK_ADVANTAGE_RATE * sizeBonusSteps) + moraleBonus) +
             experienceBonus + armourBonus
-        ) * (1 - routedPenalty);
+        ) * (1 - routedPenalty) * (1 + terrainBonus);
         return {
             ...entry,
             stackSize,
@@ -64,6 +65,7 @@ function getBattleCandidateData(group) {
             experienceBonus,
             armourBonus,
             routedPenalty,
+            terrainBonus,
             towerDefender,
             towerDefenderBonus,
             rawWeight,

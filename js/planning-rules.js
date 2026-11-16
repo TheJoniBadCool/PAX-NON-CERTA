@@ -22,7 +22,7 @@ function getPlanArrowKind(move, allMoves) {
         other.to[0] === move.to[0] && other.to[1] === move.to[1]
     );
     const enemyDestinationMove = destinationMoves.some(other => other.player !== move.player);
-    const destinationPiece = gameState.board[move.to[0]][move.to[1]];
+    const destinationPiece = getVisiblePiece(move.to[0], move.to[1], move.player);
     const destinationPieceMovesAway = allMoves.some(other =>
         other.from[0] === move.to[0] && other.from[1] === move.to[1]
     );

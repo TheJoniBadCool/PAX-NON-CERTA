@@ -68,7 +68,7 @@ class PaxRelay {
 
 const state = {
     board: [], eliminated: [false, false, true, true], plans: [[], [], [], []],
-    committed: [false, false, false, false], phase: 'PLANNING', round: 1,
+    committed: [false, false, false, false], phase: 'PLANNING', round: 1, boardSize: 16,
     objectives: [
         [{ label: 'Host secret', points: 4 }],
         [{ label: 'Guest secret', points: 3 }], [], []
@@ -81,6 +81,7 @@ let prisonerRequest;
 let starts = 0;
 const ctx = {
     document, PaxRelay,
+    BOARD_SIZES: [10, 12, 14, 16],
     crypto: { getRandomValues: bytes => bytes.fill(1) },
     window: { addEventListener() {} },
     MutationObserver: class { observe() {} },
@@ -112,6 +113,8 @@ const ctx = {
         ctx.customSetupModal.classList.remove('hidden');
     },
     isTowerGateMove: () => true, canMoveWholePiece: () => true,
+    isPassableSquare: (r, c) => state.biomes?.[r]?.[c] !== 'mountain',
+    getVisiblePiece: (r, c) => state.board[r][c],
     getPieceContents: piece => piece.contents || [{ id: 'unit', type: 'p' }],
     canUnitsTarget: () => true, isPrisoner: () => false,
     renderCaptureChoices() {},
@@ -125,8 +128,10 @@ const ctx = {
     },
     resolveAllMoves() { resolutions++; state.phase = 'RESOLVING'; return Promise.resolve(); }
 };
-Object.assign(ctx, new Function(`${readSource('js/setup-utils.js')}
-    return { isValidSavedSetup, cloneSetupBoard };`)());
+Object.assign(ctx, new Function('ctx', `with (ctx) {
+    ${readSource('js/setup-utils.js')}
+    return { isValidSavedSetup, cloneSetupBoard };
+}`)(ctx));
 Object.assign(ctx, new Function('ctx', `with (ctx) {
     ${readSource('js/board-utils.js')}
     return { towersAreSpaced };
@@ -220,10 +225,21 @@ async function run() {
     assert(starts === 1 && state.board[0][0].id === 'guest-piece' &&
         state.board[0][0].contents[0].experience === 2,
         'Starting must use the confirmed custom board, not discarded edits');
+    state.biomes = Array.from({ length: 16 }, () => Array(16).fill('plains'));
+    state.biomes[0][1] = 'mountain';
+    state.hillHeld = [[{ player: 1, ids: ['held-unit'] }]];
+    multiplayer.onBoardRendered();
+    guest.emit('data', { type: 'commit', gameId: 1, round: 1,
+        plan: [{ from: [0, 0], to: [0, 1], pieceId: 'guest-piece' }] });
+    assert(!state.committed[1], 'The host must reject plans that enter mountains');
+    state.biomes[0][1] = 'plains';
+    guest.emit('data', { type: 'join', name: 'Guest' });
     const sync = guest.sent.filter(message => message.type === 'sync' && message.game).pop();
     assert(sync.game.board[0][0].id === 'guest-piece' &&
         sync.game.board[4][1].contents.length === 2,
         'Guests must receive the authoritative custom starting board and stacks');
+    assert(sync.game.biomes === state.biomes && sync.game.hillHeld === state.hillHeld,
+        'Guest snapshots must include the authoritative terrain and hill history');
     assert(sync.game.objectives[1][0].label === 'Guest secret', 'Guest must receive its objectives');
     assert(sync.game.objectives[0].length === 0 &&
         !JSON.stringify(sync).includes('Host secret'), 'Snapshots must not leak another player objective');

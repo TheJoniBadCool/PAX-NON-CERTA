@@ -58,6 +58,8 @@ function loadSavedSetup(index) {
         customSetupStatusEl.innerText = 'This saved setup must use the same players as the room. Change the lobby player count or choose another setup.';
         return;
     }
+    gameState.boardSize = setup.board.length;
+    document.getElementById('board-size').value = String(gameState.boardSize);
     showCustomSetup(setup.activePlayers, cloneSetupBoard(setup.board));
 }
 
@@ -77,6 +79,7 @@ function saveCustomSetup() {
     const setup = {
         name: '',
         activePlayers: [...gameState.activePlayers],
+        boardSize: gameState.boardSize,
         board: cloneSetupBoard(gameState.customSetupBoard)
     };
     if (!isValidSavedSetup(setup)) {

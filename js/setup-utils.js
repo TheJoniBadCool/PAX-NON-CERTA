@@ -36,8 +36,8 @@ function escapeHtml(value) {
 
 function isValidSavedSetup(setup) {
     if (!setup || !Array.isArray(setup.activePlayers) || setup.activePlayers.length !== 4 ||
-        !Array.isArray(setup.board) || setup.board.length !== 16 ||
-        setup.board.some(row => !Array.isArray(row) || row.length !== 16) ||
+        !Array.isArray(setup.board) || !BOARD_SIZES.includes(setup.board.length) ||
+        setup.board.some(row => !Array.isArray(row) || row.length !== setup.board.length) ||
         setup.activePlayers.filter(Boolean).length < 2) {
         return false;
     }

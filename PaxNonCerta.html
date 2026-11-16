@@ -13,7 +13,7 @@
             <div class="brand-icon">⚔️</div>
             <div>
                 <div class="brand-title">PaxNonCerta</div>
-                <div class="brand-subtitle">16x16 Local Hotseat Battlefield</div>
+                <div class="brand-subtitle">Variable-size Hotseat Battlefield</div>
             </div>
         </div>
         <div class="header-actions">
@@ -174,7 +174,7 @@
             </div>
             <div id="battle-log" class="log-container">
                 <div class="log-item" style="color: var(--text-muted); text-align: center;">
-                    Match Started! 16x16 grid initialized. Plan moves secretly!
+                    Match Started! Plan moves secretly!
                 </div>
             </div>
         </section>
@@ -229,6 +229,16 @@
                         <select id="mp-count"><option>2</option><option>3</option><option>4</option></select>
                     </label>
                     <div class="setup-option">
+                        <label class="mp-field" for="mp-board-size">Board size
+                            <select id="mp-board-size">
+                                <option value="10">10 × 10</option>
+                                <option value="12">12 × 12</option>
+                                <option value="14">14 × 14</option>
+                                <option value="16" selected>16 × 16</option>
+                            </select>
+                        </label>
+                    </div>
+                    <div class="setup-option">
                         <strong>Unit progression</strong>
                         <label><input type="radio" name="mp-progression" value="zero" checked> All level 0</label>
                         <label><input type="radio" name="mp-progression" value="random"> Random levels 1-3</label>
@@ -279,6 +289,16 @@
                     </div>
                 </div>
                 <div id="player-selection-error" style="color: #f87171; font-size: 0.8rem; min-height: 1.1rem;"></div>
+                <div class="setup-option">
+                    <label class="mp-field" for="board-size">Board size
+                        <select id="board-size">
+                            <option value="10">10 × 10</option>
+                            <option value="12">12 × 12</option>
+                            <option value="14">14 × 14</option>
+                            <option value="16" selected>16 × 16</option>
+                        </select>
+                    </label>
+                </div>
                 <div class="setup-option">
                     <strong>Unit progression</strong>
                     <label><input type="radio" name="progression-mode" value="zero" checked> All level 0</label>
@@ -337,8 +357,8 @@
             </div>
             <div class="modal-body">
                 <div class="rule-box">
-                    <h4>1. 16x16 Quadrupled Board</h4>
-                    4 players spawn in each of the 4 corners: Red (Top-Left), Blue (Top-Right), Green (Bottom-Right), Yellow (Bottom-Left).
+                    <h4>1. Board Size and Player Corners</h4>
+                    Choose a 10×10, 12×12, 14×14, or 16×16 board before starting. Players spawn in the 4 corners: Red (Top-Left), Blue (Top-Right), Green (Bottom-Right), Yellow (Bottom-Left).
                 </div>
                 <div class="rule-box">
                     <h4>2. Movement Rules & Unmovable Towers</h4>
@@ -350,6 +370,12 @@
                 <div class="rule-box">
                     <h4>3. Multi-Piece Turns</h4>
                     During your turn, you can move <strong>0, 1, or MULTIPLE</strong> of your movable surviving pieces at once!
+                </div>
+                <div class="rule-box">
+                    <h4>Terrain</h4>
+                    Each game generates roughly 50% plains, 20% forests (🌲), 20% hills (⛰) and 10% mountains (▲), rounded to whole squares. Castles always start on plains and mountain squares cannot be entered or used for retreat re-entry. Starting units and castle gates are never blocked by mountains.
+                    Forest forces are hidden from opponents and gain +25% strength when they remain there and are attacked. A force that held a hill for the entire previous round gains +25% strength when it stays and is attacked. Arriving forces and opposing swaps receive no terrain defence. Bonuses apply before the odds curve; plains have no effect.
+                    Entering an unseen enemy's square resolves normally, including the usual rules for prisoners. Concealment is visual; multiplayer guests receive the board data and the host can inspect it.
                 </div>
                 <div class="rule-box">
                     <h4>4. Same-Player Merging</h4>
