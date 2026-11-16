@@ -37,6 +37,7 @@ const document = {
     },
     createElement() { return element(); },
     querySelector() { return { value: 'zero' }; },
+    querySelectorAll() { return []; },
     body: element()
 };
 
@@ -82,6 +83,7 @@ let starts = 0;
 const ctx = {
     document, PaxRelay,
     BOARD_SIZES: [10, 12, 14, 16],
+    REBEL_PLAYER_ID: 5,
     crypto: { getRandomValues: bytes => bytes.fill(1) },
     window: { addEventListener() {} },
     MutationObserver: class { observe() {} },
@@ -113,6 +115,10 @@ const ctx = {
         ctx.customSetupModal.classList.remove('hidden');
     },
     isTowerGateMove: () => true, canMoveWholePiece: () => true,
+    isEliminatedPiece: piece => Boolean(state.eliminated[piece.player - 1]),
+    createRandomMapSeed: () => 'test-seed',
+    createStartingBoard: () => ({ board: [], biomes: [] }),
+    renderMapPreview() {},
     isPassableSquare: (r, c) => state.biomes?.[r]?.[c] !== 'mountain',
     getVisiblePiece: (r, c) => state.board[r][c],
     getPieceContents: piece => piece.contents || [{ id: 'unit', type: 'p' }],
@@ -135,7 +141,11 @@ Object.assign(ctx, new Function('ctx', `with (ctx) {
 Object.assign(ctx, new Function('ctx', `with (ctx) {
     ${readSource('js/board-utils.js')}
     return { towersAreSpaced };
-}`)({ getPieceContents: piece => piece.contents, getUnitType: unit => unit.type }));
+}`)({
+    REBEL_PLAYER_ID: 5,
+    getPieceContents: piece => piece.contents,
+    getUnitType: unit => unit.type
+}));
 Object.assign(ctx, new Function('ctx', `with (ctx) {
     ${readSource('js/prisoner-rules.js')}
     ${readSource('js/models.js')}
@@ -213,6 +223,7 @@ async function run() {
     document.getElementById('btn-mp-setup').handlers.click();
     state.customSetupBoard[0][0] = null;
     document.getElementById('btn-custom-setup-back').handlers.click();
+    document.getElementById('btn-mp-generate-map').handlers.click();
     assert(!multiplayer.isEditingSetup(), 'Back to lobby must exit the editor');
     guest.close();
     document.getElementById('btn-mp-start').handlers.click();
@@ -320,6 +331,7 @@ async function run() {
     setupMode.value = 'random';
     setupMode.handlers.change();
     document.getElementById('mp-count').handlers.change({ target: { value: '2' } });
+    document.getElementById('btn-mp-generate-map').handlers.click();
     document.getElementById('btn-mp-start').handlers.click();
     assert(starts === 2 && state.board[4][0] === null,
         'Default random mode must not reuse a previously confirmed custom board');
@@ -327,6 +339,6 @@ async function run() {
 }
 
 run().catch(error => {
-    printerr(error.stack || error.message);
+    printerr(`${error}\n${error.stack || ''}`);
     imports.system.exit(1);
 });

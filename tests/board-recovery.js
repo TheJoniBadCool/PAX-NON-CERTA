@@ -13,6 +13,7 @@ function element() {
     };
 }
 const boardEl = element();
+boardEl.parentElement = { style: { setProperty() {} } };
 const context = vm.createContext({
     document: { createElement: element }, boardEl,
     getPieceClass: () => 'piece-p1',

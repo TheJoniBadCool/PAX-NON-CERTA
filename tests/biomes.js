@@ -17,9 +17,10 @@ const context = vm.createContext({
     vm.runInContext(fs.readFileSync(`js/${name}.js`, 'utf8'), context));
 const api = vm.runInContext(`const gameState = new GameState();
     ({ state: gameState, initBoard, generateBiomes, createStartingBoard, getTowerGate, isTowerPiece, getBiome,
-       getVisiblePiece, getValidMovesForPiece, getPlanArrowKind, createUnit,
+       getVisiblePiece, getFogVisibility, getValidMovesForPiece, getPlanArrowKind, createUnit,
        getDefenderTerrainBonus, snapshotHillOccupants, updateHillHeld,
-       getBattleCandidateData, processRetreatsAtRoundStart })`, context);
+       getBattleCandidateData, processRetreatsAtRoundStart,
+       rebelId: REBEL_PLAYER_ID, getPieceContents, getUnitDisplayClass })`, context);
 const { state } = api;
 const seedPlayers = [true, true, false, false];
 const seededMapA = api.createStartingBoard(seedPlayers, 10, 'test-seed');
@@ -95,9 +96,77 @@ for (const size of [10, 12, 14, 16]) {
                 }
             }
         }
-        assert.equal(seen.size, size * size - counts.mountain - 8);
+        assert.equal(seen.size, size * size - counts.mountain - 16);
+        const rebels = state.board.flat().filter(piece => piece && piece.player === api.rebelId);
+        const rebelCastles = rebels.filter(api.isTowerPiece);
+        const rebelCastleLocations = state.board.flatMap((row, r) =>
+            row.map((piece, c) => piece && piece.player === api.rebelId &&
+                api.isTowerPiece(piece) ? { piece, r, c } : null).filter(Boolean));
+        assert.equal(rebelCastles.length, 12);
+        assert.equal(rebels.filter(piece => !api.isTowerPiece(piece)).length, 12);
+        const allCastleLocations = state.board.flatMap((row, r) =>
+            row.map((piece, c) => piece && api.isTowerPiece(piece)
+                ? { piece, r, c } : null).filter(Boolean));
+        assert.equal(allCastleLocations.length, 16);
+        for (const { piece, r, c } of allCastleLocations) {
+            const provinceRow = Array.from({ length: 4 }, (_, index) => index)
+                .find(index => r >= Math.floor(index * size / 4) &&
+                    r < Math.floor((index + 1) * size / 4));
+            const provinceColumn = Array.from({ length: 4 }, (_, index) => index)
+                .find(index => c >= Math.floor(index * size / 4) &&
+                    c < Math.floor((index + 1) * size / 4));
+            const playerIndex = piece.player - 1;
+            const homeRow = playerIndex >= 2 ? 3 : 0;
+            const homeColumn = playerIndex === 1 || playerIndex === 2 ? 3 : 0;
+            const isPlayerProvince = piece.player !== api.rebelId &&
+                provinceRow === homeRow && provinceColumn === homeColumn;
+            assert.equal(piece.player === api.rebelId, !isPlayerProvince,
+                'Each province has its player castle or one rebel castle, never both');
+            if (isPlayerProvince) {
+                assert.equal(api.getPieceContents(piece).length, 12,
+                    'All starting player units must be in their province castle');
+            }
+        }
+        for (let provinceRow = 0; provinceRow < 4; provinceRow++) {
+            for (let provinceColumn = 0; provinceColumn < 4; provinceColumn++) {
+                const minRow = Math.floor(provinceRow * size / 4);
+                const maxRow = Math.floor((provinceRow + 1) * size / 4);
+                const minColumn = Math.floor(provinceColumn * size / 4);
+                const maxColumn = Math.floor((provinceColumn + 1) * size / 4);
+                const inProvince = allCastleLocations.filter(({ r, c }) =>
+                    r >= minRow && r < maxRow && c >= minColumn && c < maxColumn);
+                assert.equal(inProvince.length, 1, 'Each province must contain exactly one castle');
+                if (inProvince[0].piece.player === api.rebelId) {
+                    assert(rebelCastleLocations.some(({ piece }) => piece === inProvince[0].piece));
+                    const garrison = api.getPieceContents(inProvince[0].piece);
+                    assert.equal(garrison.map(unit => unit.type).sort().join(','), 'p,r');
+                    assert(garrison.every(unit => unit.player === api.rebelId));
+                }
+            }
+        }
+        const [rebelRow, rebelColumn] = state.board.flatMap((row, r) =>
+            row.map((piece, c) => piece && piece.player === api.rebelId &&
+                !api.isTowerPiece(piece) ? [r, c] : null).filter(Boolean))[0];
+        assert.equal(api.getValidMovesForPiece(rebelRow, rebelColumn).length, 0,
+            'Rebel pieces must remain stationary');
+        assert(api.getUnitDisplayClass(api.getPieceContents(rebels[0])[0], api.rebelId)
+            .includes('piece-eliminated'), 'Rebels must use the defeated-player grey style');
+        const rebelBattle = api.getBattleCandidateData({ candidates: [
+            { player: 1, pieceId: 'raider', pieceType: 'p',
+                contents: [api.createUnit(1, 'p', 'raider-pawn')] },
+            { player: api.rebelId, pieceId: rebelCastles[0].id, pieceType: 'r',
+                contents: api.getPieceContents(rebelCastles[0]), isStationary: true }
+        ] });
+        assert.equal(rebelBattle.find(entry => entry.candidate.player === api.rebelId)
+            .towerDefenderBonus, 3, 'Rebel castles must defend like normal Towers');
+        state.biomes[rebelRow][rebelColumn] = 'forest';
+        assert.equal(api.getVisiblePiece(rebelRow, rebelColumn, 1)?.player ?? null,
+            api.getFogVisibility(1)[rebelRow][rebelColumn] ? api.rebelId : null,
+            'Rebels ignore forest concealment, but not fog of war');
+        state.biomes[rebelRow][rebelColumn] = 'plains';
         state.board.forEach((row, r) => row.forEach((entry, c) => {
             if (!entry) return;
+            if (!api.isTowerPiece(entry)) return;
             assert.equal(api.getBiome(r, c), 'plains');
             const [dr, dc] = api.getTowerGate(entry);
             assert.notEqual(api.getBiome(r + dr, c + dc), 'mountain');

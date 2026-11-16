@@ -15,8 +15,14 @@ const PLAYERS = [
     { id: 3, name: 'Green', colorName: 'Green', color: '#10b981', class: 'piece-p3' },
     { id: 4, name: 'Yellow', colorName: 'Yellow', color: '#eab308', class: 'piece-p4' }
 ];
-const PLAYER_CODES = ['A', 'B', 'C', 'D'];
+const REBEL_PLAYER_ID = 5;
+const REBEL_PLAYER = { id: REBEL_PLAYER_ID, name: 'Rebels', colorName: 'Grey', color: '#94a3b8', class: 'piece-p1 piece-eliminated' };
+const PLAYER_CODES = ['A', 'B', 'C', 'D', 'R'];
 const BOARD_SIZES = [10, 12, 14, 16];
+
+function getPlayerInfo(playerId) {
+    return playerId === REBEL_PLAYER_ID ? REBEL_PLAYER : PLAYERS[playerId - 1];
+}
 
 function getPlayerZone(playerIndex, boardSize = gameState.boardSize) {
     const minRow = playerIndex >= 2 ? boardSize - 4 : 0;

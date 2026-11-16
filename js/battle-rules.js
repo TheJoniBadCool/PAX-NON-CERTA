@@ -7,7 +7,7 @@ function getBattleCandidateData(group) {
             id: `${candidate.pieceId}::unit::0`,
             player: candidate.player,
             type: candidate.pieceType,
-            name: `${PLAYER_CODES[candidate.player - 1]}${candidate.pieceType}1`
+            name: `${PLAYER_CODES[candidate.player - 1] || 'R'}${candidate.pieceType}1`
         }],
         unitCount: (candidate.contents || [candidate.pieceType]).length
     }));

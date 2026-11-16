@@ -64,6 +64,37 @@ chess rules.
 - The authoritative multiplayer snapshot includes terrain and hill occupancy
   history, including when a guest rejoins.
 
+### Fog of war
+
+- Each player sees their owned provinces and all eight neighboring provinces,
+  including diagonally touching ones. Sight does not chain through neighbors.
+  Ownership uses the same castle-based rules as province coloring; empty,
+  rebel, and contested provinces grant no ownership sight.
+- Every friendly piece reveals its square and the eight surrounding squares.
+  A stack containing a non-prisoner Bishop instead reveals all squares within
+  two steps in any direction (a 5x5 area), clipped at the board edge.
+- Fog hides enemy and rebel troops, but terrain, province ownership, Towers,
+  and Tower gates remain visible. A concealed castle exposes only its Tower
+  units, not its garrison, garrison count, prisoners, or recovery badges.
+- Forest concealment remains independent: revealing a forest square does not
+  reveal enemy troops or castle garrisons there. The existing rebel exception
+  to forest concealment applies only when their square is outside fog.
+- Sight follows actual positions and castle ownership, not queued plans.
+  Moving, merging, unmerging, captures, casualties, and re-entry recalculate
+  sight; there is no remembered exploration.
+- Hotseat planning follows the current player. Hotseat resolution combines
+  active, non-eliminated players' fog sight without removing forest hiding.
+  Multiplayer keeps the local player's sight during planning and resolution.
+- Animations require both endpoints to be visible without forest concealment.
+  Siege markers require a friendly Tower or a visible besieger; hidden
+  besiegers and garrisons are not exposed through siege announcements.
+  The shared log omits non-battle coordinates concealed from any active player,
+  so later hotseat turns and multiplayer guests cannot read hidden locations.
+- Battles still reveal their participants, game over reveals the whole board,
+  and setup previews remain unfogged. Movement and combat rules are unchanged.
+- Fog is visual, not network secrecy; snapshots and reconnects carry the full
+  authoritative board and each client derives its own view.
+
 ### Board and interface
 
 - The board and custom placement grid use a uniform square color.

@@ -19,6 +19,7 @@ function pieceContainsPawn(piece) {
 }
 
 function canMoveWholePiece(piece, plans = gameState.plans[piece.player - 1]) {
+    if (piece.player === REBEL_PLAYER_ID || isEliminatedPiece(piece)) return false;
     const contents = getPlannedPieceContents(piece, plans);
     return contents.length > 0 && (!isPawnRestTurn() ||
         !contents.some(unit => getUnitType(unit) === 'p' || isPrisoner(unit)));

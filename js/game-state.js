@@ -39,6 +39,9 @@ class GameState {
 
 function recordDeadPieces(gameState, units) {
     units.forEach(unit => {
-        gameState.deadPieces[(unit.originalPlayer || unit.player) - 1].push({ ...unit });
+        const player = unit.originalPlayer || unit.player;
+        if (player >= 1 && player <= gameState.deadPieces.length) {
+            gameState.deadPieces[player - 1].push({ ...unit });
+        }
     });
 }

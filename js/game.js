@@ -106,7 +106,9 @@
                     return;
                 }
                 siege.attackers = siege.attackers.filter(entry => entry !== attacker);
-                logAction(`🏳️ Player ${move.player} cancelled a siege at ${coordsToNotation(...siege.towerSquare)}.`);
+                const location = isPubliclyVisiblePiece(piece, [move.from])
+                    ? `at ${coordsToNotation(...siege.towerSquare)}` : 'out of sight';
+                logAction(`🏳️ Player ${move.player} cancelled a siege ${location}.`);
             });
             syncSieges();
         }
@@ -223,16 +225,14 @@
             const animationLayer = document.getElementById('movement-animation-layer');
             animationLayer.innerHTML = '';
 
-            for (const move of allMoves) {
-                if (move.invalid || move.siegeStart || move.sallyOut || move.siegeCancel) continue;
-                if (move.player !== gameState.turnIndex + 1 &&
-                    (getBiome(...move.from) === 'forest' || getBiome(...move.to) === 'forest')) continue;
+            const visibleMoves = getVisibleMovements(allMoves);
+            for (const move of visibleMoves) {
                 const sourcePiece = move.isUnmerge
                     ? { player: move.player, type: move.pieceType, contents: move.contents }
                     : gameState.board[move.from[0]][move.from[1]];
                 if (!sourcePiece) continue;
 
-                const kind = getPlanArrowKind(move, allMoves);
+                const kind = getPlanArrowKind(move, visibleMoves);
                 const colors = {
                     green: '#22c55e',
                     yellow: '#facc15',
@@ -649,7 +649,9 @@
             if (!siege.attackers.length) {
                 gameState.sieges = gameState.sieges.filter(entry => entry.id !== siege.id);
             }
-            logAction(`🏳️ Player ${gameState.turnIndex + 1} cancelled a siege at ${coordsToNotation(...siege.towerSquare)}.`);
+            const location = isPubliclyVisiblePiece(selectedPiece, [gameState.selectedSquare])
+                ? `at ${coordsToNotation(...siege.towerSquare)}` : 'out of sight';
+            logAction(`🏳️ Player ${gameState.turnIndex + 1} cancelled a siege ${location}.`);
             gameState.selectedSquare = null;
             gameState.validMoves = [];
             pieceTooltip.classList.add('hidden');
@@ -1063,7 +1065,7 @@
                     if (m.prisonerAction) continue;
                     const source = gameState.board[m.from[0]][m.from[1]];
                     if (!source || (m.isUnmerge ? source.id !== m.sourcePieceId : source.id !== m.pieceId)) {
-                        logAction(`P${p + 1}'s move from ${coordsToNotation(...m.from)} cancelled: its source no longer exists.`);
+                        logAction(`P${p + 1}'s move cancelled: its source no longer exists.`);
                         continue;
                     }
                     allIntendedMoves.push({
@@ -1296,6 +1298,8 @@
                 gameState.board[move.to[0]][move.to[1]] = piece;
                 if (getBiome(...move.from) === 'forest' || getBiome(...move.to) === 'forest') {
                     logAction(`<b>Player ${move.player} (${PLAYERS[move.player - 1].name})</b> moved through a forest.`);
+                } else if (!isPubliclyVisiblePiece(piece, [move.from, move.to])) {
+                    logAction(`<b>Player ${move.player} (${PLAYERS[move.player - 1].name})</b> moved through fog of war.`);
                 } else {
                     logAction(`<b>Player ${move.player} (${PLAYERS[move.player - 1].name})</b> moved ${getPieceLabel(move.pieceType)}: ${coordsToNotation(...move.from)} ➔ ${coordsToNotation(...move.to)}`);
                 }
@@ -1406,10 +1410,12 @@
                             contents: survivor.contents
                         };
                         logAction(getBiome(targetR, targetC) === 'forest'
-                            ? `🔗 <b>MERGE</b> in a forest for ${PLAYERS[survivor.player - 1].name}.`
+                            ? `🔗 <b>MERGE</b> in a forest for ${getPlayerInfo(survivor.player).name}.`
+                            : !isPubliclyVisiblePiece(gameState.board[targetR][targetC], [[targetR, targetC]])
+                                ? `🔗 <b>MERGE</b> in fog of war for ${getPlayerInfo(survivor.player).name}.`
                             : `🔗 <b>MERGE</b> at ${coordsToNotation(targetR, targetC)}: ` +
                                 `${survivor.contents.length} unit(s) consolidated for ` +
-                                `${PLAYERS[survivor.player - 1].name}.`);
+                                `${getPlayerInfo(survivor.player).name}.`);
                         resolve();
                         return;
                     }
@@ -1450,7 +1456,9 @@
                     ).join(' + ');
                     logAction(getBiome(targetR, targetC) === 'forest'
                         ? `🔗 <b>MERGE</b> in a forest for ${PLAYERS[mergedPlayer - 1].name}.`
-                        : `🔗 <b>MERGE</b> at ${coordsToNotation(targetR, targetC)}: ${sourceLabels} became a <b>${getPieceLabel(mergedType)} x${mergedContents.length}</b> for ${PLAYERS[mergedPlayer - 1].name}.`);
+                        : !isPubliclyVisiblePiece(gameState.board[targetR][targetC], [[targetR, targetC]])
+                            ? `🔗 <b>MERGE</b> in fog of war for ${getPlayerInfo(mergedPlayer).name}.`
+                        :                         `🔗 <b>MERGE</b> at ${coordsToNotation(targetR, targetC)}: ${sourceLabels} became a <b>${getPieceLabel(mergedType)} x${mergedContents.length}</b> for ${getPlayerInfo(mergedPlayer).name}.`);
                     resolve();
                     return;
                 }
@@ -1486,7 +1494,7 @@
                         const survivor = group.candidates[survivorIdx];
                         const battleRolls = [
                             captureOnly ? `Unopposed prisoner capture by P${survivor.player}; no battle roll.` :
-                                `Winner roll ${(roll * 100).toFixed(2)}% selected P${survivor.player} ${PLAYERS[survivor.player - 1].name}`
+                                `Winner roll ${(roll * 100).toFixed(2)}% selected ${getPlayerInfo(survivor.player).name}`
                         ];
                         group.survivor = survivor;
                         const candidateDataById = new Map(activeCandidateData.map(entry => [entry.candidate.pieceId, entry]));
@@ -1513,6 +1521,7 @@
                         candidateResults.set(survivor.pieceId, winnerResult);
                         const retreatEntries = [];
                         const capturedTowers = [];
+                        const recruitedRebels = [];
 
                         group.candidates.forEach((cand, idx) => {
                             const [fr, fc] = cand.from;
@@ -1563,6 +1572,16 @@
                                 battleRolls
                             );
                             candidateResults.set(cand.pieceId, result);
+                            if (cand.player === REBEL_PLAYER_ID) {
+                                [...result.survivors, ...result.captured]
+                                    .filter(unit => getUnitType(unit) !== 'r' && !isPrisoner(unit))
+                                    .forEach(unit => recruitedRebels.push({
+                                        ...unit,
+                                        player: survivor.player,
+                                        id: `${survivor.pieceId}::rebel-captured::${unit.id}`,
+                                        name: getNextUnitName(survivor.player, getUnitType(unit))
+                                    }));
+                            }
                             const retained = [];
                             result.survivors.forEach(unit => {
                                 if (isSiege && getUnitType(unit) === 'r') {
@@ -1577,11 +1596,12 @@
                                     retained.push(unit);
                                 }
                             });
-                            if (retained.length) {
+                            if (retained.length && cand.player !== REBEL_PLAYER_ID) {
                                 retreatEntries.push({ player: cand.player, contents: retained });
                             }
                         });
 
+                        capturedTowers.push(...recruitedRebels);
                         const destination = survivor.to;
                         if (capturedTowers.length) {
                             const boardPiece = gameState.board[destination[0]][destination[1]];
@@ -1600,7 +1620,24 @@
                         retreatEntries.forEach(entry => queueRetreat(entry.player, entry.contents, destination));
                         recordDeadPieces(gameState, [...candidateResults.values()].flatMap(result => result.casualties));
                         const capturedUnits = [...candidateResults.values()].flatMap(result => result.captured);
-                        beginCaptureChoices(survivor.player, capturedUnits, destination);
+                        if (survivor.player === REBEL_PLAYER_ID) {
+                            capturedUnits.forEach(unit => {
+                                const captive = {
+                                    ...unit,
+                                    originalPlayer: unit.originalPlayer || unit.player,
+                                    player: REBEL_PLAYER_ID,
+                                    prisonerOf: REBEL_PLAYER_ID
+                                };
+                                addCapturedUnit(REBEL_PLAYER_ID, captive, destination);
+                            });
+                        } else {
+                            beginCaptureChoices(survivor.player,
+                                capturedUnits.filter(unit => unit.player !== REBEL_PLAYER_ID || isPrisoner(unit))
+                                    .map(unit => unit.player === REBEL_PLAYER_ID
+                                        ? { ...unit, player: unit.originalPlayer || unit.player }
+                                        : unit),
+                                destination);
+                        }
                         renderCaptureChoices();
                         renderRetreatTable();
                         const retreatedUnitIds = new Set(
@@ -1608,7 +1645,7 @@
                         );
                         renderBattleCandidates(group, candidateResults, retreatedUnitIds);
 
-                        const survivorPlayer = PLAYERS[survivor.player - 1];
+                        const survivorPlayer = getPlayerInfo(survivor.player);
                         const retreatCount = retreatEntries.reduce((n, entry) => n + entry.contents.length, 0);
                         const casualtyCount = [...candidateResults.values()]
                             .reduce((count, result) => count + result.casualties.length, 0);
@@ -1694,7 +1731,7 @@
                         );
                         const battleRolls = [
                             captureOnly ? `Unopposed prisoner capture by P${survivor.player}; no battle roll.` :
-                                `Winner roll ${(roll * 100).toFixed(2)}% selected P${survivor.player} ${PLAYERS[survivor.player - 1].name}`
+                                `Winner roll ${(roll * 100).toFixed(2)}% selected ${getPlayerInfo(survivor.player).name}`
                         ];
                         const candidateResults = new Map();
                         const winnerData = candidateDataById.get(survivor.pieceId);
@@ -1775,7 +1812,7 @@
                         renderBattleCandidates(group, candidateResults);
                         const casualtyCount = [...candidateResults.values()]
                             .reduce((count, result) => count + result.casualties.length, 0);
-                        const winnerPlayer = PLAYERS[survivor.player - 1];
+                        const winnerPlayer = getPlayerInfo(survivor.player);
                         clashResult.innerText = `${winnerPlayer.name} wins Sally Out · 💀${casualtyCount} · ⛓${capturedUnits.length}`;
                         clashResult.style.color = winnerPlayer.color;
                         renderBattleRolls(battleRolls);

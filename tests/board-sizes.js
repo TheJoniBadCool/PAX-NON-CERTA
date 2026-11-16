@@ -14,7 +14,8 @@ context.gameState = vm.runInContext('new GameState()', context);
 const api = vm.runInContext(`({
     state: gameState, sizes: BOARD_SIZES, initBoard, getPlayerZone,
     getAdjacentMoves, coordsToNotation, isValidSavedSetup, createEmptySetupBoard,
-    isTowerPiece, getTowerGate, towersAreSpaced
+    isTowerPiece, getTowerGate, towersAreSpaced, rebelId: REBEL_PLAYER_ID, getPieceContents,
+    createStartingBoard, getProvinceIndex
 })`, context);
 
 for (const size of api.sizes) {
@@ -23,17 +24,22 @@ for (const size of api.sizes) {
     assert.equal(api.state.boardSize, size);
     assert.equal(api.state.board.length, size);
     assert(api.state.board.every(row => row.length === size));
-    assert.equal(api.state.board.flat().filter(Boolean).length, 8);
+    assert.equal(api.state.board.flat().filter(Boolean).length, 28);
     assert(api.towersAreSpaced(api.state.board));
+    const rebels = api.state.board.flat().filter(piece => piece && piece.player === api.rebelId);
+    assert.equal(rebels.filter(api.isTowerPiece).length, 12);
+    assert.equal(rebels.filter(piece => !api.isTowerPiece(piece)).length, 12);
+    assert(rebels.filter(api.isTowerPiece).every(piece =>
+        api.getPieceContents(piece).some(unit => unit.type === 'p')));
     for (let player = 0; player < 4; player++) {
         const [minRow, minColumn, maxRow, maxColumn] = api.getPlayerZone(player, size);
         const castles = api.state.board.flat().filter(piece => piece && piece.player === player + 1);
-        assert.equal(castles.length, 2);
-        assert(castles.every(piece => {
-            const [row, column] = api.state.board.flatMap((line, r) =>
-                line.map((entry, c) => entry === piece ? [r, c] : null)).find(Boolean);
-            return row >= minRow && row <= maxRow && column >= minColumn && column <= maxColumn;
-        }));
+        assert.equal(castles.length, 1);
+        const [row, column] = api.state.board.flatMap((line, r) =>
+            line.map((entry, c) => entry === castles[0] ? [r, c] : null)).find(Boolean);
+        assert(row >= minRow && row <= maxRow && column >= minColumn && column <= maxColumn);
+        assert.equal(api.getPieceContents(castles[0]).length, 12);
+        assert.equal(api.getPieceContents(castles[0]).filter(unit => unit.type === 'r').length, 2);
     }
     api.state.board.forEach((row, r) => row.forEach((piece, c) => {
         if (!api.isTowerPiece(piece)) return;
@@ -44,6 +50,38 @@ for (const size of api.sizes) {
     assert.equal(api.getAdjacentMoves(0, 0).length, 3);
     assert.equal(api.getAdjacentMoves(size - 1, size - 1).length, 3);
     assert.equal(api.coordsToNotation(size - 1, size - 1), `${String.fromCharCode(64 + size)}1`);
+}
+
+for (const size of api.sizes) {
+    for (let mask = 1; mask < 16; mask++) {
+        const players = Array.from({ length: 4 }, (_, index) => Boolean(mask & (1 << index)));
+        const { board, biomes } = api.createStartingBoard(players, size, `province-pawns-${mask}`);
+        const provinces = Array.from({ length: 16 }, () => []);
+        const ids = [];
+        board.forEach((row, r) => row.forEach((piece, c) => {
+            if (!piece) return;
+            provinces[api.getProvinceIndex(r, c, size)].push(piece);
+            ids.push(piece.id, ...api.getPieceContents(piece).map(unit => unit.id));
+            assert.notEqual(biomes[r][c], 'mountain', 'Starting units must not occupy mountains');
+        }));
+        assert.equal(new Set(ids).size, ids.length, 'Generated piece and unit IDs must be unique');
+        for (const pieces of provinces) {
+            const castles = pieces.filter(api.isTowerPiece);
+            assert.equal(castles.length, 1, 'Each province must have exactly one castle');
+            const outside = pieces.filter(piece => !api.isTowerPiece(piece));
+            const rebelProvince = castles[0].player === api.rebelId;
+            assert.equal(outside.length, rebelProvince ? 1 : 0,
+                'Only non-player provinces must have exactly one outside pawn');
+            if (rebelProvince) {
+                assert.equal(api.getPieceContents(castles[0]).map(unit => unit.type).sort().join(''), 'pr',
+                    'Rebel castles must retain their inside pawn');
+                assert.equal(outside[0].player, api.rebelId);
+                assert.equal(outside[0].type, 'p');
+                assert.equal(api.getPieceContents(outside[0]).length, 1);
+                assert.equal(api.getPieceContents(outside[0])[0].type, 'p');
+            }
+        }
+    }
 }
 
 const smallSetup = Array.from({ length: 10 }, () => Array(10).fill(null));

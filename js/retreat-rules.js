@@ -64,7 +64,10 @@ function processRetreatsAtRoundStart() {
                 contents,
                 isGray
             };
-            logAction(`↩️ P${entry.player} ${entry.released ? 'released units' : 'retreat'} re-entered ${getBiome(r, c) === 'forest' ? 'in a forest' : `at ${coordsToNotation(r, c)}`}.`);
+            const location = getBiome(r, c) === 'forest' ? 'in a forest' :
+                isPubliclyVisiblePiece(gameState.board[r][c], [[r, c]])
+                    ? `at ${coordsToNotation(r, c)}` : 'in fog of war';
+            logAction(`↩️ P${entry.player} ${entry.released ? 'released units' : 'retreat'} re-entered ${location}.`);
         });
     }
     renderRetreatTable();

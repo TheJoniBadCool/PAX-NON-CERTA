@@ -18,7 +18,8 @@ function element() {
         addEventListener(event, handler) { (handlers[event] ||= []).push(handler); },
         querySelectorAll(selector) { return this.queries[selector] || []; },
         setAttribute() {}, getAttribute() { return 'false'; },
-        appendChild(child) { this.children.push(child); }
+        appendChild(child) { this.children.push(child); },
+        remove() {}
     };
 }
 const elements = new Map();
@@ -49,7 +50,7 @@ const api = vm.runInContext(`({
     rejectPrisonerMoveConflicts, applySiegeRoundProgress, processCollisionGroup,
     processSallyBattle, getUnitDisplayClass, prisonerChain, isValidSallyOutPlan, updateObjectiveScores,
     showPieceTooltip, resolvePrisonerPlans, validatePrisonerPlans, resolveAllMoves, getAllPlannedMoves,
-    handleSquareAction
+    handleSquareAction, animatePlannedMovements
 })`, context);
 const state = api.state;
 const unit = (player, type, id) => api.createUnit(player, type, id, id, 3, 3);
@@ -391,6 +392,50 @@ async function run() {
     buttons[0].handlers.click[0]();
     assert.equal(requests, 1);
     assert(state.pendingCapture, 'Guest UI must await the host rather than mutate the board');
+
+    reset();
+    context.Multiplayer = { broadcastResolutionStart() {}, beginNextRound() {} };
+    state.multiplayer = true;
+    state.board[8][8] = piece(2, [unit(2, 'n', 'fog-mover')]);
+    const fogMove = {
+        player: 2, pieceId: 'piece-2', from: [8, 8], to: [8, 9], pieceType: 'n',
+        contents: state.board[8][8].contents
+    };
+    context.requestAnimationFrame = callback => callback();
+    await api.animatePlannedMovements([fogMove]);
+    const animationLayer = elements.get('movement-animation-layer');
+    assert.equal(animationLayer.children.length, 0, 'Fogged movement creates no animation tokens');
+    state.board[7][7] = piece(1, [unit(1, 'b', 'scout')]);
+    await api.animatePlannedMovements([fogMove]);
+    assert.equal(animationLayer.children.length, 1, 'Scouted enemy movement remains animated');
+    state.biomes = Array.from({ length: 16 }, () => Array(16).fill('plains'));
+    state.biomes[8][9] = 'forest';
+    await api.animatePlannedMovements([fogMove]);
+    assert.equal(animationLayer.children.length, 0, 'Scouting cannot animate concealed forest arrivals');
+    context.requestAnimationFrame = () => {};
+
+    reset();
+    state.multiplayer = true;
+    state.board[0][0] = piece(1, [unit(1, 'n', 'distant-viewer')]);
+    state.board[15][15] = piece(2, [unit(2, 'n', 'hidden-mover')]);
+    state.plans[1] = [{ pieceId: 'piece-2', from: [15, 15], to: [14, 14] }];
+    context.animatePlannedMovements = async () => {};
+    await api.resolveAllMoves();
+    assert.equal(state.board[14][14].contents[0].id, 'hidden-mover',
+        'Fog must not change authoritative movement');
+    assert(logs.some(log => log.includes('moved through fog of war')));
+    assert(!logs.some(log => log.includes('P1') || log.includes('O2')),
+        'Hidden movement coordinates must not enter the shared log');
+    await api.processCollisionGroup({
+        type: 'TARGET', targetSquare: [14, 14],
+        candidates: [
+            { ...state.board[14][14], pieceId: 'piece-2', pieceType: 'n', from: [14, 14] },
+            { player: 2, pieceId: 'reinforcement', pieceType: 'n', from: [15, 15],
+                contents: [unit(2, 'n', 'reinforcement')] }
+        ]
+    });
+    assert(logs.at(-1).includes('MERGE') && logs.at(-1).includes('fog of war'),
+        'Concealed friendly consolidation must not log its position or stack size');
     console.log('Prisoner rules and battle integration checks passed');
 }
 run().catch(error => { console.error(error); process.exitCode = 1; });

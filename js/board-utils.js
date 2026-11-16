@@ -11,14 +11,61 @@ function isPassableSquare(r, c) {
     return getBiome(r, c) !== 'mountain';
 }
 
-function isConcealedPiece(piece, r, c, viewer = gameState.turnIndex + 1) {
-    return Boolean(piece && piece.player !== viewer && getBiome(r, c) === 'forest' &&
-        gameState.phase !== 'GAME_OVER');
+function getFogVisibility(viewer = null) {
+    const size = gameState.boardSize;
+    const visible = Array.from({ length: size }, () =>
+        Array(size).fill(gameState.phase === 'GAME_OVER'));
+    if (gameState.phase === 'GAME_OVER') return visible;
+    const viewers = viewer !== null ? [viewer] :
+        !gameState.multiplayer && gameState.phase === 'RESOLVING'
+            ? gameState.activePlayers.flatMap((active, index) =>
+                active && !gameState.eliminated[index] ? [index + 1] : [])
+            : [gameState.turnIndex + 1];
+    const owners = getProvinceOwners(gameState.board);
+    const visibleProvinces = owners.map((_, province) => owners.some((other, index) =>
+        viewers.includes(other) &&
+        Math.max(Math.abs(Math.floor(province / 4) - Math.floor(index / 4)),
+            Math.abs(province % 4 - index % 4)) <= 1));
+    gameState.board.forEach((row, r) => row.forEach((piece, c) => {
+        if (visibleProvinces[getProvinceIndex(r, c, size)]) visible[r][c] = true;
+        if (!piece || !viewers.includes(piece.player)) return;
+        const radius = getCombatContents(piece).some(unit => getUnitType(unit) === 'b') ? 2 : 1;
+        for (let rr = Math.max(0, r - radius); rr <= Math.min(size - 1, r + radius); rr++) {
+            for (let cc = Math.max(0, c - radius); cc <= Math.min(size - 1, c + radius); cc++) {
+                visible[rr][cc] = true;
+            }
+        }
+    }));
+    return visible;
 }
 
-function getVisiblePiece(r, c, viewer = gameState.turnIndex + 1) {
+function isConcealedPiece(piece, r, c, viewer = null, visibility = getFogVisibility(viewer)) {
+    return Boolean(piece && piece.player !== (viewer ?? gameState.turnIndex + 1) &&
+        gameState.phase !== 'GAME_OVER' &&
+        (!visibility[r][c] || (piece.player !== REBEL_PLAYER_ID && getBiome(r, c) === 'forest')));
+}
+
+function getVisiblePiece(r, c, viewer = null, visibility = getFogVisibility(viewer)) {
     const piece = gameState.board[r][c];
-    return isConcealedPiece(piece, r, c, viewer) ? null : piece;
+    if (!isConcealedPiece(piece, r, c, viewer, visibility)) return piece;
+    if (!isTowerPiece(piece)) return null;
+    return { ...piece, type: 'r', contents: getPieceContents(piece).filter(unit => getUnitType(unit) === 'r') };
+}
+
+function getVisibleMovements(moves, viewer = null) {
+    const visibility = getFogVisibility(viewer);
+    return moves.filter(move => {
+        if (move.invalid || move.siegeStart || move.sallyOut || move.siegeCancel) return false;
+        const piece = { player: move.player, type: move.pieceType, contents: move.contents };
+        return [move.from, move.to].every(([r, c]) =>
+            !isConcealedPiece(piece, r, c, viewer, visibility));
+    });
+}
+
+// The shared log must be safe to read again during any player's planning turn.
+function isPubliclyVisiblePiece(piece, squares) {
+    return gameState.activePlayers.every((active, index) => !active || gameState.eliminated[index] ||
+        squares.every(([r, c]) => !isConcealedPiece(piece, r, c, index + 1)));
 }
 
 function snapshotHillOccupants() {
@@ -70,16 +117,34 @@ function isTowerPiece(piece) {
     return Boolean(piece && getPieceContents(piece).some(unit => getUnitType(unit) === 'r'));
 }
 
+function getProvinceIndex(r, c, boardSize) {
+    // Invert the floor-based province boundaries used by castle placement.
+    const row = Math.ceil((r + 1) * 4 / boardSize) - 1;
+    const column = Math.ceil((c + 1) * 4 / boardSize) - 1;
+    return row * 4 + column;
+}
+
+function getProvinceOwners(board) {
+    const owners = Array.from({ length: 16 }, () => new Set());
+    board.forEach((row, r) => row.forEach((piece, c) => {
+        if (isTowerPiece(piece)) owners[getProvinceIndex(r, c, board.length)].add(piece.player);
+    }));
+    return owners.map(players => {
+        const [owner] = players;
+        return players.size === 1 && owner !== REBEL_PLAYER_ID ? owner : null;
+    });
+}
+
 function towersAreSpaced(board) {
     const towers = [];
     for (let r = 0; r < board.length; r++) {
         for (let c = 0; c < board[r].length; c++) {
             const piece = board[r][c];
-            if (!piece) continue;
-            const count = getPieceContents(piece).filter(unit => getUnitType(unit) === 'r').length;
-            if (count > 1 || (count && towers.some(([tr, tc]) =>
-                Math.max(Math.abs(tr - r), Math.abs(tc - c)) < 3))) return false;
-            if (count) towers.push([r, c]);
+            if (!piece || piece.player === REBEL_PLAYER_ID ||
+                !getPieceContents(piece).some(unit => getUnitType(unit) === 'r')) continue;
+            if (towers.some(([tr, tc]) =>
+                Math.max(Math.abs(tr - r), Math.abs(tc - c)) < 3)) return false;
+            towers.push([r, c]);
         }
     }
     return true;
@@ -108,13 +173,13 @@ function isAdjacentSquare(first, second) {
 }
 
 function isEliminatedPiece(piece) {
-    return Boolean(piece && gameState.eliminated[piece.player - 1]);
+    return Boolean(piece && (piece.player === REBEL_PLAYER_ID || gameState.eliminated[piece.player - 1]));
 }
 
 function getPieceClass(piece) {
     const unit = getPieceContents(piece).find(entry => entry.type === piece.type && !isPrisoner(entry)) ||
         getPieceContents(piece).find(entry => entry.type === piece.type);
     if (unit && isPrisoner(unit)) return getUnitDisplayClass(unit, piece.player);
-    const player = PLAYERS[piece.player - 1];
+    const player = getPlayerInfo(piece.player);
     return `${player ? player.class : ''}${isEliminatedPiece(piece) ? ' piece-eliminated' : ''}`;
 }

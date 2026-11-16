@@ -64,7 +64,9 @@ function registerSiegeStarts(allIntendedMoves) {
         });
         move.siegeStart = true;
         move.siegeId = siege.id;
-        logAction(`🏹 <b>SIEGE</b>: Player ${move.player} began besieging the Tower at ${coordsToNotation(...move.to)}. Assault ready in 3 rounds.`);
+        const location = isPubliclyVisiblePiece(source, [move.from])
+            ? `at ${coordsToNotation(...move.to)}` : 'out of sight';
+        logAction(`🏹 <b>SIEGE</b>: Player ${move.player} began besieging the Tower ${location}. Assault ready in 3 rounds.`);
     });
 }
 
@@ -101,7 +103,9 @@ function applySiegeRoundProgress() {
                 tower.contents = getPieceContents(tower).filter(unit => unit.id !== casualty.id);
                 tower.type = getMergedPieceType(tower.contents);
                 recordDeadPieces(gameState, [casualty]);
-                logAction(`🏰 <b>SIEGE</b> at ${coordsToNotation(...siege.towerSquare)}: ${getUnitName(casualty)} was lost to the siege.`);
+                logAction(isPubliclyVisiblePiece(tower, [siege.towerSquare])
+                    ? `🏰 <b>SIEGE</b> at ${coordsToNotation(...siege.towerSquare)}: ${getUnitName(casualty)} was lost to the siege.`
+                    : '🏰 <b>SIEGE</b>: A garrison unit was lost out of sight.');
             }
         }
     });
@@ -121,7 +125,7 @@ function rejectInvalidTowerAttacks(allIntendedMoves) {
         if (move.siegeAssault || move.sallyOut || move.siegeCancel) return;
         if (move.isUnmerge && getSiegeAtSquare(move.from)) {
             move.invalid = true;
-            logAction(`🚫 The defending Tower at ${coordsToNotation(...move.from)} is under siege; ordinary extraction is not allowed.`);
+            logAction(`🚫 Player ${move.player}'s defending Tower is under siege; ordinary extraction is not allowed.`);
             return;
         }
         const target = gameState.board[move.to[0]][move.to[1]];
@@ -134,7 +138,7 @@ function rejectInvalidTowerAttacks(allIntendedMoves) {
 
         if (move.isUnmerge || !move.contents.some(unit => !isPrisoner(unit) && getUnitType(unit) === 'p')) {
             move.invalid = true;
-            logAction(`🚫 Player ${move.player}'s attack on the Tower at ${coordsToNotation(...move.to)} was rejected: a whole stack containing a Pawn is required.`);
+            logAction(`🚫 Player ${move.player}'s attack on a Tower was rejected: a whole stack containing a Pawn is required.`);
         }
     });
 }

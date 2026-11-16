@@ -58,6 +58,7 @@
                 </div>
             <div class="board-wrapper">
                 <div id="board" class="chessboard"></div>
+                <div class="province-lines" role="img" aria-label="Board divided into 16 provinces"></div>
                 <svg id="plan-arrows" class="plan-arrows" viewBox="0 0 16 16" aria-hidden="true"></svg>
                 <div id="movement-animation-layer" class="movement-animation-layer"></div>
                 <svg id="battle-connector" class="battle-connector hidden" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
@@ -403,6 +404,12 @@
                     Generate a map preview before starting, then reuse its seed to recreate starting positions, tower gates, levels and terrain. Seeds control map generation only; objectives and combat rolls remain random. Each map has roughly 50% plains, 20% forests (🌲), 20% hills (⛰) and 10% mountains (▲), rounded to whole squares. Castles always start on plains and mountain squares cannot be entered or used for retreat re-entry. Starting units and castle gates are never blocked by mountains.
                     Forest forces are hidden from opponents and gain +25% strength when they remain there and are attacked. A force that held a hill for the entire previous round gains +25% strength when it stays and is attacked. Arriving forces and opposing swaps receive no terrain defence. Bonuses apply before the odds curve; plains have no effect.
                     Entering an unseen enemy's square resolves normally, including the usual rules for prisoners. Concealment is visual; multiplayer guests receive the board data and the host can inspect it.
+                </div>
+                <div class="rule-box">
+                    <h4>Fog of War</h4>
+                    You see your owned provinces and all eight neighboring provinces, including diagonals. Each friendly piece also reveals the surrounding 3×3 area; a stack containing a non-prisoner Bishop reveals a 5×5 area. Sight follows actual positions and castle ownership, not queued plans, and disappears when no longer provided.<br>
+                    Outside your sight, opposing and rebel troops are hidden. Towers and gates remain visible, but concealed garrisons and their badges do not. Terrain and province colors remain visible. Revealing a forest never cancels forest concealment.<br>
+                    Hotseat resolution combines active players' fog sight without lifting forest hiding; multiplayer always keeps your own sight. Battles reveal participants, game over reveals everything, and setup previews have no fog. Hidden movements are not animated, and the shared log omits non-battle coordinates concealed from any active player. Fog is visual, not network secrecy.
                 </div>
                 <div class="rule-box">
                     <h4>4. Same-Player Merging</h4>

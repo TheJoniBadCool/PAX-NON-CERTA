@@ -2,18 +2,19 @@ function initializeObjectives() {
     const unitsByPlayer = PLAYERS.map(() => []);
     const castlesByPlayer = PLAYERS.map(() => []);
     gameState.board.forEach((row, r) => row.forEach((piece, c) => {
-        if (!piece) return;
+        if (!piece || piece.player === REBEL_PLAYER_ID) return;
         const contents = getPieceContents(piece);
         piece.contents = contents;
         unitsByPlayer[piece.player - 1].push(...contents);
-        contents.filter(unit => getUnitType(unit) === 'r').forEach(unit => {
+        const castle = contents.find(unit => getUnitType(unit) === 'r');
+        if (castle) {
             const castles = castlesByPlayer[piece.player - 1];
-            unit.castleId = unit.id;
-            unit.castleSquare = [r, c];
-            unit.castleLetter = String.fromCharCode(65 + castles.length);
-            unit.castleLabel = `${PLAYERS[piece.player - 1].name} castle ${String.fromCharCode(65 + castles.length)} (${coordsToNotation(r, c)})`;
-            castles.push(unit);
-        });
+            castle.castleId = castle.id;
+            castle.castleSquare = [r, c];
+            castle.castleLetter = String.fromCharCode(65 + castles.length);
+            castle.castleLabel = `${PLAYERS[piece.player - 1].name} castle ${String.fromCharCode(65 + castles.length)} (${coordsToNotation(r, c)})`;
+            castles.push(castle);
+        }
     }));
     const choose = items => items[Math.floor(Math.random() * items.length)];
     gameState.scores = [0, 0, 0, 0];

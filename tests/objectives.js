@@ -112,6 +112,15 @@ async function run() {
         });
     }
 
+    api.startNewGame([true, true, false, false], null, 16, 'province-castles');
+    for (let player = 1; player <= 2; player++) {
+        const castle = state.board.flat().find(piece => piece && piece.player === player);
+        assert.equal(state.board.flat().filter(piece => piece && piece.player === player).length, 1);
+        assert.equal(castle.contents.length, 12);
+        assert.equal(state.objectives[player - 1].filter(objective => objective.kind === 'lose').length, 1,
+            'One physical starting castle must create one loss objective');
+    }
+
     start();
     const blueCastle = state.objectives[0].find(objective => objective.kind === 'conquer');
     const blueLoss = state.objectives[1].find(objective => objective.castleId === blueCastle.castleId);

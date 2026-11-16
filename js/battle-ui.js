@@ -14,7 +14,7 @@ function renderBattleCandidates(group, candidateResults = null, retreatedUnitIds
     const candidateData = getBattleCandidateData(group);
     battleCandidatesEl.innerHTML = candidateData.map(entry => {
         const candidate = entry.candidate;
-        const player = PLAYERS[candidate.player - 1];
+        const player = getPlayerInfo(candidate.player);
         const icons = entry.contents
             .map(unit => {
                 const result = candidateResults && candidateResults.get(candidate.pieceId);
@@ -63,7 +63,7 @@ function renderBattleCandidates(group, candidateResults = null, retreatedUnitIds
         return `
             <div class="battle-candidate">
                 <div class="battle-candidate-header">
-                    <span class="battle-candidate-title" style="color: ${player.color};" title="P${candidate.player} ${player.name}">P${candidate.player}</span>
+                    <span class="battle-candidate-title" style="color: ${player.color};" title="${player.name}">${player.name}</span>
                     ${battleStat('⚖', `${(entry.probability * 100).toFixed(1)}%`, `Chance to win ${(entry.probability * 100).toFixed(1)}%`, 'battle-win-odds')}
                 </div>
                 <div class="battle-candidate-icons">${icons}</div>

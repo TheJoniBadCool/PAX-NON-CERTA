@@ -115,6 +115,8 @@ function resolvePrisonerPlans() {
         actions.forEach(plan => {
             const [r, c] = plan.from;
             const piece = gameState.board[r][c];
+            const location = getBiome(r, c) === 'forest' ? 'in a forest' :
+                isPubliclyVisiblePiece(piece, [[r, c]]) ? `at ${coordsToNotation(r, c)}` : 'in fog of war';
             const contents = getPieceContents(piece);
             const unit = contents.find(unit => unit.id === plan.unitId);
             const remaining = contents.filter(entry => entry !== unit);
@@ -130,7 +132,7 @@ function resolvePrisonerPlans() {
                 const restored = restorePrisoner(unit);
                 queueRetreat(restored.player, [restored], [r, c], true);
             }
-            logAction(`${plan.prisonerAction === 'execute' ? '💀' : '🏳️'} <b>P${index + 1}</b> ${plan.prisonerAction === 'execute' ? 'executed' : 'released'} prisoner <b>${escapeHtml(getUnitName(unit))}</b> ${getBiome(r, c) === 'forest' ? 'in a forest' : `at ${coordsToNotation(r, c)}`}.`);
+            logAction(`${plan.prisonerAction === 'execute' ? '💀' : '🏳️'} <b>P${index + 1}</b> ${plan.prisonerAction === 'execute' ? 'executed' : 'released'} prisoner <b>${escapeHtml(getUnitName(unit))}</b> ${location}.`);
             count++;
         });
     }

@@ -25,7 +25,9 @@ function isPrisonerOnly(piece) {
 
 function getUnitDisplayClass(unit, owner) {
     const player = isPrisoner(unit) ? unit.originalPlayer : owner;
-    return `${PLAYERS[player - 1].class}${!isPrisoner(unit) && gameState.eliminated[owner - 1] ? ' piece-eliminated' : ''}`;
+    const playerInfo = getPlayerInfo(player);
+    return `${playerInfo.class}${!isPrisoner(unit) &&
+        (owner === REBEL_PLAYER_ID || gameState.eliminated[owner - 1]) ? ' piece-eliminated' : ''}`;
 }
 
 const PRISONER_CHAIN_SVG = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><path d="M10 13a5 5 0 0 1 0-7l3-3a5 5 0 0 1 7 7l-3 3M14 11a5 5 0 0 1 0 7l-3 3a5 5 0 0 1-7-7l3-3M8 16l8-8"/></svg>';
@@ -34,7 +36,7 @@ const PRISONER_RELEASE_SVG = '<svg width="16" height="16" viewBox="0 0 24 24" fi
 
 function prisonerChain(unit) {
     return isPrisoner(unit)
-        ? `<span class="prisoner-chain" style="color: ${PLAYERS[unit.prisonerOf - 1].color}" title="Prisoner of P${unit.prisonerOf}" aria-label="Prisoner of P${unit.prisonerOf}">${PRISONER_CHAIN_SVG}</span>`
+        ? `<span class="prisoner-chain" style="color: ${getPlayerInfo(unit.prisonerOf).color}" title="Prisoner of P${unit.prisonerOf}" aria-label="Prisoner of P${unit.prisonerOf}">${PRISONER_CHAIN_SVG}</span>`
         : '';
 }
 
@@ -59,7 +61,7 @@ function getPieceContents(piece) {
         : unit);
 }
 
-function getPlannedPieceContents(piece, plans = gameState.plans[piece.player - 1]) {
+function getPlannedPieceContents(piece, plans = gameState.plans[piece.player - 1] || []) {
     const removedIds = new Set(plans.filter(plan => plan.prisonerAction && plan.pieceId === piece.id)
         .map(plan => plan.unitId));
     return getPieceContents(piece).filter(unit => !removedIds.has(unit.id));

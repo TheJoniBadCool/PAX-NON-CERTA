@@ -24,55 +24,62 @@ for (let run = 0; run < 300; run++) {
     gameState.activePlayers = [true, true, true, true];
     initBoard();
     assert(towersAreSpaced(gameState.board), 'Random towers must be spaced');
-    assert(gameState.board.flat().filter(Boolean).length === 8,
-        'Random setup must place two castle stacks per player');
+    assert(gameState.board.flat().filter(Boolean).length === 28,
+        'Random setup must place one castle in each province and one outside pawn per rebel province');
+    const rebels = gameState.board.flat().filter(piece => piece && piece.player === REBEL_PLAYER_ID);
+    assert(rebels.filter(isTowerPiece).length === 12 &&
+        rebels.filter(piece => !isTowerPiece(piece)).length === 12,
+    'Each non-player province receives a rebel castle and one outside rebel pawn');
     for (let player = 1; player <= 4; player++) {
         const castles = gameState.board.flat().filter(piece => piece && piece.player === player);
-        assert(castles.length === 2, 'Each selected player must have two castles');
-        const unitCounts = type => castles.flatMap(getPieceContents)
-            .filter(unit => unit.type === type).length;
+        assert(castles.length === 1, 'Each selected player must have one starting castle');
+        const contents = getPieceContents(castles[0]);
+        const unitCounts = type => contents.filter(unit => unit.type === type).length;
         assert(unitCounts('r') === 2 && unitCounts('b') === 2 &&
             unitCounts('p') === 4 && unitCounts('n') === 2 &&
             unitCounts('q') === 1 && unitCounts('k') === 1,
-        'Castle stacks must preserve the standard 12-unit roster');
-        const queenCastle = castles.find(piece =>
-            getPieceContents(piece).some(unit => unit.type === 'q'));
-        const kingCastle = castles.find(piece =>
-            getPieceContents(piece).some(unit => unit.type === 'k'));
-        const countTypes = piece => getPieceContents(piece).map(unit => unit.type).sort().join('');
-        assert(countTypes(queenCastle) === 'bnppqr',
-            'One castle must contain a Bishop, two Pawns, a Horse, and a Queen');
-        assert(countTypes(kingCastle) === 'bknppr',
-            'The other castle must contain a Bishop, two Pawns, a Horse, and a King');
+        'Each castle must hold the full standard 12-unit roster');
+        assert(contents.map(unit => unit.type).sort().join('') === 'bbknnppppqrr',
+            'The single castle must contain both Towers and every other starting piece');
         const namesByType = {};
-        castles.flatMap(getPieceContents).forEach(unit => {
+        contents.forEach(unit => {
             (namesByType[unit.type] ||= []).push(unit.name);
             assert(unit.id && unit.name, 'Every starting unit must retain an ID and name');
         });
         Object.values(namesByType).forEach(names =>
             assert(new Set(names).size === names.length, 'Unit names must be unique by type'));
-        assert(castles.every(piece => getPieceContents(piece).length === 6 && isTowerPiece(piece)),
-            'Each castle must hold exactly six units, including its Tower');
+        assert(contents.length === 12, 'Each starting castle must contain twelve units');
     }
     for (let r = 0; r < 16; r++) {
         for (let c = 0; c < 16; c++) {
             const piece = gameState.board[r][c];
-            if (!isTowerPiece(piece)) continue;
-            const [minR, minC, maxR, maxC] = getPlayerZone(piece.player - 1);
+            if (!isTowerPiece(piece) || piece.player === REBEL_PLAYER_ID) continue;
+            const playerIndex = piece.player - 1;
+            const minR = playerIndex >= 2 ? 12 : 0;
+            const minC = playerIndex === 1 || playerIndex === 2 ? 12 : 0;
+            const maxR = minR + 3;
+            const maxC = minC + 3;
             assert(r >= minR && r <= maxR && c >= minC && c <= maxC,
-                'Castle stacks must remain in their player corner');
+                'Player castles must remain in their starting corner province');
             const gate = getTowerGate(piece);
             assert(Math.abs(gate[0]) + Math.abs(gate[1]) === 1, 'Gate must be cardinal');
             assert(r + gate[0] >= 0 && r + gate[0] < 16 &&
                 c + gate[1] >= 0 && c + gate[1] < 16, 'Gate must be on the board');
+            assert(getPieceContents(piece).filter(unit => unit.type === 'r')
+                .every(unit => unit.gate[0] === gate[0] && unit.gate[1] === gate[1]),
+            'Every Tower in the castle must retain the shared gate');
         }
     }
 }
 
 gameState.activePlayers = [true, false, true, false];
 initBoard();
-assert(gameState.board.flat().filter(Boolean).length === 4,
-    'Only selected players must receive castle stacks');
+assert(gameState.board.flat().filter(Boolean).length === 30,
+    'Every province receives one castle and each non-player province one outside rebel pawn');
+assert(gameState.board.flat().filter(piece => piece && piece.player === REBEL_PLAYER_ID &&
+    isTowerPiece(piece)).length === 14, 'Unselected provinces receive rebel castles');
+assert(gameState.board.flat().filter(piece => piece && [1, 3].includes(piece.player)).length === 2,
+    'Only selected players receive a player castle');
 assert(!gameState.board.flat().some(piece => piece && [2, 4].includes(piece.player)),
     'Unselected players must have no starting pieces');
 
@@ -166,6 +173,7 @@ function element() {
 }
 const document = { createElement: element };
 const boardEl = element();
+boardEl.parentElement = { style: { setProperty() {} } };
 function renderPlanArrows() {}
 function renderRetreatTable() {}
 gameState.board = emptyBoard();

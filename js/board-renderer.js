@@ -65,6 +65,12 @@ function renderBoard() {
     boardEl.innerHTML = '';
     boardEl.style.gridTemplateColumns = `repeat(${gameState.boardSize}, 1fr)`;
     boardEl.style.gridTemplateRows = `repeat(${gameState.boardSize}, 1fr)`;
+    for (let boundary = 1; boundary < 4; boundary++) {
+        boardEl.parentElement.style.setProperty(`--province-boundary-${boundary}`,
+            `${Math.floor(boundary * gameState.boardSize / 4) / gameState.boardSize * 100}%`);
+    }
+    const provinceOwners = getProvinceOwners(gameState.board);
+    const visibility = getFogVisibility();
     const currentPlans = gameState.plans[gameState.turnIndex];
 
     for (let r = 0; r < gameState.boardSize; r++) {
@@ -74,15 +80,14 @@ function renderBoard() {
             const biome = getBiome(r, c);
 
             let sqClass = `square ${isLight ? 'sq-light' : 'sq-dark'} biome-${biome}`;
+            if (!visibility[r][c]) sqClass += ' sq-fog';
 
-            const playerZone = PLAYERS.findIndex((player, index) => {
-                const [minR, minC, maxR, maxC] = getPlayerZone(index);
-                return r >= minR && r <= maxR && c >= minC && c <= maxC;
-            });
-            if (playerZone !== -1) sqClass += ` zone-p${playerZone + 1}`;
+            const provinceOwner = provinceOwners[getProvinceIndex(r, c, gameState.boardSize)];
+            if (provinceOwner) sqClass += ` zone-p${provinceOwner}`;
 
             square.className = sqClass;
             square.title = `${biome[0].toUpperCase()}${biome.slice(1)} · ${coordsToNotation(r, c)}`;
+            if (!visibility[r][c]) square.title += ' · Fog of war';
 
             if (gameState.selectedSquare && gameState.selectedSquare[0] === r && gameState.selectedSquare[1] === c) {
                 square.classList.add('sq-selected');
@@ -110,9 +115,12 @@ function renderBoard() {
                 square.appendChild(plannedBadge);
             }
 
-            const piece = getVisiblePiece(r, c);
+            const piece = getVisiblePiece(r, c, null, visibility);
             const siegeAtSquare = getSiegeAtSquare([r, c]);
-            if (siegeAtSquare) {
+            const visibleSiege = siegeAtSquare && (piece?.player === gameState.turnIndex + 1 ||
+                siegeAtSquare.attackers.some(attacker =>
+                    getVisiblePiece(...attacker.sourceSquare, null, visibility)));
+            if (visibleSiege) {
                 const siegeMark = document.createElement('div');
                 siegeMark.className = 'siege-mark';
                 siegeMark.innerText = 'XXXX';
@@ -147,7 +155,7 @@ function renderBoard() {
                 if (prisoners.length) {
                     const chains = document.createElement('div');
                     chains.className = 'prisoner-board-badge';
-                    chains.style.color = PLAYERS[piece.player - 1].color;
+                    chains.style.color = getPlayerInfo(piece.player).color;
                     chains.innerHTML = `${PRISONER_CHAIN_SVG}${prisoners.length > 1 ? prisoners.length : ''}`;
                     chains.title = prisoners.map(unit => `${getUnitName(unit)} · ${getUnitStats(unit)}`).join('; ');
                     square.appendChild(chains);

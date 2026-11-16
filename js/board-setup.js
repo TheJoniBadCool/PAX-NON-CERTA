@@ -113,60 +113,97 @@ function generateBiomes(board, random = Math.random) {
     return biomes;
 }
 
-// Randomly place two six-unit castle stacks per player inside their 4x4 area.
+// Place each player's full roster in one castle in their corner province.
 function generatePlayerPieces(playerIdx, random = Math.random, board = gameState.board,
     boardSize = gameState.boardSize, progressionMode = gameState.progressionMode) {
-    const [minR, minC, maxR, maxC] = getPlayerZone(playerIdx, boardSize);
-    const castleContents = [
-        ['r', 'b', 'p', 'p', 'n', 'q'],
-        ['r', 'b', 'p', 'p', 'n', 'k']
-    ];
-
+    const provinceRow = playerIdx >= 2 ? 3 : 0;
+    const provinceColumn = playerIdx === 1 || playerIdx === 2 ? 3 : 0;
+    const minRow = Math.floor(provinceRow * boardSize / 4);
+    const maxRow = Math.floor((provinceRow + 1) * boardSize / 4);
+    const minColumn = Math.floor(provinceColumn * boardSize / 4);
+    const maxColumn = Math.floor((provinceColumn + 1) * boardSize / 4);
     const coords = [];
-    for (let r = minR; r <= maxR; r++) {
-        for (let c = minC; c <= maxC; c++) {
-            coords.push([r, c]);
+    for (let r = minRow; r < maxRow; r++) {
+        for (let c = minColumn; c < maxColumn; c++) {
+            if (!board[r][c]) coords.push([r, c]);
         }
     }
-
     for (let i = coords.length - 1; i > 0; i--) {
         const j = Math.floor(random() * (i + 1));
         [coords[i], coords[j]] = [coords[j], coords[i]];
     }
+    if (!coords.length) {
+        throw new Error(`No free square for player ${playerIdx + 1}'s castle in its starting province`);
+    }
 
-    const towerPairs = [];
-    coords.forEach((first, index) => {
-        coords.slice(index + 1).forEach(second => {
-            if (Math.max(Math.abs(first[0] - second[0]), Math.abs(first[1] - second[1])) >= 3) {
-                towerPairs.push([first, second]);
-            }
-        });
-    });
-    const towers = towerPairs[Math.floor(random() * towerPairs.length)];
-
+    const [r, c] = coords[0];
+    const pieceId = `p${playerIdx + 1}_castle`;
+    const pieceTypes = ['r', 'b', 'p', 'p', 'n', 'q', 'r', 'b', 'p', 'p', 'n', 'k'];
     const typeCounts = {};
-    towers.forEach((coord, castleIndex) => {
-        const [r, c] = coord;
-        const pieceId = `p${playerIdx + 1}_${castleIndex}`;
-        const contents = castleContents[castleIndex].map((pieceType, unitIndex) => {
-            typeCounts[pieceType] = (typeCounts[pieceType] || 0) + 1;
-            const unitName = `${PLAYER_CODES[playerIdx]}${pieceType}${typeCounts[pieceType]}`;
-            return createUnit(
-                playerIdx + 1,
-                pieceType,
-                `${pieceId}::unit::${unitIndex}`,
-                unitName,
-                randomLevel(random, progressionMode),
-                randomLevel(random, progressionMode)
-            );
-        });
-        board[r][c] = {
-            id: pieceId,
-            player: playerIdx + 1,
-            type: 'r',
-            contents
-        };
+    const contents = pieceTypes.map((pieceType, unitIndex) => {
+        typeCounts[pieceType] = (typeCounts[pieceType] || 0) + 1;
+        const unitName = `${PLAYER_CODES[playerIdx]}${pieceType}${typeCounts[pieceType]}`;
+        return createUnit(
+            playerIdx + 1,
+            pieceType,
+            `${pieceId}::unit::${unitIndex}`,
+            unitName,
+            randomLevel(random, progressionMode),
+            randomLevel(random, progressionMode)
+        );
     });
+    board[r][c] = {
+        id: pieceId,
+        player: playerIdx + 1,
+        type: 'r',
+        contents
+    };
+}
+
+function generateRebelPieces(random, board, boardSize) {
+    for (let provinceRow = 0; provinceRow < 4; provinceRow++) {
+        for (let provinceColumn = 0; provinceColumn < 4; provinceColumn++) {
+            const minRow = Math.floor(provinceRow * boardSize / 4);
+            const maxRow = Math.floor((provinceRow + 1) * boardSize / 4);
+            const minColumn = Math.floor(provinceColumn * boardSize / 4);
+            const maxColumn = Math.floor((provinceColumn + 1) * boardSize / 4);
+            const available = [];
+            let hasCastle = false;
+            for (let r = minRow; r < maxRow; r++) {
+                for (let c = minColumn; c < maxColumn; c++) {
+                    if (isTowerPiece(board[r][c])) hasCastle = true;
+                    if (!board[r][c]) available.push([r, c]);
+                }
+            }
+            if (hasCastle) continue;
+            if (!available.length) {
+                throw new Error(`No free square for a rebel castle in province ${provinceRow * 4 + provinceColumn + 1}`);
+            }
+            const castleIndex = Math.floor(random() * available.length);
+            const [r, c] = available.splice(castleIndex, 1)[0];
+            const id = `rebel_castle_${provinceRow * 4 + provinceColumn + 1}`;
+            board[r][c] = {
+                id,
+                player: REBEL_PLAYER_ID,
+                type: 'r',
+                contents: [
+                    createUnit(REBEL_PLAYER_ID, 'r', `${id}::tower`, `${PLAYER_CODES[4]}r${provinceRow * 4 + provinceColumn + 1}`),
+                    createUnit(REBEL_PLAYER_ID, 'p', `${id}::pawn`, `${PLAYER_CODES[4]}p${provinceRow * 4 + provinceColumn + 1}`)
+                ]
+            };
+            if (!available.length) {
+                throw new Error(`No free square for a rebel pawn outside the castle in province ${provinceRow * 4 + provinceColumn + 1}`);
+            }
+            const [pawnRow, pawnColumn] = available[Math.floor(random() * available.length)];
+            const pawnId = `rebel_roamer_${provinceRow * 4 + provinceColumn + 1}`;
+            board[pawnRow][pawnColumn] = {
+                id: pawnId,
+                player: REBEL_PLAYER_ID,
+                type: 'p',
+                contents: [createUnit(REBEL_PLAYER_ID, 'p', `${pawnId}::pawn`, 'Rebel pawn')]
+            };
+        }
+    }
 }
 
 function createStartingBoard(activePlayers, boardSize, seed, customBoard = null,
@@ -179,14 +216,16 @@ function createStartingBoard(activePlayers, boardSize, seed, customBoard = null,
         for (let p = 0; p < 4; p++) {
             if (activePlayers[p]) generatePlayerPieces(p, random, board, boardSize, progressionMode);
         }
+        generateRebelPieces(random, board, boardSize);
     }
     board.forEach((row, r) => row.forEach((piece, c) => {
         if (!isTowerPiece(piece)) return;
         const directions = [[-1, 0], [1, 0], [0, -1], [0, 1]]
             .filter(([dr, dc]) => r + dr >= 0 && r + dr < boardSize &&
                 c + dc >= 0 && c + dc < boardSize);
-        const tower = getPieceContents(piece).find(unit => getUnitType(unit) === 'r');
-        tower.gate = directions[Math.floor(random() * directions.length)];
+        const gate = directions[Math.floor(random() * directions.length)];
+        getPieceContents(piece).filter(unit => getUnitType(unit) === 'r')
+            .forEach(tower => { tower.gate = gate; });
     }));
     return { board, biomes: generateBiomes(board, random) };
 }
@@ -208,24 +247,30 @@ function initBoard(customBoard = null, boardSize = gameState.boardSize, seed = n
 function renderMapPreview(container, starting, boardSize) {
     container.innerHTML = '';
     container.style.gridTemplateColumns = `repeat(${boardSize}, 1fr)`;
+    const provinceOwners = getProvinceOwners(starting.board);
     for (let r = 0; r < boardSize; r++) {
         for (let c = 0; c < boardSize; c++) {
             const square = document.createElement('div');
             const isLight = (r + c) % 2 === 0;
             square.className = `square ${isLight ? 'sq-light' : 'sq-dark'} biome-${starting.biomes[r][c]} map-preview-square`;
-            const zone = PLAYERS.findIndex((player, index) => {
-                const [minR, minC, maxR, maxC] = getPlayerZone(index, boardSize);
-                return r >= minR && r <= maxR && c >= minC && c <= maxC;
-            });
-            if (zone !== -1) square.classList.add(`zone-p${zone + 1}`);
+            const provinceOwner = provinceOwners[getProvinceIndex(r, c, boardSize)];
+            if (provinceOwner) square.classList.add(`zone-p${provinceOwner}`);
             const piece = starting.board[r][c];
             if (isTowerPiece(piece)) {
                 const marker = document.createElement('span');
-                marker.className = `map-preview-castle piece-p${piece.player}`;
+                const player = getPlayerInfo(piece.player);
+                marker.className = `map-preview-castle ${player.class}`;
+                marker.setAttribute('aria-hidden', 'true');
+                square.appendChild(marker);
+            } else if (piece && piece.player === REBEL_PLAYER_ID) {
+                const marker = document.createElement('span');
+                marker.className = 'map-preview-pawn';
+                marker.innerText = '♟';
                 marker.setAttribute('aria-hidden', 'true');
                 square.appendChild(marker);
             }
-            square.title = `${starting.biomes[r][c]}${piece ? ` · ${PLAYERS[piece.player - 1].colorName} castle` : ''}`;
+            square.title = `${starting.biomes[r][c]}${piece
+                ? ` · ${getPlayerInfo(piece.player).colorName} ${isTowerPiece(piece) ? 'castle' : 'pawn'}` : ''}`;
             container.appendChild(square);
         }
     }
