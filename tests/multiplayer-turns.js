@@ -112,7 +112,7 @@ const ctx = {
         ctx.customSetupModal.classList.remove('hidden');
     },
     isTowerGateMove: () => true, canMoveWholePiece: () => true,
-    getPieceContents: () => [{ id: 'unit', type: 'p' }],
+    getPieceContents: piece => piece.contents || [{ id: 'unit', type: 'p' }],
     canUnitsTarget: () => true, isPrisoner: () => false,
     renderCaptureChoices() {},
     decideCapture(player, captureId, unitId, fate) {
@@ -131,6 +131,12 @@ Object.assign(ctx, new Function('ctx', `with (ctx) {
     ${readSource('js/board-utils.js')}
     return { towersAreSpaced };
 }`)({ getPieceContents: piece => piece.contents, getUnitType: unit => unit.type }));
+Object.assign(ctx, new Function('ctx', `with (ctx) {
+    ${readSource('js/prisoner-rules.js')}
+    ${readSource('js/models.js')}
+    ${readSource('js/movement-rules.js')}
+    return { validatePrisonerPlans, getPlannedPieceContents, isPrisoner, canMoveWholePiece, canMoveHeldUnit };
+}`)(ctx));
 
 async function run() {
     const multiplayer = new Function('ctx', `with (ctx) { ${source}\n return Multiplayer; }`)(ctx);
@@ -238,12 +244,46 @@ async function run() {
         'Capture authority must use the authenticated slot, not a submitted player');
     guest.emit('data', { type: 'prisoner-action', gameId: 1, round: 1,
         player: 1, unitId: 'unit', action: 'release' });
-    assert(prisonerRequest.player === 2 && prisonerRequest.action === 'release',
-        'Prisoner actions must use authenticated ownership');
+    assert(!prisonerRequest, 'Immediate prisoner-action messages must no longer be accepted');
 
     guest.emit('data', { type: 'commit', gameId: 1, round: 2, plan: [] });
     assert(!state.committed[1], 'A stale or future turn must be ignored');
     const guestPlan = [{ from: [0, 0], to: [0, 1], pieceId: 'guest-piece' }];
+    const guestPiece = state.board[0][0];
+    const prisoner = { id: 'guest-prisoner', player: 2, originalPlayer: 1, prisonerOf: 2, type: 'q' };
+    guestPiece.contents.push(prisoner);
+    guestPiece.contents[0].type = 'n';
+    state.round = 2;
+    const decision = {
+        from: [0, 0], to: [0, 0], pieceId: 'guest-piece', unitId: 'guest-prisoner', prisonerAction: 'release'
+    };
+    const commitPlan = plan => guest.emit('data', { type: 'commit', gameId: 1, round: 2, plan });
+    commitPlan(guestPlan);
+    assert(!state.committed[1], 'Even-round movement with a prisoner must be rejected');
+    commitPlan([{ ...decision, unitId: 'unit' }]);
+    assert(!state.committed[1], 'Normal units cannot receive prisoner actions');
+    commitPlan([{ ...decision, prisonerAction: 'invalid' }]);
+    assert(!state.committed[1], 'Unknown prisoner fates must be rejected');
+    commitPlan([{ ...decision, to: [0, 1] }]);
+    assert(!state.committed[1], 'Prisoner actions must be stationary');
+    commitPlan([decision, decision]);
+    assert(!state.committed[1], 'Duplicate prisoner decisions must be rejected');
+    commitPlan([decision, { ...guestPlan[0], isUnmerge: true,
+        unitId: prisoner.id, sourcePieceId: 'guest-piece' }]);
+    assert(!state.committed[1], 'Prisoners cannot both leave custody and transfer');
+    commitPlan([guestPlan[0], decision]);
+    assert(state.committed[1] && state.plans[1].length === 2,
+        'Movement and a prisoner decision must be accepted regardless of plan order');
+    assert(state.board[0][0].contents.includes(prisoner) && state.board[0][0].contents.length === 2,
+        'Committing a prisoner action must not apply it immediately');
+    assert(state.plans[1][0].contents.length === 1,
+        'Host must rebuild movement using the remaining stack');
+    assert(state.plans[1][1].prisonerAction === 'release', 'Host must preserve the validated prisoner decision');
+    guest.emit('data', { type: 'unlock', gameId: 1, round: 2 });
+    assert(!state.committed[1], 'Unlocking allows prisoner decisions to be changed');
+    guestPiece.contents.pop();
+    guestPiece.contents[0].type = 'p';
+    state.round = 1;
     guest.emit('data', { type: 'commit', gameId: 1, round: 1, plan: guestPlan });
     assert(state.committed[1] && resolutions === 0, 'Guest commitment must wait for host');
     const pending = multiplayer.toggleCommit();

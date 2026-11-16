@@ -1,7 +1,10 @@
-// Random Corner Spawning for 12 pieces per player inside 4x4 area
+// Randomly place two six-unit castle stacks per player inside their 4x4 area.
 function generatePlayerPieces(playerIdx) {
     const [minR, minC, maxR, maxC] = PLAYERS[playerIdx].zone;
-    const pieceTypes = ['k', 'q', 'r', 'r', 'n', 'n', 'b', 'b', 'p', 'p', 'p', 'p'];
+    const castleContents = [
+        ['r', 'b', 'p', 'p', 'n', 'q'],
+        ['r', 'b', 'p', 'p', 'n', 'k']
+    ];
     
     const coords = [];
     for (let r = minR; r <= maxR; r++) {
@@ -24,21 +27,28 @@ function generatePlayerPieces(playerIdx) {
         });
     });
     const towers = towerPairs[Math.floor(Math.random() * towerPairs.length)];
-    const otherCoords = coords.filter(coord => !towers.includes(coord));
-    const placements = [otherCoords[0], otherCoords[1], ...towers, ...otherCoords.slice(2, 10)];
 
     const typeCounts = {};
-    placements.forEach((coord, idx) => {
+    towers.forEach((coord, castleIndex) => {
         const [r, c] = coord;
-        const pieceId = `p${playerIdx + 1}_${idx}_${Date.now()}_${Math.random()}`;
-        const pieceType = pieceTypes[idx];
-        typeCounts[pieceType] = (typeCounts[pieceType] || 0) + 1;
-        const unitName = `${PLAYER_CODES[playerIdx]}${pieceType}${typeCounts[pieceType]}`;
+        const pieceId = `p${playerIdx + 1}_${castleIndex}_${Date.now()}_${Math.random()}`;
+        const contents = castleContents[castleIndex].map((pieceType, unitIndex) => {
+            typeCounts[pieceType] = (typeCounts[pieceType] || 0) + 1;
+            const unitName = `${PLAYER_CODES[playerIdx]}${pieceType}${typeCounts[pieceType]}`;
+            return createUnit(
+                playerIdx + 1,
+                pieceType,
+                `${pieceId}::unit::${unitIndex}`,
+                unitName,
+                randomLevel(),
+                randomLevel()
+            );
+        });
         gameState.board[r][c] = {
             id: pieceId,
             player: playerIdx + 1,
-            type: pieceType,
-            contents: [createUnit(playerIdx + 1, pieceType, `${pieceId}::unit::0`, unitName, randomLevel(), randomLevel())]
+            type: 'r',
+            contents
         };
     });
 }

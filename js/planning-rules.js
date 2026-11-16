@@ -1,13 +1,16 @@
 function getPendingHeldIndices(piece, currentPlans) {
     return new Set(currentPlans
-        .filter(move => move.isUnmerge && move.sourcePieceId === piece.id)
-        .map(move => move.heldIndex));
+        .filter(move => (move.isUnmerge && move.sourcePieceId === piece.id) ||
+            (move.prisonerAction && move.pieceId === piece.id))
+        .map(move => move.prisonerAction
+            ? getPieceContents(piece).findIndex(unit => unit.id === move.unitId)
+            : move.heldIndex));
 }
 
 function getAllPlannedMoves() {
     const moves = [];
     if (gameState.multiplayer && gameState.phase === 'RESOLVING') return moves;
-    gameState.plans[gameState.turnIndex].forEach(move =>
+    gameState.plans[gameState.turnIndex].filter(move => !move.prisonerAction).forEach(move =>
         moves.push({ ...move, player: gameState.turnIndex + 1 }));
     return moves;
 }

@@ -19,14 +19,12 @@ chess rules.
   - Blue / Player 2: top-right 4x4 zone.
   - Green / Player 3: bottom-right 4x4 zone.
   - Yellow / Player 4: bottom-left 4x4 zone.
-- Each selected player receives 12 randomly placed pieces in their 4x4 zone:
-  - 1 King
-  - 1 Queen
-  - 2 Towers (Rooks)
-  - 2 Horses (Knights)
-  - 2 Bishops
-  - 4 Pawns
-- A selected player's 4x4 zone has 16 cells, so four cells remain empty.
+- Each selected player receives two randomly placed castle stacks in their 4x4
+  zone, spaced at least two squares apart in every direction:
+  - One Tower, Bishop, two Pawns, Horse, and Queen in one castle.
+  - One Tower, Bishop, two Pawns, Horse, and King in the other.
+- Each castle occupies one board cell and holds six units, for 12 units total
+  per selected player.
 - Unselected players have no pieces and are marked eliminated from the start.
 - Setup can use either the default random corner positions or custom placement.
 - Custom placement is performed by one player before the game starts:
@@ -202,6 +200,8 @@ chess rules.
 
 - All active players' plans are collected and resolved in one simultaneous phase.
 - Resolution follows this order:
+  - Queued releases/executions of existing prisoners are announced and resolved
+    before the movement steps below.
   1. Moving pieces leave their original squares and are considered at their planned destinations.
   2. Two-way opposing interceptions are resolved first. The loser disappears and the winner is placed at its own planned destination.
   3. All candidates belonging to the same player on each square merge into one stack.
@@ -247,12 +247,12 @@ chess rules.
   win-probability, pursuit, experience, and siege modifiers. Winners and royals
   sharing their candidate with any other unit retain their normal base weights.
 - Every fleeing survivor gains one Routed stack, capped at 3. Each stack gives
-  -20% battle strength and +15 percentage points casualty risk, for winners and
+  -20% battle strength and +25 percentage points casualty risk, for winners and
   losers alike. A candidate's strength penalty is the average of its units'
   penalties, applied to raw strength before the 1.35 odds curve. The casualty
   penalty is added after other modifiers and capped at 100%; Towers stay immune.
-- Routed persists throughout retreat and for 3 playable rounds after re-entry:
-  the return round and the next two rounds. Another retreat before expiry adds
+- Routed persists throughout retreat and for 6 playable rounds after re-entry:
+  the return round and the next five rounds. Another retreat before expiry adds
   a stack and refreshes this cooldown after the new return. A retreat after
   expiry starts again at one stack.
 - Routed stacks and expiry rounds belong to individual units, surviving merges,
@@ -284,8 +284,18 @@ chess rules.
   conflicts without fighting units, and prisoner-only swaps, cancel their moves.
 - Recapturing original friendly units automatically restores normal service.
 - The owner can execute or release prisoners from the piece popup during
-  planning, including on even rounds. Plans involving that piece must first be
-  reset; multiplayer locked-in players cannot change prisoners.
+  planning, including on even rounds. These actions are private queued plans,
+  not immediate changes. Reset Plans cancels them; changing the selected fate
+  replaces the previous decision for that unit. Multiplayer locked-in players
+  must unlock before editing their decisions.
+- Existing prisoner releases/executions resolve first, before movement, sieges,
+  or battles, with a combat-log announcement naming each player and unit.
+  The remaining stack can also move that round; movement uses its updated
+  contents and type. A prisoner cannot both leave custody and unmerge/transfer.
+  Odd/even movement restrictions consider the remaining planned stack.
+- Multiplayer submits prisoner actions with committed plans. The host checks
+  ownership, unit identity, valid fate, duplicate actions, and conflicts with
+  unmerge/transfer. No immediate prisoner-action messages are accepted.
 - Release returns units through 3-round re-entry to the original owner without
   routed penalties. Blocked releases wait another round rather than dying.
   Released units of eliminated players remain stationary.
@@ -360,7 +370,8 @@ clarification rather than guessing.
 - An unselected player's corner must remain empty.
 - The first active turn must be the lowest-numbered selected player.
 - Every selected player's generated piece coordinates must be unique.
-- Random generation must still create exactly 12 pieces per selected player.
+- Random generation must create exactly two castle stacks and 12 units per
+  selected player, with one Queen castle and one King castle as specified above.
 - Every generated unit must have exactly one stable name, and names must be
   unique within each player and piece type.
 - Custom setup must require exactly one King, at least one Queen and one Tower

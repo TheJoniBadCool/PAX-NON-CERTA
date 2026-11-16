@@ -96,7 +96,12 @@ function renderBoard() {
             if (isPlannedTo) {
                 const plannedBadge = document.createElement('div');
                 plannedBadge.className = 'planned-badge';
-                plannedBadge.innerText = '✓';
+                const prisonerPlans = currentPlans.filter(p => p.prisonerAction &&
+                    p.from[0] === r && p.from[1] === c);
+                plannedBadge.innerText = prisonerPlans.length
+                    ? prisonerPlans.map(p => p.prisonerAction === 'execute' ? '💀' : '🏳️').join('') : '✓';
+                if (prisonerPlans.length) plannedBadge.title = prisonerPlans.map(p =>
+                    `${p.prisonerAction === 'execute' ? 'Execution' : 'Release'} planned before movement`).join('; ');
                 square.appendChild(plannedBadge);
             }
 

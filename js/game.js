@@ -425,7 +425,7 @@
                         <span class="experience-level">${['0', 'I', 'II', 'III'][getUnitLevel(unit, 'experience')]}</span> 🛡️${getUnitLevel(unit, 'armour')}${getRoutedStacks(unit) ? ` · ⚑${getRoutedStacks(unit)} (${unit.routedUntilRound - gameState.round})` : ''}
                     </span>` : ''}
                     ${!isPrisoner(unit) && contents.some(other => other.type === 'r') && getUnitLevel(unit, 'armour') < 3 ? `<button class="armor-upgrade-button" data-armour-index="${index}" title="Upgrade armour">🛡️</button>` : ''}
-                    ${isPrisoner(unit) ? `<button class="prisoner-action-button" data-prisoner-index="${index}" data-action="execute" title="Execute ${escapeHtml(getUnitName(unit))}" aria-label="Execute ${escapeHtml(getUnitName(unit))}">${PRISONER_EXECUTE_SVG}</button><button class="prisoner-action-button" data-prisoner-index="${index}" data-action="release" title="Release ${escapeHtml(getUnitName(unit))}" aria-label="Release ${escapeHtml(getUnitName(unit))}">${PRISONER_RELEASE_SVG}</button>` : ''}
+                    ${isPrisoner(unit) ? `<button class="prisoner-action-button" data-prisoner-index="${index}" data-action="execute" title="Plan execution of ${escapeHtml(getUnitName(unit))}" aria-label="Execute ${escapeHtml(getUnitName(unit))}">${PRISONER_EXECUTE_SVG}</button><button class="prisoner-action-button" data-prisoner-index="${index}" data-action="release" title="Plan release of ${escapeHtml(getUnitName(unit))}" aria-label="Release ${escapeHtml(getUnitName(unit))}">${PRISONER_RELEASE_SVG}</button>` : ''}
                 </span>`)
                 .join('');
             if (isPawnRestTurn()) {
@@ -450,6 +450,8 @@
                     if (heldUnit.type === 'r' || !canMoveHeldUnit(heldUnit)) {
                         hintTextEl.innerText = heldUnit.type === 'r'
                             ? "Towers are unmovable and cannot be unmerged or transferred."
+                            : gameState.plans[gameState.turnIndex].some(plan => plan.prisonerAction && plan.unitId === heldUnit.id)
+                            ? "This prisoner is scheduled for release or execution. Reset Plans before moving it."
                             : "Pawns and prisoners cannot be moved, unmerged, or transferred on even-numbered rounds.";
                         return;
                     }
@@ -475,12 +477,11 @@
                     event.stopPropagation();
                     if (!canEditPlans()) return;
                     const unit = contents[Number(button.dataset.prisonerIndex)];
-                    if (gameState.multiplayer && !Multiplayer.isHost()) {
-                        Multiplayer.requestPrisonerAction(unit.id, button.dataset.action);
-                    } else if (!managePrisoner(piece.player, unit.id, button.dataset.action)) {
-                        hintTextEl.innerText = "Prisoner action rejected. Reset this piece's queued plans first.";
+                    if (!managePrisoner(piece.player, unit.id, button.dataset.action)) {
+                        hintTextEl.innerText = "Prisoner action rejected. Cancel that prisoner's unmerge or transfer plan first.";
                         return;
                     }
+                    hintTextEl.innerText = `${button.dataset.action === 'execute' ? 'Execution' : 'Release'} queued for ${getUnitName(unit)}; it will resolve before movement.`;
                     pieceTooltip.classList.add('hidden');
                     gameState.selectedSquare = null;
                     gameState.selectedHeldPiece = null;
@@ -515,7 +516,7 @@
             if (gameState.multiplayer) {
                 // Planned like any other action: the catapult stack does nothing else this round.
                 const plans = gameState.plans[gameState.turnIndex];
-                gameState.plans[gameState.turnIndex] = plans.filter(move => move.pieceId !== selectedPiece.id);
+                gameState.plans[gameState.turnIndex] = plans.filter(move => move.prisonerAction || move.pieceId !== selectedPiece.id);
                 gameState.plans[gameState.turnIndex].push({
                     pieceId: selectedPiece.id,
                     from: [...gameState.selectedSquare],
@@ -701,7 +702,7 @@
                 attackerSiege.towerSquare[1] === c) {
                 if (getReadySiegeAssault(pieceToMove, [fromR, fromC], [r, c])) {
                     gameState.plans[gameState.turnIndex] = currentPlans.filter(move =>
-                        move.pieceId !== pieceToMove.id
+                        move.prisonerAction || move.pieceId !== pieceToMove.id
                     );
                     gameState.plans[gameState.turnIndex].push({
                         pieceId: pieceToMove.id,
@@ -733,7 +734,7 @@
             }
 
             if (targetPiece && targetPiece.player === activePlayerId &&
-                !currentPlans.some(p => p.from[0] === r && p.from[1] === c)) {
+                !currentPlans.some(p => !p.prisonerAction && p.from[0] === r && p.from[1] === c)) {
                 gameState.pendingMerge = {
                     from: [fromR, fromC],
                     to: [r, c],
@@ -748,7 +749,8 @@
                 return;
             }
 
-            gameState.plans[gameState.turnIndex] = currentPlans.filter(p => !(p.from[0] === fromR && p.from[1] === fromC));
+            gameState.plans[gameState.turnIndex] = currentPlans.filter(p =>
+                p.prisonerAction || !(p.from[0] === fromR && p.from[1] === fromC));
             if (fromR !== r || fromC !== c) {
                 gameState.plans[gameState.turnIndex].push({
                     pieceId: pieceToMove.id,
@@ -847,7 +849,7 @@
             }
             const currentPlans = gameState.plans[gameState.turnIndex];
             gameState.plans[gameState.turnIndex] = currentPlans.filter(move =>
-                move.pieceId !== movingPiece.id && move.pieceId !== targetPiece.id
+                move.prisonerAction || move.pieceId !== movingPiece.id && move.pieceId !== targetPiece.id
             );
             gameState.plans[gameState.turnIndex].push({
                 pieceId: movingPiece.id,
@@ -929,22 +931,35 @@
         async function resolveAllMoves() {
             gameState.phase = 'RESOLVING';
             updatePlayerCards();
-            activePlayerDescEl.innerText = 'Animating all planned movements...';
 
             logRoundHeader(gameState.round);
+            activePlayerDescEl.innerText = 'Resolving prisoner releases and executions before movement...';
+            const prisonerActions = resolvePrisonerPlans();
+            if (prisonerActions) {
+                renderBoard();
+                if (gameState.multiplayer) Multiplayer.broadcastResolutionStart([]);
+                await wait(1000);
+            }
+            activePlayerDescEl.innerText = 'Animating all planned movements...';
 
             // Collect all proposed movements
             const allIntendedMoves = [];
             for (let p = 0; p < 4; p++) {
                 if (gameState.eliminated[p]) continue;
                 for (const m of gameState.plans[p]) {
+                    if (m.prisonerAction) continue;
+                    const source = gameState.board[m.from[0]][m.from[1]];
+                    if (!source || (m.isUnmerge ? source.id !== m.sourcePieceId : source.id !== m.pieceId)) {
+                        logAction(`P${p + 1}'s move from ${coordsToNotation(...m.from)} cancelled: its source no longer exists.`);
+                        continue;
+                    }
                     allIntendedMoves.push({
                         player: p + 1,
                         pieceId: m.pieceId,
                         from: m.from,
                         to: m.to,
-                        pieceType: m.pieceType,
-                        contents: m.contents,
+                        pieceType: m.isUnmerge ? m.pieceType : source.type,
+                        contents: m.isUnmerge ? m.contents : getPieceContents(source),
                         mergeWithPieceId: m.mergeWithPieceId,
                         mergeAccepted: m.mergeAccepted,
                         isUnmerge: m.isUnmerge,

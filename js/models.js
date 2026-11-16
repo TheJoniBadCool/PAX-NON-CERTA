@@ -59,6 +59,12 @@ function getPieceContents(piece) {
         : unit);
 }
 
+function getPlannedPieceContents(piece, plans = gameState.plans[piece.player - 1]) {
+    const removedIds = new Set(plans.filter(plan => plan.prisonerAction && plan.pieceId === piece.id)
+        .map(plan => plan.unitId));
+    return getPieceContents(piece).filter(unit => !removedIds.has(unit.id));
+}
+
 function getUnitLevel(unit, attribute) {
     return Math.max(0, Math.min(3, Number(unit[attribute]) || 0));
 }

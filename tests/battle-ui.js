@@ -55,13 +55,13 @@ assert(battleCandidatesEl.innerHTML.includes('Aq1 · XP +0% · armour +0% · win
     'Escorted royal tooltip must retain normal casualty odds');
 named.contents.pop();
 named.contents[0].routedStacks = 2;
-named.contents[0].routedUntilRound = gameState.round + 3;
+named.contents[0].routedUntilRound = gameState.round + 6;
 renderBattleCandidates({ candidates: [named, candidate(2, 'b', 1)] });
 assert(battleCandidatesEl.innerHTML.includes('Routed strength -40%'),
     'Routed stack strength must be visible');
-assert(battleCandidatesEl.innerHTML.includes('Routed ×2 · strength -40% · casualty +30pp · 3 rounds remaining'),
+assert(battleCandidatesEl.innerHTML.includes('Routed ×2 · strength -40% · casualty +50pp · 6 rounds remaining'),
     'Unit tooltips must show penalties and remaining cooldown');
-gameState.round += 3;
+gameState.round += 6;
 renderBattleCandidates({ candidates: [named, candidate(2, 'b', 1)] });
 assert(!battleCandidatesEl.innerHTML.includes('Routed'), 'Expired penalties must disappear from battle cards');
 named.contents[0].name = 'Queen "<test>&';

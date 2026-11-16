@@ -22,6 +22,7 @@ function element() {
     };
 }
 const elements = new Map();
+const logs = [];
 const context = vm.createContext({
     console, Math: Object.create(Math),
     document: {
@@ -34,7 +35,9 @@ const context = vm.createContext({
     window: { addEventListener() {} }, setTimeout(fn) { fn(); }, requestAnimationFrame() {},
     bindBoardInteractions() {}, renderBoard() {}, renderBattleCandidates() {}, renderBattleRolls() {},
     renderCaptureChoices() {}, renderRetreatTable() {}, updatePlayerCards() {},
-    logAction() {}, logRoundHeader() {}, saveCustomSetup() {}
+    logAction(message) { logs.push(message); }, logRoundHeader() {}, saveCustomSetup() {},
+    updateRoundDisplay() {}, showPrivacyOverlay() {},
+    Multiplayer: { broadcastResolutionStart() {}, beginNextRound() {} }
 });
 ['constants', 'models', 'game-state', 'setup-utils', 'board-utils', 'movement-rules',
     'planning-rules', 'battle-rules', 'retreat-rules', 'prisoner-rules', 'objective-rules', 'siege-rules', 'game']
@@ -45,7 +48,8 @@ const api = vm.runInContext(`({
     beginCaptureChoices, decideCapture, managePrisoner, processRetreatsAtRoundStart,
     rejectPrisonerMoveConflicts, applySiegeRoundProgress, processCollisionGroup,
     processSallyBattle, getUnitDisplayClass, prisonerChain, isValidSallyOutPlan, updateObjectiveScores,
-    showPieceTooltip
+    showPieceTooltip, resolvePrisonerPlans, validatePrisonerPlans, resolveAllMoves, getAllPlannedMoves,
+    handleSquareAction
 })`, context);
 const state = api.state;
 const unit = (player, type, id) => api.createUnit(player, type, id, id, 3, 3);
@@ -56,6 +60,7 @@ const piece = (player, contents, id = `piece-${player}`) =>
 function reset() {
     state.reset();
     state.board = Array.from({ length: 16 }, () => Array(16).fill(null));
+    logs.length = 0;
     context.Math.random = () => 0.99;
 }
 function keepAll() {
@@ -121,11 +126,18 @@ async function run() {
     assert.equal(state.pendingCapture, null);
     state.phase = 'PLANNING';
     state.round = 2;
+    logs.length = 0;
     assert.equal(api.managePrisoner(2, 'king', 'release'), false);
-    state.plans[0] = [{ pieceId: state.board[8][8].id }];
-    assert.equal(api.managePrisoner(1, 'king', 'release'), false);
+    state.plans[0] = [{ isUnmerge: true, unitId: 'king' }];
+    assert.equal(api.managePrisoner(1, 'king', 'release'), false, 'A prisoner cannot move and be released');
     state.plans[0] = [];
     assert.equal(api.managePrisoner(1, 'king', 'release'), true);
+    assert(state.board[8][8], 'Queued release must leave the prisoner on the board');
+    assert.equal(state.retreating[1].length, 0, 'Queued release must not start re-entry early');
+    assert.equal(logs.length, 0, 'Private queued actions must not be announced before resolution');
+    assert.equal(api.getAllPlannedMoves().length, 0, 'Prisoner decisions are not movement arrows');
+    state.phase = 'RESOLVING';
+    assert.equal(api.resolvePrisonerPlans(), 1);
     assert.equal(state.board[8][8], null);
     assert.equal(state.retreating[1][0].reentryRound, 5);
     api.updateObjectiveScores();
@@ -156,6 +168,16 @@ async function run() {
     keepAll();
     state.phase = 'PLANNING';
     assert.equal(api.managePrisoner(1, 'execute-later', 'execute'), true);
+    assert.equal(state.deadPieces[1].length, 0, 'Queued execution must not kill immediately');
+    assert.equal(api.managePrisoner(1, 'execute-later', 'release'), true);
+    assert.equal(state.plans[0].length, 1, 'Changing fate replaces the previous decision');
+    assert.equal(state.plans[0][0].prisonerAction, 'release');
+    elements.get('btn-clear-plan').handlers.click[0]();
+    assert.equal(state.plans[0].length, 0, 'Reset Plans cancels prisoner decisions');
+    assert(state.board[8][8], 'Reset Plans must keep the prisoner alive');
+    api.managePrisoner(1, 'execute-later', 'execute');
+    state.phase = 'RESOLVING';
+    api.resolvePrisonerPlans();
     assert.equal(state.deadPieces[1][0].id, 'execute-later', 'Execution belongs to the original player');
 
     reset();
@@ -274,8 +296,72 @@ async function run() {
         'Release must use a white flag icon');
     assert.equal(execute.handlers.click.length, 1, 'Popup actions must attach once, not once per held unit');
     execute.handlers.click[0]({ stopPropagation() {} });
+    assert.equal(state.board[8][8].contents.length, 2, 'Popup execution must be queued');
+    state.phase = 'RESOLVING';
+    api.resolvePrisonerPlans();
     assert.equal(state.board[8][8].contents.length, 1);
     assert.equal(state.deadPieces[1][0].id, 'captive');
+
+    reset();
+    state.round = 2;
+    state.board[8][8] = piece(1, [captive(), unit(1, 'n', 'moving-guard')]);
+    api.managePrisoner(1, 'captive', 'execute');
+    assert.equal(api.canMoveWholePiece(state.board[8][8]), true,
+        'After queued removal the remaining non-pawn stack can move on an even round');
+    assert.equal(api.canMoveHeldUnit(state.board[8][8].contents[0]), false);
+    state.selectedSquare = [8, 8];
+    state.validMoves = [[8, 9]];
+    api.handleSquareAction(8, 9);
+    assert.equal(state.plans[0].filter(plan => plan.prisonerAction).length, 1,
+        'Queuing movement must preserve the prisoner decision');
+    state.multiplayer = true;
+    let animated = false;
+    context.animatePlannedMovements = async moves => {
+        animated = true;
+        assert.equal(state.deadPieces[1][0].id, 'captive', 'Execution must precede movement animation');
+        assert(logs[0].includes('PRISONER ACTIONS') && logs[1].includes('executed'),
+            'Executions must be announced before movement');
+        assert.equal(moves.length, 1, 'Prisoner actions must not become movement intents');
+        assert.equal(moves[0].contents.length, 1, 'Movement must use only surviving stack contents');
+        assert.equal(moves[0].pieceType, 'n', 'Movement artwork must follow the remaining stack');
+    };
+    await api.resolveAllMoves();
+    assert(animated);
+    assert.equal(state.board[8][8], null);
+    assert.equal(state.board[8][9].contents[0].id, 'moving-guard');
+    assert.equal(state.plans[0].length, 0);
+
+    reset();
+    state.board[8][8] = piece(1, [captive(), unit(1, 'n', 'released-guard')]);
+    state.plans[0].push({
+        pieceId: 'piece-1', from: [8, 8], to: [8, 9], pieceType: 'p',
+        contents: state.board[8][8].contents
+    });
+    api.managePrisoner(1, 'captive', 'release');
+    context.animatePlannedMovements = async moves => {
+        assert.equal(state.retreating[1][0].contents[0].id, 'captive',
+            'Release must precede movement even when it was planned after the move');
+        assert.equal(state.retreating[1][0].battleSquare[1], 8, 'Re-entry uses the original custody square');
+        assert.equal(moves[0].contents.length, 1);
+        assert(logs[1].includes('released'), 'Releases must be announced');
+    };
+    await api.resolveAllMoves();
+    assert.equal(state.board[8][9].contents[0].id, 'released-guard');
+    assert.equal(state.retreating[1][0].reentryRound, 4, 'Release timing starts in resolution');
+
+    reset();
+    state.board[8][8] = piece(1, [captive()]);
+    state.plans[0].push({
+        pieceId: 'piece-1', from: [8, 8], to: [8, 9], pieceType: 'p',
+        contents: state.board[8][8].contents
+    });
+    api.managePrisoner(1, 'captive', 'execute');
+    context.animatePlannedMovements = async moves => {
+        assert.equal(moves.length, 0, 'Empty stacks must not be animated or recreated');
+    };
+    await api.resolveAllMoves();
+    assert.equal(state.board[8][9], null);
+    assert(logs.some(log => log.includes('source no longer exists')), 'Cancelled empty-stack moves must be announced');
 
     vm.runInContext(fs.readFileSync('js/battle-ui.js', 'utf8'), context);
     const renderChoices = vm.runInContext('renderCaptureChoices', context);

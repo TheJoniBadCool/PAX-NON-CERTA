@@ -17,12 +17,15 @@ function pieceContainsPawn(piece) {
     return getPieceContents(piece).some(unit => getUnitType(unit) === 'p');
 }
 
-function canMoveWholePiece(piece) {
-    return !isPawnRestTurn() || !getPieceContents(piece).some(unit => getUnitType(unit) === 'p' || isPrisoner(unit));
+function canMoveWholePiece(piece, plans = gameState.plans[piece.player - 1]) {
+    const contents = getPlannedPieceContents(piece, plans);
+    return contents.length > 0 && (!isPawnRestTurn() ||
+        !contents.some(unit => getUnitType(unit) === 'p' || isPrisoner(unit)));
 }
 
-function canMoveHeldUnit(unit) {
-    return !isPawnRestTurn() || (getUnitType(unit) !== 'p' && !isPrisoner(unit));
+function canMoveHeldUnit(unit, plans = gameState.plans.flat()) {
+    return !plans.some(plan => plan.prisonerAction && plan.unitId === unit.id) &&
+        (!isPawnRestTurn() || (getUnitType(unit) !== 'p' && !isPrisoner(unit)));
 }
 
 function canUnitsTarget(contents, target, player) {
@@ -68,7 +71,7 @@ function getValidMovesForPiece(r, c) {
             }
 
             if (targetPiece && targetPiece.player === activePlayerId) {
-                const targetIsMovingAway = currentPlans.some(p => p.from[0] === tr && p.from[1] === tc);
+                const targetIsMovingAway = currentPlans.some(p => !p.prisonerAction && p.from[0] === tr && p.from[1] === tc);
                 if (!targetIsMovingAway || targetPiece.type === 'r') {
                     moves.push([tr, tc]);
                     continue;

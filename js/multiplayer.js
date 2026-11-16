@@ -253,11 +253,9 @@ const Multiplayer = (() => {
         } else if (message.type === 'armour') {
             if (message.gameId !== m.gameId || message.round !== gameState.round) return;
             handleArmourRequest(index, message.unitId);
-        } else if (message.type === 'capture-choice' || message.type === 'prisoner-action') {
+        } else if (message.type === 'capture-choice') {
             if (message.gameId !== m.gameId || message.round !== gameState.round) return;
-            const accepted = message.type === 'capture-choice'
-                ? decideCapture(index + 1, message.captureId, message.unitId, message.fate)
-                : managePrisoner(index + 1, message.unitId, message.action);
+            const accepted = decideCapture(index + 1, message.captureId, message.unitId, message.fate);
             if (!accepted) {
                 send(conn, { type: 'notice', text: 'Prisoner action rejected. Check ownership, battle state, and queued plans.' });
             }
@@ -313,12 +311,23 @@ const Multiplayer = (() => {
         if (!['PLANNING', 'COMMITTED'].includes(gameState.phase)) return null;
         const isSquare = square => Array.isArray(square) && square.length === 2 &&
             square.every(value => Number.isInteger(value) && value >= 0 && value < 16);
+        if (!plan.every(entry => entry && isSquare(entry.from) && isSquare(entry.to)) ||
+            !validatePrisonerPlans(index + 1, plan)) return null;
         const result = [];
         for (const entry of plan) {
             if (!entry || !isSquare(entry.from) || !isSquare(entry.to)) return null;
             if (Math.max(Math.abs(entry.from[0] - entry.to[0]), Math.abs(entry.from[1] - entry.to[1])) > 1) return null;
             const piece = gameState.board[entry.from[0]][entry.from[1]];
             if (!piece || piece.player !== index + 1) return null;
+            if (entry.prisonerAction) {
+                result.push({
+                    pieceId: piece.id, unitId: entry.unitId, prisonerAction: entry.prisonerAction,
+                    from: [...entry.from], to: [...entry.from]
+                });
+                continue;
+            }
+            const plannedContents = getPlannedPieceContents(piece, plan);
+            const plannedPiece = { ...piece, contents: plannedContents };
             const stationarySiegeAction = !entry.isUnmerge && (entry.sallyOut || entry.siegeCancel) &&
                 entry.from[0] === entry.to[0] && entry.from[1] === entry.to[1];
             if (!stationarySiegeAction && !isTowerGateMove(entry.from, entry.to)) return null;
@@ -326,7 +335,7 @@ const Multiplayer = (() => {
             if (entry.isUnmerge) {
                 if (entry.sourcePieceId !== piece.id) return null;
                 const heldUnit = getPieceContents(piece).find(unit => unit.id === entry.unitId);
-                if (!heldUnit || !canMoveHeldUnit(heldUnit)) return null;
+                if (!heldUnit || !plannedContents.includes(heldUnit) || !canMoveHeldUnit(heldUnit, plan)) return null;
                 clean.contents = [heldUnit];
                 clean.pieceType = heldUnit.type;
             } else {
@@ -336,11 +345,11 @@ const Multiplayer = (() => {
                     if (!siege || entry.siegeId !== siege.id) return null;
                 } else if (entry.sallyOut) {
                     if (!isValidSallyOutPlan(piece, entry.from, entry.to, index + 1, entry.siegeId)) return null;
-                } else if (!entry.siegeCancel && !canMoveWholePiece(piece)) {
+                } else if (!entry.siegeCancel && !canMoveWholePiece(plannedPiece, [])) {
                     return null;
                 }
                 clean.pieceType = piece.type;
-                clean.contents = getPieceContents(piece);
+                clean.contents = plannedContents;
             }
             const target = gameState.board[entry.to[0]][entry.to[1]];
             if (!canUnitsTarget(clean.contents, target, index + 1)) return null;
@@ -837,14 +846,6 @@ const Multiplayer = (() => {
         m.conn.send({ type: 'capture-choice', captureId, unitId, fate, gameId: m.gameId, round: gameState.round });
     }
 
-    function requestPrisonerAction(unitId, action) {
-        if (!m.conn || !m.conn.open) {
-            toast('Not connected to the host. Prisoner action was not sent.');
-            return;
-        }
-        m.conn.send({ type: 'prisoner-action', unitId, action, gameId: m.gameId, round: gameState.round });
-    }
-
     function getRosterEntry(index) {
         return m.roster[index];
     }
@@ -976,7 +977,6 @@ const Multiplayer = (() => {
         toggleCommit,
         requestArmourUpgrade,
         requestCaptureDecision,
-        requestPrisonerAction,
         onBoardRendered,
         broadcastResolutionStart,
         beginNextRound,
