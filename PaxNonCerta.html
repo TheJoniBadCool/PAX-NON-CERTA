@@ -154,6 +154,7 @@
             <div class="phase-status" aria-live="polite">
                 <span id="active-player-name">Red (Player 1) Turn</span>
                 <span id="active-player-desc">Plan moves for any surviving pieces.</span>
+                <span id="map-seed-display"></span>
             </div>
             <div id="hint-text" style="margin-top: 0.5rem; font-size: 0.8rem; color: var(--text-muted); text-align: center;">
                 Click or tap a piece to select it, then an adjacent square to queue a 1-step move. Right-click or long-press for its unit list; click a catapult or besieged tower for siege actions.
@@ -243,6 +244,14 @@
                         <label><input type="radio" name="mp-progression" value="zero" checked> All level 0</label>
                         <label><input type="radio" name="mp-progression" value="random"> Random levels 1-3</label>
                     </div>
+                    <div class="map-preview-controls">
+                        <label class="mp-field" for="mp-map-seed">Map seed
+                            <input id="mp-map-seed" type="text" maxlength="64" placeholder="Generate one or enter a seed">
+                        </label>
+                        <button id="btn-mp-generate-map" class="btn btn-secondary" type="button">🗺️ Generate Map</button>
+                        <div id="mp-map-preview" class="map-preview-grid" role="img" aria-label="Map preview"></div>
+                        <div id="mp-map-preview-status" class="mp-status" aria-live="polite">Generate a map to preview the starting layout.</div>
+                    </div>
                     <label class="mp-field">Starting position
                         <select id="mp-setup-mode">
                             <option value="random">Default random corner positions</option>
@@ -309,6 +318,14 @@
                     <label><input type="radio" name="setup-mode" value="random" checked> Default random corner positions</label>
                     <label><input type="radio" name="setup-mode" value="custom"> Custom placement</label>
                 </div>
+                <div id="hotseat-map-preview-controls" class="map-preview-controls">
+                    <label class="mp-field" for="map-seed">Map seed
+                        <input id="map-seed" type="text" maxlength="64" placeholder="Generate one or enter a seed">
+                    </label>
+                    <button id="btn-generate-map" class="btn btn-secondary" type="button">🗺️ Generate Map</button>
+                    <div id="map-preview" class="map-preview-grid" role="img" aria-label="Map preview"></div>
+                    <div id="map-preview-status" class="mp-status" aria-live="polite">Generate a map to preview the starting layout.</div>
+                </div>
                 <div class="saved-setup-section">
                     <strong>Saved custom setups</strong>
                     <div id="saved-setup-list" class="saved-setup-list"></div>
@@ -326,6 +343,16 @@
             </div>
             <div class="modal-body custom-setup-body">
                 <div id="custom-setup-status">Select a player and piece, then click or tap a board square to place it. Same-player pieces stack.</div>
+                <div class="map-preview-controls">
+                    <label class="mp-field" for="custom-map-seed">Map seed
+                        <input id="custom-map-seed" type="text" maxlength="64" placeholder="Generate one or enter a seed">
+                    </label>
+                    <button id="btn-custom-generate-map" class="btn btn-secondary" type="button">🗺️ Generate Map</button>
+                    <div id="custom-map-preview" class="map-preview-grid" role="img" aria-label="Custom setup map preview"></div>
+                    <div id="custom-map-preview-status" class="mp-status" aria-live="polite">
+                        Generate the map preview after editing your custom placement.
+                    </div>
+                </div>
                 <div id="custom-player-list" class="custom-player-list"></div>
                 <div class="custom-piece-list">
                     <button class="custom-piece-option selected" data-piece-type="p">Pawn</button>
@@ -373,7 +400,7 @@
                 </div>
                 <div class="rule-box">
                     <h4>Terrain</h4>
-                    Each game generates roughly 50% plains, 20% forests (🌲), 20% hills (⛰) and 10% mountains (▲), rounded to whole squares. Castles always start on plains and mountain squares cannot be entered or used for retreat re-entry. Starting units and castle gates are never blocked by mountains.
+                    Generate a map preview before starting, then reuse its seed to recreate starting positions, tower gates, levels and terrain. Seeds control map generation only; objectives and combat rolls remain random. Each map has roughly 50% plains, 20% forests (🌲), 20% hills (⛰) and 10% mountains (▲), rounded to whole squares. Castles always start on plains and mountain squares cannot be entered or used for retreat re-entry. Starting units and castle gates are never blocked by mountains.
                     Forest forces are hidden from opponents and gain +25% strength when they remain there and are attacked. A force that held a hill for the entire previous round gains +25% strength when it stays and is attacked. Arriving forces and opposing swaps receive no terrain defence. Bonuses apply before the odds curve; plains have no effect.
                     Entering an unseen enemy's square resolves normally, including the usual rules for prisoners. Concealment is visual; multiplayer guests receive the board data and the host can inspect it.
                 </div>

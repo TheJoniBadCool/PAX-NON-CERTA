@@ -38,6 +38,7 @@
                     customSetupBoardEl.appendChild(square);
                 }
             }
+            invalidateCustomMapPreview();
         }
 
         function renderSavedSetups(listElement, includeLoadButton) {

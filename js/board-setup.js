@@ -1,4 +1,22 @@
-function generateBiomes(board) {
+function createRandomMapSeed() {
+    return String(Math.floor(Math.random() * 4294967296));
+}
+
+function createSeededRandom(seed) {
+    let state = 2166136261;
+    for (const character of String(seed)) {
+        state = Math.imul(state ^ character.charCodeAt(0), 16777619);
+    }
+    return () => {
+        state += 0x6D2B79F5;
+        let value = state;
+        value = Math.imul(value ^ (value >>> 15), value | 1);
+        value ^= value + Math.imul(value ^ (value >>> 7), value | 61);
+        return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
+    };
+}
+
+function generateBiomes(board, random = Math.random) {
     const size = board.length;
     const biomes = Array.from({ length: size }, () => Array(size).fill('plains'));
     const squares = [];
@@ -76,7 +94,7 @@ function generateBiomes(board) {
                 const resultingSize = 1 + [...neighboringPatches]
                     .reduce((sum, id) => sum + patchSizes[id], 0);
                 const excess = Math.max(0, resultingSize - patchLimits[biome]);
-                return { r, c, excess, score: Math.random() * 3 +
+                return { r, c, excess, score: random() * 3 +
                     (similar ? 1.2 : 0) + (similar === 2 ? 0.3 : 0) +
                     (biome === 'hill' && mountains ? 0.5 : 0) };
             }).sort((a, b) => a.excess - b.excess || b.score - a.score);
@@ -96,8 +114,9 @@ function generateBiomes(board) {
 }
 
 // Randomly place two six-unit castle stacks per player inside their 4x4 area.
-function generatePlayerPieces(playerIdx) {
-    const [minR, minC, maxR, maxC] = getPlayerZone(playerIdx);
+function generatePlayerPieces(playerIdx, random = Math.random, board = gameState.board,
+    boardSize = gameState.boardSize, progressionMode = gameState.progressionMode) {
+    const [minR, minC, maxR, maxC] = getPlayerZone(playerIdx, boardSize);
     const castleContents = [
         ['r', 'b', 'p', 'p', 'n', 'q'],
         ['r', 'b', 'p', 'p', 'n', 'k']
@@ -111,7 +130,7 @@ function generatePlayerPieces(playerIdx) {
     }
 
     for (let i = coords.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
+        const j = Math.floor(random() * (i + 1));
         [coords[i], coords[j]] = [coords[j], coords[i]];
     }
 
@@ -123,12 +142,12 @@ function generatePlayerPieces(playerIdx) {
             }
         });
     });
-    const towers = towerPairs[Math.floor(Math.random() * towerPairs.length)];
+    const towers = towerPairs[Math.floor(random() * towerPairs.length)];
 
     const typeCounts = {};
     towers.forEach((coord, castleIndex) => {
         const [r, c] = coord;
-        const pieceId = `p${playerIdx + 1}_${castleIndex}_${Date.now()}_${Math.random()}`;
+        const pieceId = `p${playerIdx + 1}_${castleIndex}`;
         const contents = castleContents[castleIndex].map((pieceType, unitIndex) => {
             typeCounts[pieceType] = (typeCounts[pieceType] || 0) + 1;
             const unitName = `${PLAYER_CODES[playerIdx]}${pieceType}${typeCounts[pieceType]}`;
@@ -137,11 +156,11 @@ function generatePlayerPieces(playerIdx) {
                 pieceType,
                 `${pieceId}::unit::${unitIndex}`,
                 unitName,
-                randomLevel(),
-                randomLevel()
+                randomLevel(random, progressionMode),
+                randomLevel(random, progressionMode)
             );
         });
-        gameState.board[r][c] = {
+        board[r][c] = {
             id: pieceId,
             player: playerIdx + 1,
             type: 'r',
@@ -150,32 +169,66 @@ function generatePlayerPieces(playerIdx) {
     });
 }
 
-function initBoard(customBoard = null, boardSize = gameState.boardSize) {
-    if (customBoard) {
-        gameState.board = cloneSetupBoard(customBoard);
-        gameState.boardSize = customBoard.length;
-        gameState.eliminated = gameState.activePlayers.map(isSelected => !isSelected);
-    } else {
-        if (!BOARD_SIZES.includes(boardSize)) throw new Error(`Unsupported board size: ${boardSize}`);
-        gameState.boardSize = boardSize;
-        gameState.board = Array(boardSize).fill(null).map(() => Array(boardSize).fill(null));
-        gameState.eliminated = gameState.activePlayers.map(isSelected => !isSelected);
+function createStartingBoard(activePlayers, boardSize, seed, customBoard = null,
+    progressionMode = gameState.progressionMode) {
+    const random = createSeededRandom(seed);
+    const board = customBoard
+        ? cloneSetupBoard(customBoard)
+        : Array(boardSize).fill(null).map(() => Array(boardSize).fill(null));
+    if (!customBoard) {
         for (let p = 0; p < 4; p++) {
-            if (gameState.activePlayers[p]) {
-                generatePlayerPieces(p);
-            }
+            if (activePlayers[p]) generatePlayerPieces(p, random, board, boardSize, progressionMode);
         }
     }
-    gameState.board.forEach((row, r) => row.forEach((piece, c) => {
+    board.forEach((row, r) => row.forEach((piece, c) => {
         if (!isTowerPiece(piece)) return;
         const directions = [[-1, 0], [1, 0], [0, -1], [0, 1]]
-            .filter(([dr, dc]) => r + dr >= 0 && r + dr < gameState.boardSize &&
-                c + dc >= 0 && c + dc < gameState.boardSize);
+            .filter(([dr, dc]) => r + dr >= 0 && r + dr < boardSize &&
+                c + dc >= 0 && c + dc < boardSize);
         const tower = getPieceContents(piece).find(unit => getUnitType(unit) === 'r');
-        tower.gate = directions[Math.floor(Math.random() * directions.length)];
+        tower.gate = directions[Math.floor(random() * directions.length)];
     }));
-    gameState.biomes = generateBiomes(gameState.board);
+    return { board, biomes: generateBiomes(board, random) };
+}
+
+function initBoard(customBoard = null, boardSize = gameState.boardSize, seed = null) {
+    if (!customBoard && !BOARD_SIZES.includes(boardSize)) {
+        throw new Error(`Unsupported board size: ${boardSize}`);
+    }
+    gameState.mapSeed = seed === null ? createRandomMapSeed() : String(seed);
+    gameState.boardSize = customBoard ? customBoard.length : boardSize;
+    const starting = createStartingBoard(
+        gameState.activePlayers, gameState.boardSize, gameState.mapSeed, customBoard);
+    gameState.board = starting.board;
+    gameState.biomes = starting.biomes;
+    gameState.eliminated = gameState.activePlayers.map(isSelected => !isSelected);
     gameState.hillHeld = [];
+}
+
+function renderMapPreview(container, starting, boardSize) {
+    container.innerHTML = '';
+    container.style.gridTemplateColumns = `repeat(${boardSize}, 1fr)`;
+    for (let r = 0; r < boardSize; r++) {
+        for (let c = 0; c < boardSize; c++) {
+            const square = document.createElement('div');
+            const isLight = (r + c) % 2 === 0;
+            square.className = `square ${isLight ? 'sq-light' : 'sq-dark'} biome-${starting.biomes[r][c]} map-preview-square`;
+            const zone = PLAYERS.findIndex((player, index) => {
+                const [minR, minC, maxR, maxC] = getPlayerZone(index, boardSize);
+                return r >= minR && r <= maxR && c >= minC && c <= maxC;
+            });
+            if (zone !== -1) square.classList.add(`zone-p${zone + 1}`);
+            const piece = starting.board[r][c];
+            if (isTowerPiece(piece)) {
+                const marker = document.createElement('span');
+                marker.className = `map-preview-castle piece-p${piece.player}`;
+                marker.setAttribute('aria-hidden', 'true');
+                square.appendChild(marker);
+            }
+            square.title = `${starting.biomes[r][c]}${piece ? ` · ${PLAYERS[piece.player - 1].colorName} castle` : ''}`;
+            container.appendChild(square);
+        }
+    }
 }
 
 function createEmptySetupBoard(boardSize = gameState.boardSize) {

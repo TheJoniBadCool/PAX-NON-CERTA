@@ -58,6 +58,8 @@
         const roundTagEl = document.getElementById('round-tag');
         const hintTextEl = document.getElementById('hint-text');
         let battleTargetSquare = null;
+        let hotseatMapPreview = null;
+        let customMapPreview = null;
         btnToggleCombatLog.addEventListener('click', () => {
             const isExpanded = btnToggleCombatLog.getAttribute('aria-expanded') === 'true';
             combatLogPanel.classList.toggle('hidden', isExpanded);
@@ -204,8 +206,8 @@
 
         initializeBattleWindowDrag();
 
-        function randomLevel() {
-            return gameState.progressionMode === 'random' ? 1 + Math.floor(Math.random() * 3) : 0;
+        function randomLevel(random = Math.random, progressionMode = gameState.progressionMode) {
+            return progressionMode === 'random' ? 1 + Math.floor(random() * 3) : 0;
         }
 
         function getNextUnitName(player, type) {
@@ -258,10 +260,10 @@
             }
         }
 
-        function startNewGame(selectedPlayers, customBoard = null, boardSize = gameState.boardSize) {
+        function startNewGame(selectedPlayers, customBoard = null, boardSize = gameState.boardSize, seed = null) {
             gameState.activePlayers = selectedPlayers;
             btnEditNames.classList.remove('hidden');
-            initBoard(customBoard, boardSize);
+            initBoard(customBoard, boardSize, seed);
             gameState.turnIndex = gameState.activePlayers.findIndex(isSelected => isSelected);
             gameState.round = 1;
             gameState.phase = 'PLANNING';
@@ -283,9 +285,11 @@
 
             battleLogEl.innerHTML = `
                 <div class="log-item" style="color: var(--text-muted); text-align: center;">
-                    Match Initialized! ${gameState.boardSize}x${gameState.boardSize} grid. Secretly plan multi-piece moves.
+                    Match Initialized! ${gameState.boardSize}x${gameState.boardSize} grid. Map seed: ${gameState.mapSeed}.
+                    Secretly plan multi-piece moves.
                 </div>
             `;
+            document.getElementById('map-seed-display').innerText = `Map seed: ${gameState.mapSeed}`;
 
             document.getElementById('gameover-modal').classList.add('hidden');
             playerSelectionModal.classList.add('hidden');
@@ -311,11 +315,20 @@
             const multiplayerSetup = Multiplayer.isEditingSetup();
             document.getElementById('btn-custom-setup-back').classList.toggle('hidden', !multiplayerSetup);
             btnConfirmCustomSetup.innerText = multiplayerSetup ? 'Use Placement' : 'Confirm Placement';
+            const priorSeed = multiplayerSetup
+                ? document.getElementById('mp-map-seed').value
+                : document.getElementById('map-seed').value;
+            document.getElementById('custom-map-seed').value = priorSeed.trim();
+            customMapPreview = null;
+            document.getElementById('custom-map-preview').innerHTML = '';
+            document.getElementById('custom-map-preview-status').innerText =
+                'Generate the map preview after editing your custom placement.';
             customSetupStatusEl.innerText = 'Every selected player needs exactly one King, at least one Queen and one Tower. Click or tap the board to place pieces.';
             renderCustomSetupPlayers();
             renderCustomSetupBoard();
             playerSelectionModal.classList.add('hidden');
             customSetupModal.classList.remove('hidden');
+            updateCustomMapPreviewControls();
             renderAllSavedSetups();
         }
 
@@ -345,8 +358,56 @@
                 Multiplayer.confirmSetup();
                 return;
             }
+            const seed = document.getElementById('custom-map-seed').value.trim();
+            if (!customMapPreview || customMapPreview.signature !== getCustomMapSignature(seed)) {
+                customSetupStatusEl.innerText = 'Generate a map preview for this placement before starting.';
+                updateCustomMapPreviewControls();
+                return;
+            }
             customSetupModal.classList.add('hidden');
-            startNewGame(gameState.activePlayers, gameState.customSetupBoard);
+            document.getElementById('map-seed').value = seed;
+            startNewGame(gameState.activePlayers, gameState.customSetupBoard, gameState.boardSize, seed);
+        }
+
+        function getCustomMapSignature(seed) {
+            return JSON.stringify({
+                players: gameState.activePlayers,
+                boardSize: gameState.boardSize,
+                progression: gameState.progressionMode,
+                board: gameState.customSetupBoard,
+                seed
+            });
+        }
+
+        function updateCustomMapPreviewControls() {
+            const multiplayerSetup = Multiplayer.isEditingSetup();
+            const seed = document.getElementById('custom-map-seed').value.trim();
+            const current = seed && customMapPreview &&
+                customMapPreview.signature === getCustomMapSignature(seed);
+            btnConfirmCustomSetup.disabled = !multiplayerSetup && !current;
+        }
+
+        function invalidateCustomMapPreview() {
+            customMapPreview = null;
+            document.getElementById('custom-map-preview').innerHTML = '';
+            document.getElementById('custom-map-preview-status').innerText =
+                'Placement or seed changed. Generate a new map preview.';
+            updateCustomMapPreviewControls();
+        }
+
+        function generateCustomMapPreview() {
+            const seedInput = document.getElementById('custom-map-seed');
+            const seed = seedInput.value.trim() || createRandomMapSeed();
+            seedInput.value = seed;
+            document.getElementById('map-seed').value = seed;
+            if (Multiplayer.isEditingSetup()) document.getElementById('mp-map-seed').value = seed;
+            const starting = createStartingBoard(
+                gameState.activePlayers, gameState.boardSize, seed, gameState.customSetupBoard);
+            renderMapPreview(document.getElementById('custom-map-preview'), starting, gameState.boardSize);
+            customMapPreview = { seed, signature: getCustomMapSignature(seed) };
+            document.getElementById('custom-map-preview-status').innerText =
+                'Preview ready. Confirming placement will use this exact terrain and seed.';
+            updateCustomMapPreviewControls();
         }
 
         function showPlayerSelection() {
@@ -357,8 +418,54 @@
             });
             btnEditNames.classList.add('hidden');
             customSetupModal.classList.add('hidden');
+            hotseatMapPreview = null;
+            document.getElementById('map-preview').innerHTML = '';
+            document.getElementById('map-preview-status').innerText = 'Generate a map to preview the starting layout.';
+            updateHotseatMapControls();
             playerSelectionModal.classList.remove('hidden');
             renderAllSavedSetups();
+        }
+
+        function getSelectedHotseatPlayers() {
+            return [...document.querySelectorAll('#player-selection-list input[type="checkbox"]')]
+                .map(input => input.checked);
+        }
+
+        function getHotseatMapSignature(seed) {
+            return JSON.stringify({
+                players: getSelectedHotseatPlayers(),
+                size: Number(document.getElementById('board-size').value),
+                progression: document.querySelector('input[name="progression-mode"]:checked').value,
+                seed
+            });
+        }
+
+        function updateHotseatMapControls() {
+            const isCustom = document.querySelector('input[name="setup-mode"]:checked').value === 'custom';
+            document.getElementById('hotseat-map-preview-controls').classList.toggle('hidden', isCustom);
+            const seed = document.getElementById('map-seed').value.trim();
+            const current = seed && hotseatMapPreview &&
+                hotseatMapPreview.signature === getHotseatMapSignature(seed);
+            btnStartSelectedGame.disabled = !isCustom && !current;
+        }
+
+        function generateHotseatMapPreview() {
+            const players = getSelectedHotseatPlayers();
+            if (players.filter(Boolean).length < 2) {
+                document.getElementById('map-preview-status').innerText = 'Select at least two players before generating a map.';
+                return;
+            }
+            const seedInput = document.getElementById('map-seed');
+            const seed = seedInput.value.trim() || createRandomMapSeed();
+            seedInput.value = seed;
+            const size = Number(document.getElementById('board-size').value);
+            const progression = document.querySelector('input[name="progression-mode"]:checked').value;
+            const starting = createStartingBoard(players, size, seed, null, progression);
+            renderMapPreview(document.getElementById('map-preview'), starting, size);
+            hotseatMapPreview = { seed, signature: getHotseatMapSignature(seed) };
+            document.getElementById('map-preview-status').innerText =
+                'Preview ready. Starting the game will use this exact map and seed.';
+            updateHotseatMapControls();
         }
 
         function cleanPlayerName(value, index) {
@@ -1732,8 +1839,7 @@
         });
         btnConfirmCustomSetup.addEventListener('click', confirmCustomSetup);
         btnStartSelectedGame.addEventListener('click', () => {
-            const selectedPlayers = [...document.querySelectorAll('#player-selection-list input')]
-                .filter(input => input.type === 'checkbox').map(input => input.checked);
+            const selectedPlayers = getSelectedHotseatPlayers();
             if (selectedPlayers.filter(Boolean).length < 2) {
                 playerSelectionError.innerText = 'Select at least two players to start.';
                 return;
@@ -1750,8 +1856,37 @@
                 showCustomSetup(selectedPlayers);
                 return;
             }
-            startNewGame(selectedPlayers);
+            const seed = document.getElementById('map-seed').value.trim();
+            if (!hotseatMapPreview || hotseatMapPreview.signature !== getHotseatMapSignature(seed)) {
+                playerSelectionError.innerText = 'Generate a map preview before starting.';
+                updateHotseatMapControls();
+                return;
+            }
+            startNewGame(selectedPlayers, null, gameState.boardSize, hotseatMapPreview.seed);
         });
+        document.getElementById('btn-generate-map').addEventListener('click', generateHotseatMapPreview);
+        document.getElementById('btn-custom-generate-map').addEventListener('click', generateCustomMapPreview);
+        document.getElementById('custom-map-seed').addEventListener('input', () => {
+            document.getElementById('map-seed').value = document.getElementById('custom-map-seed').value;
+            if (Multiplayer.isEditingSetup()) {
+                document.getElementById('mp-map-seed').value = document.getElementById('custom-map-seed').value;
+            }
+            invalidateCustomMapPreview();
+        });
+        const invalidateHotseatPreview = () => {
+            hotseatMapPreview = null;
+            document.getElementById('map-preview').innerHTML = '';
+            document.getElementById('map-preview-status').innerText =
+                'Settings changed. Generate a new map preview before starting.';
+            updateHotseatMapControls();
+        };
+        document.querySelectorAll(
+            '#player-selection-list input[type="checkbox"], #board-size, #map-seed, ' +
+            'input[name="progression-mode"]'
+        ).forEach(input => input.addEventListener(input.id === 'map-seed' ? 'input' : 'change',
+            invalidateHotseatPreview));
+        document.querySelectorAll('input[name="setup-mode"]').forEach(input =>
+            input.addEventListener('change', updateHotseatMapControls));
 
         // Start game on load
         window.onload = function() {

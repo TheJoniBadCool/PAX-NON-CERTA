@@ -16,11 +16,25 @@ const context = vm.createContext({
     'planning-rules', 'battle-rules', 'retreat-rules', 'board-setup'].forEach(name =>
     vm.runInContext(fs.readFileSync(`js/${name}.js`, 'utf8'), context));
 const api = vm.runInContext(`const gameState = new GameState();
-    ({ state: gameState, initBoard, generateBiomes, getTowerGate, isTowerPiece, getBiome,
+    ({ state: gameState, initBoard, generateBiomes, createStartingBoard, getTowerGate, isTowerPiece, getBiome,
        getVisiblePiece, getValidMovesForPiece, getPlanArrowKind, createUnit,
        getDefenderTerrainBonus, snapshotHillOccupants, updateHillHeld,
        getBattleCandidateData, processRetreatsAtRoundStart })`, context);
 const { state } = api;
+const seedPlayers = [true, true, false, false];
+const seededMapA = api.createStartingBoard(seedPlayers, 10, 'test-seed');
+const seededMapB = api.createStartingBoard(seedPlayers, 10, 'test-seed');
+const seededMapC = api.createStartingBoard(seedPlayers, 10, 'different-seed');
+assert.equal(JSON.stringify(seededMapA), JSON.stringify(seededMapB),
+    'The same seed recreates starting positions, gates and terrain');
+assert.notEqual(JSON.stringify(seededMapA), JSON.stringify(seededMapC),
+    'Different seeds produce different maps');
+assert.equal(state.board.length, 0, 'Generating a preview does not mutate the active game');
+state.activePlayers = seedPlayers;
+api.initBoard(null, 10, 'test-seed');
+assert.equal(JSON.stringify({ board: state.board, biomes: state.biomes }),
+    JSON.stringify(seededMapA), 'Starting the game uses the exact preview for its seed');
+
 const piece = (player, id, type = 'n') => ({
     id, player, type, contents: [api.createUnit(player, type, id + '-unit', id)]
 });

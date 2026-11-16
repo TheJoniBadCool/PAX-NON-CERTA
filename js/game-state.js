@@ -6,6 +6,7 @@ class GameState {
     reset() {
         this.board = [];
         this.biomes = [];
+        this.mapSeed = '';
         this.hillHeld = [];
         this.boardSize = 16;
         this.eliminated = [false, false, false, false];

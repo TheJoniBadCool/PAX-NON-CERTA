@@ -17,6 +17,8 @@ const Multiplayer = (() => {
         myIndex: 0,
         count: 2,
         boardSize: 16,
+        mapSeed: '',
+        mapPreviewSignature: null,
         setupBoard: null,
         editingSetup: false,
         started: false,
@@ -46,6 +48,45 @@ const Multiplayer = (() => {
     function setStatus(text, isError = false) {
         statusEl.innerText = text;
         statusEl.style.color = isError ? '#f87171' : 'var(--text-muted)';
+    }
+
+    function lobbyMapSignature(seed) {
+        return JSON.stringify({
+            count: m.count,
+            boardSize: m.boardSize,
+            progression: document.querySelector('input[name="mp-progression"]:checked').value,
+            setupMode: $('mp-setup-mode').value,
+            setupBoard: m.setupBoard,
+            seed
+        });
+    }
+
+    function invalidateLobbyMapPreview(message = 'Settings changed. Generate a new map preview before starting.') {
+        m.mapPreviewSignature = null;
+        $('mp-map-preview').innerHTML = '';
+        $('mp-map-preview-status').innerText = message;
+        renderLobby();
+    }
+
+    function generateLobbyMapPreview() {
+        const custom = $('mp-setup-mode').value === 'custom';
+        if (custom && !m.setupBoard) {
+            $('mp-map-preview-status').innerText = 'Configure and confirm custom placement before previewing its map.';
+            return;
+        }
+        const seedInput = $('mp-map-seed');
+        const seed = seedInput.value.trim() || createRandomMapSeed();
+        seedInput.value = seed;
+        const activePlayers = [0, 1, 2, 3].map(index => index < m.count);
+        const progression = document.querySelector('input[name="mp-progression"]:checked').value;
+        const starting = createStartingBoard(
+            activePlayers, m.boardSize, seed, custom ? m.setupBoard : null, progression);
+        renderMapPreview($('mp-map-preview'), starting, m.boardSize);
+        m.mapSeed = seed;
+        m.mapPreviewSignature = lobbyMapSignature(seed);
+        $('mp-map-preview-status').innerText =
+            'Preview ready. Starting the game will use this exact map and seed.';
+        renderLobby();
     }
 
     function toast(text) {
@@ -134,7 +175,16 @@ const Multiplayer = (() => {
                 ? 'Custom placement ready. You can edit it before starting.'
                 : 'Place pieces or load a saved setup before starting.';
             const ready = m.roster.slice(0, m.count).every(entry => entry && entry.connected);
-            $('btn-mp-start').disabled = !ready;
+            const seed = $('mp-map-seed').value.trim();
+            const previewReady = seed && m.mapPreviewSignature === lobbyMapSignature(seed);
+            const needsCustomSetup = $('mp-setup-mode').value === 'custom' && !m.setupBoard;
+            $('btn-mp-start').disabled = !ready || (!previewReady && !needsCustomSetup);
+            if (needsCustomSetup) {
+                $('btn-mp-generate-map').disabled = true;
+                $('mp-map-preview-status').innerText = 'Configure custom placement before previewing its map.';
+            } else {
+                $('btn-mp-generate-map').disabled = false;
+            }
         }
     }
 
@@ -167,6 +217,9 @@ const Multiplayer = (() => {
         }
         m.setupBoard = cloneSetupBoard(setup.board);
         m.boardSize = setup.board.length;
+        m.mapPreviewSignature = null;
+        $('mp-map-preview').innerHTML = '';
+        $('mp-map-preview-status').innerText = 'Placement changed. Generate a new map preview before starting.';
         $('mp-board-size').value = String(m.boardSize);
         m.editingSetup = false;
         showLobby();
@@ -389,20 +442,26 @@ const Multiplayer = (() => {
         if (!isHost() || m.started) return;
         const needed = m.roster.slice(0, m.count);
         if (!needed.every(entry => entry && entry.connected)) return;
-        m.roster.forEach((entry, index) => {
-            PLAYERS[index].name = entry ? cleanName(entry.name, PLAYERS[index].colorName) : PLAYERS[index].colorName;
-        });
         const custom = $('mp-setup-mode').value === 'custom';
         if (custom && !m.setupBoard) {
             editCustomSetup();
             return;
         }
+        const seed = $('mp-map-seed').value.trim();
+        if (!seed || m.mapPreviewSignature !== lobbyMapSignature(seed)) {
+            setStatus('Generate a map preview before starting.', true);
+            return;
+        }
+        m.roster.forEach((entry, index) => {
+            PLAYERS[index].name = entry ? cleanName(entry.name, PLAYERS[index].colorName) : PLAYERS[index].colorName;
+        });
         gameState.progressionMode = document.querySelector('input[name="mp-progression"]:checked').value;
         m.started = true;
         m.gameId++;
         gameState.multiplayer = true;
         gameState.committed = [false, false, false, false];
-        startNewGame([0, 1, 2, 3].map(i => i < m.count), custom ? m.setupBoard : null, m.boardSize);
+        startNewGame([0, 1, 2, 3].map(i => i < m.count),
+            custom ? m.setupBoard : null, m.boardSize, m.mapSeed);
         gameState.turnIndex = m.myIndex;
         gameState.phase = 'PLANNING';
         hideAllModals();
@@ -510,6 +569,7 @@ const Multiplayer = (() => {
                 nextUnitSequence: gameState.nextUnitSequence,
                 progressionMode: gameState.progressionMode,
                 boardSize: gameState.boardSize,
+                mapSeed: gameState.mapSeed,
                 objectives: gameState.objectives.map((objectives, i) => i === index ? objectives : []),
                 scores: gameState.scores,
                 pendingCapture: gameState.pendingCapture,
@@ -727,12 +787,14 @@ const Multiplayer = (() => {
             nextUnitSequence: game.nextUnitSequence,
             progressionMode: game.progressionMode,
             boardSize: game.boardSize,
+            mapSeed: game.mapSeed || '',
             objectives: game.objectives,
             scores: game.scores,
             committed: message.committed,
             pendingCapture: game.pendingCapture || null,
             turnIndex: message.you
         });
+        $('map-seed-display').innerText = `Map seed: ${gameState.mapSeed}`;
         gameState.phase = game.phase === 'PLANNING' && (message.committed[message.you] || game.eliminated[message.you])
             ? 'COMMITTED'
             : game.phase;
@@ -959,8 +1021,12 @@ const Multiplayer = (() => {
     $('btn-mp-create').addEventListener('click', createRoom);
     $('btn-mp-join').addEventListener('click', joinRoom);
     $('btn-mp-start').addEventListener('click', startMatch);
+    $('btn-mp-generate-map').addEventListener('click', generateLobbyMapPreview);
     $('btn-mp-setup').addEventListener('click', editCustomSetup);
-    $('mp-setup-mode').addEventListener('change', renderLobby);
+    $('mp-setup-mode').addEventListener('change', () => invalidateLobbyMapPreview());
+    $('mp-map-seed').addEventListener('input', () => invalidateLobbyMapPreview());
+    document.querySelectorAll('input[name="mp-progression"]').forEach(input =>
+        input.addEventListener('change', () => invalidateLobbyMapPreview()));
     $('btn-custom-setup-back').addEventListener('click', cancelSetup);
     $('btn-mp-back').addEventListener('click', () => {
         if (m.role) location.reload();
@@ -974,7 +1040,7 @@ const Multiplayer = (() => {
             toast('Player count changed. Please configure custom placement again.');
         }
         m.count = count;
-        renderLobby();
+        invalidateLobbyMapPreview();
         broadcastSync();
     });
     $('mp-board-size').addEventListener('change', event => {
@@ -985,7 +1051,7 @@ const Multiplayer = (() => {
             toast('Board size changed. Please configure custom placement again.');
         }
         m.boardSize = boardSize;
-        renderLobby();
+        invalidateLobbyMapPreview();
     });
     $('btn-menu').addEventListener('click', leaveToMenu);
     btnForceSkip.addEventListener('click', forceSkipDisconnected);
