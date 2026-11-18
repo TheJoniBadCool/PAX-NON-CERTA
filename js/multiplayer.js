@@ -20,6 +20,7 @@ const Multiplayer = (() => {
         mapSeed: '',
         mapPreviewSignature: null,
         setupBoard: null,
+        setupMap: null,
         editingSetup: false,
         started: false,
         gameId: 0,
@@ -55,8 +56,12 @@ const Multiplayer = (() => {
             count: m.count,
             boardSize: m.boardSize,
             progression: document.querySelector('input[name="mp-progression"]:checked').value,
+            resources: $('mp-resource-mode').value,
+            resourceBalance: $('mp-resource-balance').value,
+            resourceCapitals: $('mp-resource-capitals').checked,
             setupMode: $('mp-setup-mode').value,
             setupBoard: m.setupBoard,
+            setupMap: m.setupMap,
             seed
         });
     }
@@ -79,8 +84,17 @@ const Multiplayer = (() => {
         seedInput.value = seed;
         const activePlayers = [0, 1, 2, 3].map(index => index < m.count);
         const progression = document.querySelector('input[name="mp-progression"]:checked').value;
-        const starting = createStartingBoard(
-            activePlayers, m.boardSize, seed, custom ? m.setupBoard : null, progression);
+        let starting;
+        try {
+            starting = createStartingBoard(
+                activePlayers, m.boardSize, seed, custom ? m.setupBoard : null, progression,
+                $('mp-resource-mode').value, $('mp-resource-balance').value,
+                $('mp-resource-capitals').checked, custom ? m.setupMap : null);
+        } catch (error) {
+            if (!(error instanceof ResourceBalanceError)) throw error;
+            invalidateLobbyMapPreview(error.message);
+            return;
+        }
         renderMapPreview($('mp-map-preview'), starting, m.boardSize);
         m.mapSeed = seed;
         m.mapPreviewSignature = lobbyMapSignature(seed);
@@ -168,6 +182,7 @@ const Multiplayer = (() => {
         $('mp-host-options').classList.toggle('hidden', !isHost());
         $('mp-guest-wait').classList.toggle('hidden', isHost());
         if (isHost()) {
+            updateCapitalResourceOption('mp-');
             $('mp-count').value = String(m.count);
             $('mp-board-size').value = String(m.boardSize);
             $('mp-custom-options').classList.toggle('hidden', $('mp-setup-mode').value !== 'custom');
@@ -200,7 +215,7 @@ const Multiplayer = (() => {
         gameState.progressionMode = document.querySelector('input[name="mp-progression"]:checked').value;
         mpModal.classList.add('hidden');
         showCustomSetup([0, 1, 2, 3].map(i => i < m.count),
-            m.setupBoard ? cloneSetupBoard(m.setupBoard) : null);
+            m.setupBoard ? cloneSetupBoard(m.setupBoard) : null, m.setupMap);
     }
 
     function confirmSetup() {
@@ -208,14 +223,20 @@ const Multiplayer = (() => {
         const setup = {
             activePlayers: gameState.activePlayers,
             boardSize: gameState.boardSize,
-            board: gameState.customSetupBoard
+            board: gameState.customSetupBoard,
+            sandbox: true,
+            map: customMapPreview?.starting || null
         };
-        if (!setupMatchesRoom(setup.activePlayers) || !isValidSavedSetup(setup) ||
-            !towersAreSpaced(setup.board)) {
-            customSetupStatusEl.innerText = 'Invalid placement. Match the room players and give each one a King, Queen and spaced Tower.';
+        if (!setupMatchesRoom(setup.activePlayers) || !isValidSavedSetup(setup)) {
+            customSetupStatusEl.innerText = 'Invalid sandbox data or player selection does not match the room.';
             return;
         }
         m.setupBoard = cloneSetupBoard(setup.board);
+        m.setupMap = setup.map ? cloneSetupBoard(setup.map) : null;
+        if (customMapPreview) {
+            m.mapSeed = customMapPreview.seed;
+            $('mp-map-seed').value = m.mapSeed;
+        }
         m.boardSize = setup.board.length;
         m.mapPreviewSignature = null;
         $('mp-map-preview').innerHTML = '';
@@ -456,12 +477,15 @@ const Multiplayer = (() => {
             PLAYERS[index].name = entry ? cleanName(entry.name, PLAYERS[index].colorName) : PLAYERS[index].colorName;
         });
         gameState.progressionMode = document.querySelector('input[name="mp-progression"]:checked').value;
+        gameState.resourceMode = $('mp-resource-mode').value;
+        gameState.resourceBalance = $('mp-resource-balance').value;
+        gameState.resourceCapitals = gameState.resourceMode === '16' || $('mp-resource-capitals').checked;
         m.started = true;
         m.gameId++;
         gameState.multiplayer = true;
         gameState.committed = [false, false, false, false];
         startNewGame([0, 1, 2, 3].map(i => i < m.count),
-            custom ? m.setupBoard : null, m.boardSize, m.mapSeed);
+            custom ? m.setupBoard : null, m.boardSize, m.mapSeed, custom ? m.setupMap : null);
         gameState.turnIndex = m.myIndex;
         gameState.phase = 'PLANNING';
         hideAllModals();
@@ -570,6 +594,12 @@ const Multiplayer = (() => {
                 progressionMode: gameState.progressionMode,
                 boardSize: gameState.boardSize,
                 mapSeed: gameState.mapSeed,
+                resourceMode: gameState.resourceMode,
+                resourceBalance: gameState.resourceBalance,
+                resourceCapitals: gameState.resourceCapitals,
+                provinceResources: gameState.provinceResources,
+                resources: gameState.resources.map((resources, i) => i === index ? resources : null),
+                lastResourceProductionRound: gameState.lastResourceProductionRound,
                 objectives: gameState.objectives.map((objectives, i) => i === index ? objectives : []),
                 scores: gameState.scores,
                 pendingCapture: gameState.pendingCapture,
@@ -788,6 +818,12 @@ const Multiplayer = (() => {
             progressionMode: game.progressionMode,
             boardSize: game.boardSize,
             mapSeed: game.mapSeed || '',
+            resourceMode: game.resourceMode,
+            resourceBalance: game.resourceBalance,
+            resourceCapitals: game.resourceCapitals,
+            provinceResources: game.provinceResources,
+            resources: game.resources,
+            lastResourceProductionRound: game.lastResourceProductionRound,
             objectives: game.objectives,
             scores: game.scores,
             committed: message.committed,
@@ -1037,6 +1073,7 @@ const Multiplayer = (() => {
         const count = Math.max(Number(event.target.value), highestOccupied, 2);
         if (count !== m.count && m.setupBoard) {
             m.setupBoard = null;
+            m.setupMap = null;
             toast('Player count changed. Please configure custom placement again.');
         }
         m.count = count;
@@ -1048,12 +1085,18 @@ const Multiplayer = (() => {
         if (!BOARD_SIZES.includes(boardSize)) return;
         if (boardSize !== m.boardSize && m.setupBoard) {
             m.setupBoard = null;
+            m.setupMap = null;
             toast('Board size changed. Please configure custom placement again.');
         }
         m.boardSize = boardSize;
         invalidateLobbyMapPreview();
     });
+    $('mp-resource-mode').addEventListener('change', () => invalidateLobbyMapPreview());
+    $('mp-resource-balance').addEventListener('change', () => invalidateLobbyMapPreview());
+    $('mp-resource-capitals').addEventListener('change', () => invalidateLobbyMapPreview());
     $('btn-menu').addEventListener('click', leaveToMenu);
+    $('btn-custom-menu').addEventListener('click', leaveToMenu);
+    $('btn-selection-menu').addEventListener('click', leaveToMenu);
     btnForceSkip.addEventListener('click', forceSkipDisconnected);
     initializeHostObservers();
     // Close promptly when possible; the relay also expires missed heartbeats.

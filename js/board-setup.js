@@ -206,8 +206,93 @@ function generateRebelPieces(random, board, boardSize) {
     }
 }
 
+class ResourceBalanceError extends Error {}
+
+function getResourceQuadrant(province) {
+    return Math.floor(province / 8) * 2 + Math.floor((province % 4) / 2);
+}
+
+function generateProvinceResources(board, mode, random, balance = 'off', resourceCapitals = false) {
+    const config = RESOURCE_MODES[mode];
+    if (!config) throw new Error(`Unsupported resource mode: ${mode}`);
+    if (!['off', 'allow-empty', 'require-all'].includes(balance)) {
+        throw new Error(`Unsupported resource balance: ${balance}`);
+    }
+    const rebels = new Set();
+    const nonRebels = new Set();
+    board.forEach((row, r) => row.forEach((piece, c) => {
+        if (!isTowerPiece(piece)) return;
+        (piece.player === REBEL_PLAYER_ID ? rebels : nonRebels)
+            .add(getProvinceIndex(r, c, board.length));
+    }));
+    const shuffle = values => {
+        for (let i = values.length - 1; i > 0; i--) {
+            const j = Math.floor(random() * (i + 1));
+            [values[i], values[j]] = [values[j], values[i]];
+        }
+        return values;
+    };
+    const rebelProvinces = [...rebels].filter(province => !nonRebels.has(province));
+    const capitals = resourceCapitals
+        ? getProvinceOwners(board).flatMap((owner, province) => owner ? [province] : [])
+        : [];
+    const provinces = mode === '16'
+        ? Array.from({ length: 16 }, (_, province) => province)
+        : shuffle([...rebelProvinces, ...capitals]);
+    const count = mode === '8' ? Math.max(0, rebelProvinces.length - 4)
+        : mode === '16' ? 16 : rebelProvinces.length;
+    let selected = provinces.slice(0, count);
+    if (balance === 'require-all') {
+        const firstInQuadrant = Array.from({ length: 4 }, (_, quadrant) =>
+            provinces.find(province => getResourceQuadrant(province) === quadrant));
+        if (count < 4 || firstInQuadrant.some(province => province === undefined)) {
+            throw new ResourceBalanceError('Cannot place a resource in every quadrant with this map and resource mode. Change the placement, resource mode, capital-resource setting, or balance option.');
+        }
+        const required = new Set(firstInQuadrant);
+        selected = [...firstInQuadrant, ...provinces.filter(province => !required.has(province))
+            .slice(0, count - 4)];
+        shuffle(selected);
+    }
+    // Largest remainders preserve proportions; shuffled ties avoid favoring a type.
+    const scale = weights => {
+        const total = weights.reduce((sum, weight) => sum + weight, 0);
+        const shares = shuffle(weights.map((weight, index) => {
+            const exact = weight * count / total;
+            return { index, count: Math.floor(exact), fraction: exact % 1 };
+        })).sort((a, b) => b.fraction - a.fraction);
+        const remaining = count - shares.reduce((sum, share) => sum + share.count, 0);
+        shares.forEach((share, index) => { if (index < remaining) share.count++; });
+        return shuffle(shares.flatMap(share => Array(share.count).fill(share.index)));
+    };
+    const types = scale(config.counts);
+    const resources = Array(16).fill(null);
+    selected.forEach((province, index) => {
+        resources[province] = {
+            type: RESOURCE_TYPES[types[index]].key,
+            productionChance: balance === 'off' ? 5 + Math.floor(random() * 91) : 5
+        };
+    });
+    if (balance !== 'off') {
+        for (let quadrant = 0; quadrant < 4; quadrant++) {
+            const group = shuffle(selected.filter(province => getResourceQuadrant(province) === quadrant));
+            if (!group.length) continue;
+            let remaining = 25 - group.length * 5;
+            group.forEach((province, index) => {
+                const extra = index === group.length - 1
+                    ? remaining : Math.floor(random() * (remaining + 1));
+                resources[province].productionChance += extra;
+                remaining -= extra;
+            });
+        }
+    }
+    return resources;
+}
+
 function createStartingBoard(activePlayers, boardSize, seed, customBoard = null,
-    progressionMode = gameState.progressionMode) {
+    progressionMode = gameState.progressionMode, resourceMode = gameState.resourceMode,
+    resourceBalance = gameState.resourceBalance, resourceCapitals = gameState.resourceCapitals,
+    customMap = null) {
+    resourceCapitals = resourceMode === '16' || resourceCapitals;
     const random = createSeededRandom(seed);
     const board = customBoard
         ? cloneSetupBoard(customBoard)
@@ -227,19 +312,31 @@ function createStartingBoard(activePlayers, boardSize, seed, customBoard = null,
         getPieceContents(piece).filter(unit => getUnitType(unit) === 'r')
             .forEach(tower => { tower.gate = gate; });
     }));
-    return { board, biomes: generateBiomes(board, random) };
+    if (customMap && !isValidCustomMap(customMap, boardSize)) {
+        throw new Error('Invalid custom map.');
+    }
+    const biomes = customMap ? cloneSetupBoard(customMap.biomes) : generateBiomes(board, random);
+    return { board, biomes, resourceMode, resourceBalance, resourceCapitals,
+        provinceResources: customMap ? cloneSetupBoard(customMap.provinceResources)
+            : generateProvinceResources(board, resourceMode, random, resourceBalance, resourceCapitals) };
 }
 
-function initBoard(customBoard = null, boardSize = gameState.boardSize, seed = null) {
+function initBoard(customBoard = null, boardSize = gameState.boardSize, seed = null, customMap = null) {
     if (!customBoard && !BOARD_SIZES.includes(boardSize)) {
         throw new Error(`Unsupported board size: ${boardSize}`);
     }
     gameState.mapSeed = seed === null ? createRandomMapSeed() : String(seed);
     gameState.boardSize = customBoard ? customBoard.length : boardSize;
     const starting = createStartingBoard(
-        gameState.activePlayers, gameState.boardSize, gameState.mapSeed, customBoard);
+        gameState.activePlayers, gameState.boardSize, gameState.mapSeed, customBoard,
+        gameState.progressionMode, gameState.resourceMode, gameState.resourceBalance,
+        gameState.resourceCapitals, customMap);
     gameState.board = starting.board;
     gameState.biomes = starting.biomes;
+    gameState.provinceResources = starting.provinceResources;
+    gameState.resourceCapitals = starting.resourceCapitals;
+    gameState.resources = createResourceStockpiles();
+    gameState.lastResourceProductionRound = null;
     gameState.eliminated = gameState.activePlayers.map(isSelected => !isSelected);
     gameState.hillHeld = [];
 }
@@ -271,6 +368,8 @@ function renderMapPreview(container, starting, boardSize) {
             }
             square.title = `${starting.biomes[r][c]}${piece
                 ? ` · ${getPlayerInfo(piece.player).colorName} ${isTowerPiece(piece) ? 'castle' : 'pawn'}` : ''}`;
+            renderProvinceResource(square, r, c, starting.provinceResources, boardSize,
+                starting.biomes);
             container.appendChild(square);
         }
     }

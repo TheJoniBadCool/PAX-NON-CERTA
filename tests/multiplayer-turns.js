@@ -16,7 +16,7 @@ function element() {
     const handlers = {};
     const classes = new Set();
     return {
-        handlers, style: {}, value: '', innerText: '', innerHTML: '', disabled: false,
+        handlers, style: {}, value: '', checked: false, innerText: '', innerHTML: '', disabled: false,
         firstElementChild: { innerText: '' },
         classList: {
             add: value => classes.add(value),
@@ -76,14 +76,20 @@ const state = {
     ],
     scores: [0, 0, 0, 0]
 };
+state.resourceMode = '8';
+state.resourceBalance = 'off';
+state.provinceResources = [{ type: 'gold', productionChance: 75 }];
+state.resources = [{ gold: 99 }, { gold: 3 }, { gold: 0 }, { gold: 0 }];
+state.lastResourceProductionRound = 4;
 let resolutions = 0;
 let captureRequest;
 let prisonerRequest;
 let starts = 0;
 const ctx = {
     document, PaxRelay,
-    BOARD_SIZES: [10, 12, 14, 16],
+    BOARD_SIZES: [12, 16],
     REBEL_PLAYER_ID: 5,
+    RESOURCE_TYPES: ['horse', 'food', 'wood', 'metal', 'gold'].map(key => ({ key })),
     crypto: { getRandomValues: bytes => bytes.fill(1) },
     window: { addEventListener() {} },
     MutationObserver: class { observe() {} },
@@ -92,6 +98,7 @@ const ctx = {
         name: `Player ${id}`, colorName: `Color ${id}`, color: 'red'
     })),
     gameState: state,
+    customMapPreview: null,
     customSetupStatusEl: element(),
     mainMenuModal: element(), playerSelectionModal: element(), customSetupModal: element(),
     clashOverlay: element(), battleLogEl: element(), battleCandidatesEl: element(),
@@ -99,19 +106,25 @@ const ctx = {
     mergePrompt: element(), pieceTooltip: element(), btnMergeConfirm: element(),
     btnFinishPlan: element(), btnRestart: element(), activePlayerDescEl: element(),
     hintTextEl: element(), btnStartBattle: element(), btnProceedBattle: element(),
-    startNewGame(players, board) {
+    startNewGame(players, board, size, seed, map) {
         starts++;
         state.activePlayers = players;
         state.board = board ? JSON.parse(JSON.stringify(board)) :
             Array.from({ length: 16 }, () => Array(16).fill(null));
         if (!board) state.board[0][0] = { id: 'guest-piece', player: 2, type: 'p' };
+        if (map) {
+            state.biomes = JSON.parse(JSON.stringify(map.biomes));
+            state.provinceResources = JSON.parse(JSON.stringify(map.provinceResources));
+        }
         state.plans = [[], [], [], []];
         state.eliminated = [false, false, true, true];
     },
     updatePlayerCards() {}, renderBoard() {}, logAction() {}, showPlayerSelection() {},
-    showCustomSetup(players, board) {
+    showCustomSetup(players, board, map) {
         state.activePlayers = players;
         state.customSetupBoard = board || Array.from({ length: 16 }, () => Array(16).fill(null));
+        ctx.customMapPreview = map
+            ? { seed: 'painted-map', starting: JSON.parse(JSON.stringify(map)) } : null;
         ctx.customSetupModal.classList.remove('hidden');
     },
     isTowerGateMove: () => true, canMoveWholePiece: () => true,
@@ -136,11 +149,11 @@ const ctx = {
 };
 Object.assign(ctx, new Function('ctx', `with (ctx) {
     ${readSource('js/setup-utils.js')}
-    return { isValidSavedSetup, cloneSetupBoard };
+    return { isValidSavedSetup, cloneSetupBoard, updateCapitalResourceOption };
 }`)(ctx));
 Object.assign(ctx, new Function('ctx', `with (ctx) {
     ${readSource('js/board-utils.js')}
-    return { towersAreSpaced };
+    return { towersAreSpaced, getProvinceResources, getProvinceIndex };
 }`)({
     REBEL_PLAYER_ID: 5,
     getPieceContents: piece => piece.contents,
@@ -157,6 +170,9 @@ async function run() {
     const multiplayer = new Function('ctx', `with (ctx) { ${source}\n return Multiplayer; }`)(ctx);
     ctx.Multiplayer = multiplayer;
     document.getElementById('mp-name').value = 'Host';
+    document.getElementById('mp-resource-mode').value = '12';
+    document.getElementById('mp-resource-balance').value = 'require-all';
+    document.getElementById('mp-resource-capitals').checked = true;
     document.getElementById('btn-mp-create').handlers.click();
     await Promise.resolve();
 
@@ -172,8 +188,8 @@ async function run() {
     assert(multiplayer.isEditingSetup() && starts === 0 && !state.multiplayer,
         'Starting without custom placement must open the editor, not start a match');
     multiplayer.confirmSetup();
-    assert(multiplayer.isEditingSetup() && ctx.customSetupStatusEl.innerText.includes('Invalid'),
-        'Incomplete placement must be rejected');
+    assert(!multiplayer.isEditingSetup(), 'Empty sandbox placements are allowed');
+    document.getElementById('btn-mp-setup').handlers.click();
     assert(multiplayer.setupMatchesRoom([true, true, false, false]) &&
         !multiplayer.setupMatchesRoom([true, false, true, false]) &&
         !multiplayer.setupMatchesRoom([true, true, true, false]),
@@ -210,21 +226,54 @@ async function run() {
     const draft = state.customSetupBoard;
     draft[4][0].contents.push({ player: 1, type: 'k' });
     multiplayer.confirmSetup();
-    assert(multiplayer.isEditingSetup(), 'Duplicate Kings must prevent confirmation');
-    draft[4][0].contents.pop();
-    draft[4][1].contents.push({ id: 'stack-pawn', player: 1, type: 'p' });
-    draft[4][3] = { player: 1, type: 'r', contents: [{ player: 1, type: 'r' }] };
+    assert(!multiplayer.isEditingSetup(), 'Duplicate Kings are allowed in sandbox placements');
+    document.getElementById('btn-mp-setup').handlers.click();
+    state.customSetupBoard[4][0].contents.pop();
+    state.customSetupBoard[4][1].contents.push({ id: 'stack-pawn', player: 1, type: 'p' });
+    state.customSetupBoard[4][3] = { player: 1, type: 'r', contents: [{ player: 1, type: 'r' }] };
     multiplayer.confirmSetup();
-    assert(multiplayer.isEditingSetup(), 'Too-close towers must prevent confirmation');
-    draft[4][3] = null;
+    assert(!multiplayer.isEditingSetup(), 'Adjacent towers are allowed in sandbox placements');
+    document.getElementById('btn-mp-setup').handlers.click();
+    state.customSetupBoard[4][3] = null;
+    const paintedMap = {
+        biomes: Array.from({ length: 16 }, () => Array(16).fill('plains')),
+        provinceResources: Array.from({ length: 16 }, () => [])
+    };
+    paintedMap.biomes[2][2] = 'mountain';
+    paintedMap.provinceResources[0] = [
+        { type: 'gold', productionChance: 75, row: 1, column: 1 },
+        { type: 'wood', productionChance: 12.5, row: 1, column: 1 }
+    ];
+    ctx.customMapPreview = { seed: 'painted-map', starting: paintedMap };
     multiplayer.confirmSetup();
     assert(!multiplayer.isEditingSetup() && starts === 0,
         'Confirming placement must return to the lobby without starting');
     document.getElementById('btn-mp-setup').handlers.click();
     state.customSetupBoard[0][0] = null;
+    ctx.customMapPreview.starting.biomes[2][2] = 'forest';
+    ctx.customMapPreview.starting.provinceResources[0][0].productionChance = 0;
     document.getElementById('btn-custom-setup-back').handlers.click();
     document.getElementById('btn-mp-generate-map').handlers.click();
     assert(!multiplayer.isEditingSetup(), 'Back to lobby must exit the editor');
+    document.getElementById('mp-resource-balance').value = 'allow-empty';
+    document.getElementById('mp-resource-balance').handlers.change();
+    assert(document.getElementById('mp-map-preview-status').innerText.includes('Settings changed'),
+        'Changing balance invalidates the lobby preview');
+    document.getElementById('mp-resource-balance').value = 'require-all';
+    document.getElementById('mp-resource-balance').handlers.change();
+    document.getElementById('btn-mp-generate-map').handlers.click();
+    const capitalOption = document.getElementById('mp-resource-capitals');
+    capitalOption.checked = false;
+    capitalOption.handlers.change();
+    assert(document.getElementById('btn-mp-start').disabled,
+        'Changing capital eligibility invalidates the lobby preview');
+    document.getElementById('mp-resource-mode').value = '16';
+    document.getElementById('mp-resource-mode').handlers.change();
+    assert(capitalOption.checked && capitalOption.disabled, '16-resource mode forces capitals on');
+    document.getElementById('mp-resource-mode').value = '12';
+    document.getElementById('mp-resource-mode').handlers.change();
+    assert(!capitalOption.disabled, 'Other modes allow changing capital eligibility');
+    document.getElementById('btn-mp-generate-map').handlers.click();
     guest.close();
     document.getElementById('btn-mp-start').handlers.click();
     assert(starts === 0, 'A custom match must wait for connected players');
@@ -236,6 +285,10 @@ async function run() {
     assert(starts === 1 && state.board[0][0].id === 'guest-piece' &&
         state.board[0][0].contents[0].experience === 2,
         'Starting must use the confirmed custom board, not discarded edits');
+    assert(state.biomes[2][2] === 'mountain' &&
+        state.provinceResources[0][0].productionChance === 75 &&
+        state.provinceResources[0][1].productionChance === 12.5,
+        'Starting must preserve the confirmed edited map and independent resource sites, not discarded edits');
     state.biomes = Array.from({ length: 16 }, () => Array(16).fill('plains'));
     state.biomes[0][1] = 'mountain';
     state.hillHeld = [[{ player: 1, ids: ['held-unit'] }]];
@@ -251,6 +304,22 @@ async function run() {
         'Guests must receive the authoritative custom starting board and stacks');
     assert(sync.game.biomes === state.biomes && sync.game.hillHeld === state.hillHeld,
         'Guest snapshots must include the authoritative terrain and hill history');
+    assert(state.resourceMode === '12' && sync.game.resourceMode === '12',
+        'The host-selected resource mode must be used and synchronized');
+    assert(state.resourceBalance === 'require-all' && sync.game.resourceBalance === 'require-all',
+        'The host-selected balance must be used and synchronized');
+    assert(state.resourceCapitals === true && sync.game.resourceCapitals === true,
+        'Capital eligibility must be used and synchronized');
+    assert(sync.game.provinceResources === state.provinceResources &&
+        sync.game.lastResourceProductionRound === state.lastResourceProductionRound &&
+        sync.game.provinceResources[0][0].productionChance === 75 &&
+        sync.game.provinceResources[0][1].productionChance === 12.5 &&
+        sync.game.provinceResources[0][0].row === 1 &&
+        sync.game.provinceResources[0][0].column === 1,
+        'Rejoining guests must receive resource locations, chances and the last production round');
+    assert(sync.game.resources[1].gold === 3 && sync.game.resources[0] === null &&
+        sync.game.resources[2] === null && sync.game.resources[3] === null,
+        'Snapshots must contain only the receiving player resource stockpile');
     assert(sync.game.objectives[1][0].label === 'Guest secret', 'Guest must receive its objectives');
     assert(sync.game.objectives[0].length === 0 &&
         !JSON.stringify(sync).includes('Host secret'), 'Snapshots must not leak another player objective');

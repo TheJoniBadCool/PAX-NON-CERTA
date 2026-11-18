@@ -23,23 +23,28 @@ const api = vm.runInContext(`const gameState = new GameState();
        rebelId: REBEL_PLAYER_ID, getPieceContents, getUnitDisplayClass })`, context);
 const { state } = api;
 const seedPlayers = [true, true, false, false];
-const seededMapA = api.createStartingBoard(seedPlayers, 10, 'test-seed');
-const seededMapB = api.createStartingBoard(seedPlayers, 10, 'test-seed');
-const seededMapC = api.createStartingBoard(seedPlayers, 10, 'different-seed');
+const seededMapA = api.createStartingBoard(seedPlayers, 12, 'test-seed');
+const seededMapB = api.createStartingBoard(seedPlayers, 12, 'test-seed');
+const seededMapC = api.createStartingBoard(seedPlayers, 12, 'different-seed');
 assert.equal(JSON.stringify(seededMapA), JSON.stringify(seededMapB),
     'The same seed recreates starting positions, gates and terrain');
 assert.notEqual(JSON.stringify(seededMapA), JSON.stringify(seededMapC),
     'Different seeds produce different maps');
 assert.equal(state.board.length, 0, 'Generating a preview does not mutate the active game');
 state.activePlayers = seedPlayers;
-api.initBoard(null, 10, 'test-seed');
-assert.equal(JSON.stringify({ board: state.board, biomes: state.biomes }),
+api.initBoard(null, 12, 'test-seed');
+assert.equal(JSON.stringify({
+    board: state.board, biomes: state.biomes, resourceMode: state.resourceMode,
+    resourceBalance: state.resourceBalance,
+    resourceCapitals: state.resourceCapitals,
+    provinceResources: state.provinceResources
+}),
     JSON.stringify(seededMapA), 'Starting the game uses the exact preview for its seed');
 
 const piece = (player, id, type = 'n') => ({
     id, player, type, contents: [api.createUnit(player, type, id + '-unit', id)]
 });
-for (const size of [10, 12, 14, 16]) {
+for (const size of [12, 16]) {
     for (let run = 1; run <= 20; run++) {
         seed = run;
         state.activePlayers = [true, true, true, true];
@@ -174,28 +179,28 @@ for (const size of [10, 12, 14, 16]) {
     }
 }
 
-const crowded = Array.from({ length: 10 }, (_, r) =>
-    Array.from({ length: 10 }, (_, c) => piece(1, `${r}-${c}`)));
+const crowded = Array.from({ length: 12 }, (_, r) =>
+    Array.from({ length: 12 }, (_, c) => piece(1, `${r}-${c}`)));
 crowded[0][0] = piece(1, 'castle', 'r');
 api.initBoard(crowded);
 assert(!state.biomes.flat().includes('mountain'));
 assert.equal(state.biomes[0][0], 'plains');
 
-const restricted = Array.from({ length: 10 }, (_, r) =>
-    Array.from({ length: 10 }, (_, c) => {
+const restricted = Array.from({ length: 12 }, (_, r) =>
+    Array.from({ length: 12 }, (_, c) => {
         const unit = piece(1, `tower-${r}-${c}`, 'r');
         unit.contents[0].gate = [r === 0 ? 1 : -1, 0];
         return r < 2 ? piece(1, `unit-${r}-${c}`) : unit;
     }));
 const restrictedBiomes = api.generateBiomes(restricted);
-assert.equal(restrictedBiomes.flat().filter(biome => biome === 'hill').length, 20,
+assert.equal(restrictedBiomes.flat().filter(biome => biome === 'hill').length, 24,
     'Crowded custom boards can exceed the patch limit to use all available terrain squares');
 assert.equal(restrictedBiomes.flat().filter(biome => biome === 'mountain').length, 0);
 
 state.reset();
-state.boardSize = 10;
-state.board = Array.from({ length: 10 }, () => Array(10).fill(null));
-state.biomes = Array.from({ length: 10 }, () => Array(10).fill('plains'));
+state.boardSize = 12;
+state.board = Array.from({ length: 12 }, () => Array(12).fill(null));
+state.biomes = Array.from({ length: 12 }, () => Array(12).fill('plains'));
 state.board[4][4] = piece(1, 'defender');
 state.board[4][5] = piece(2, 'enemy');
 state.biomes[4][4] = 'hill';

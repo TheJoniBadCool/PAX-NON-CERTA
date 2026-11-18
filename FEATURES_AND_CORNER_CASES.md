@@ -11,7 +11,7 @@ chess rules.
 
 ### Game setup
 
-- At game start, the host/player chooses a 10x10, 12x12, 14x14, or 16x16 board.
+- At game start, the host/player chooses a 12x12 or 16x16 board.
 - A new game starts with a player-selection modal.
 - At least two of four players must be selected.
 - Players are fixed to board corners:
@@ -29,13 +29,18 @@ chess rules.
 - Setup can use either the default random corner positions or custom placement.
 - Custom placement is performed by one player before the game starts:
   - The user selects a player and piece type, then clicks or taps board squares to place pieces.
-  - Each selected player must have exactly one King.
-  - At least one Queen and one Tower are also required for attainable objectives.
-  - Other non-King piece types and quantities are unrestricted.
+  - Sandbox piece types and quantities are unrestricted, including multiple or no Kings, Queens, or Towers; rebels may also be placed.
+  - Objectives for missing starting units are omitted; some sandbox armies cannot reach the normal winning score.
   - Same-player pieces may intentionally start in stacks.
   - Different players may not share a starting square.
   - Custom pieces may be placed anywhere on the selected board.
-  - Reset clears all custom placements; Confirm Placement starts the game.
+  - The placement board keeps square, equally sized cells at either board size; scroll the modal to reach the full board on smaller screens.
+  - Generate Map displays biomes, province ownership, and resources directly on the placement grid behind the pieces. Piece edits preserve the map.
+  - Editor tools paint any biome, erase pieces, and add/update or erase resource sites anywhere, including mountains. Different resource types can share a square; each site has its own 0–100% production probability and produces independently for its province owner.
+  - Seed and generation-setting changes preserve manual edits. Generate Map explicitly replaces terrain/resources after confirmation.
+  - Saved sandbox setups retain the complete map, probabilities, seed, and army; multiplayer uses the same edited map.
+  - Reset clears pieces without changing terrain/resources; Confirm Placement can start any army composition, including an empty board. Without generation, the editor starts from blank plains.
+  - Exit to Menu is available in the placement and player-selection screens.
 - A new game resets the board, round, plans, overlays, selections, merge state,
   and combat log.
 - Opening the page shows the player-selection modal.
@@ -63,6 +68,56 @@ chess rules.
   interceptions do not. Terrain strength applies before the odds curve.
 - The authoritative multiplayer snapshot includes terrain and hill occupancy
   history, including when a guest rejoins.
+
+### Resources
+
+- Hotseat and Multiplayer hosts choose **8 resources** (default),
+  **12 resources**, or **16 resources** before previewing their map. Changing this choice invalidates
+  the preview; the seed and mode reproduce the same resource assignments.
+- With 12 rebel provinces, the default mode covers eight randomly selected
+  provinces with 1 horse, 3 food, 2 wood, 1 metal, and 1 gold.
+- By default full mode covers all 12 rebel provinces with 2 horses, 4 food, 3 wood, 2 metal,
+  and 1 gold.
+- The 16-resource mode places one resource in every province, regardless of
+  ownership, with 3 horses, 5 food, 4 wood, 3 metal, and 1 gold.
+- Every board size has 16 provinces. If the rebel count differs, default mode
+  places rebels minus four resources (minimum zero), full mode places the rebel count, and
+  16-resource mode always covers all provinces. Resource counts use proportional
+  largest-remainder rounding with random ties.
+- The optional **Allow resources in player capitals** checkbox adds exclusively
+  player-owned provinces to the random placement pool without increasing the
+  resource count or guaranteeing resources in capitals. It defaults off for
+  8/12 resources and is checked and locked for 16 resources. It works with
+  quadrant balancing and is included in seeded previews and multiplayer state.
+- Custom setups use their actual exclusively rebel-owned provinces to calculate
+  the 8/12 resource count; no rebels are added. Capitals can join the pool when
+  enabled, but empty and contested provinces cannot. The 16-resource mode still places
+  one resource in every province, including empty and mixed-ownership provinces.
+- By default each province's resource independently receives a uniformly random whole-number
+  production chance from 5% through 95%, inclusive, at map generation. Optional
+  balanced mode assigns whole-number chances of at least 5% that sum to exactly
+  25% within each populated 2x2 corner quadrant. Empty quadrants are either
+  allowed (and total 0%) or prohibited, according to the host's selection.
+  When prohibited, eligible provinces are selected to cover all quadrants;
+  an impossible custom map or resource count produces a preview error instead.
+  Counts need not be equal across quadrants. Changing balance invalidates previews.
+  Resource icons are public even in fog and forests; tooltips show their chance.
+  Resource types and chances are fixed to provinces, not castles, persist through
+  conquest, and are reproduced by the map seed. There are no production numbers.
+- All resource icons use the first non-mountain square in their province, both
+  on the board and in map previews; resources are never displayed on mountains.
+- After each fourth completed round (4, 8, 12, ...), after combat, sieges,
+  re-entry, and eliminations, each eligible province rolls independently against
+  its fixed chance to produce one resource for its current active,
+  non-eliminated owner. Every resource can succeed or fail.
+  Rebel, empty, and contested provinces produce nothing. The public log announces
+  production checks without revealing private results. Duplicate production is prevented.
+- Players start with zero resources; stockpiles have no cap and no spending
+  mechanic. Cards use icon-and-count rows visible only to their own player.
+  Hotseat handoff and resolution clear and hide all stockpile rows. Multiplayer
+  snapshots/rejoins carry public assignments, chances, and the last production round but only the
+  recipient's stockpile. The authoritative host retains all stockpiles.
+- New games reset assignments, stockpiles, and production history.
 
 ### Fog of war
 
@@ -190,8 +245,8 @@ chess rules.
     gate, indicated by an arrow on the Tower. It keeps this gate when captured.
   - Enemy sieges and friendly merges, transfers, and unmerges must use the
     adjacent gate square. Diagonal and other adjacent squares cannot be used.
-  - Towers start with at least two intervening squares in every direction,
-    including diagonals; custom placement and saved setups must obey this rule.
+  - Generated Towers start with at least two intervening squares in every direction,
+    including diagonals; sandbox placement and sandbox saves have no spacing restriction.
   - They cannot be selected as held pieces for unmerge or transfer.
 - A friendly occupied adjacent square may be selected as a merge destination.
 - A friendly piece that is already committed to a merge cannot be selected again
@@ -429,12 +484,12 @@ clarification rather than guessing.
   selected player, with one Queen castle and one King castle as specified above.
 - Every generated unit must have exactly one stable name, and names must be
   unique within each player and piece type.
-- Custom setup must require exactly one King, at least one Queen and one Tower
-  for every selected player, and preserve unique stable unit names.
+- Custom setup must allow any army composition, including empty armies, duplicate Kings,
+  rebels, and adjacent Towers, while preserving stable unit names.
 - Custom setup must allow same-player stacks, reject cross-player overlap, and
   allow placements outside the default corner zones.
-- Custom setup Reset must clear every placement, and Confirm Placement must not
-  start until every selected player has a King, Queen and Tower.
+- Custom setup Reset must clear piece placements without changing the map. Confirm Placement
+  must preserve edited terrain and resource sites/probabilities without requiring objective units.
 - Restarting during a prior game must not retain old plans, stacks, overlays,
   eliminations, or log entries.
 

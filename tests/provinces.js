@@ -52,7 +52,7 @@ function checkRendering(expectedOwners) {
     assert.equal(JSON.stringify(state.board), before, 'Rendering must not mutate castle ownership');
 }
 
-for (const size of [10, 12, 14, 16]) {
+for (const size of [12, 16]) {
     state.boardSize = size;
     const starting = api.createStartingBoard([true, false, true, false], size, 'province-test');
     Object.assign(state, starting);

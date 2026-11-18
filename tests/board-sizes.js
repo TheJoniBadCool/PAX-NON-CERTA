@@ -18,6 +18,11 @@ const api = vm.runInContext(`({
     createStartingBoard, getProvinceIndex
 })`, context);
 
+assert.deepEqual(Array.from(api.sizes), [12, 16]);
+for (const size of [10, 14]) {
+    assert.throws(() => api.initBoard(null, size), /Unsupported board size/);
+}
+
 for (const size of api.sizes) {
     api.state.activePlayers = [true, true, true, true];
     api.initBoard(null, size);
@@ -84,7 +89,7 @@ for (const size of api.sizes) {
     }
 }
 
-const smallSetup = Array.from({ length: 10 }, () => Array(10).fill(null));
+const smallSetup = Array.from({ length: 12 }, () => Array(12).fill(null));
 for (let player = 1; player <= 2; player++) {
     for (const [index, type] of ['k', 'q', 'r'].entries()) {
         smallSetup[player - 1][index] = {
@@ -94,6 +99,12 @@ for (let player = 1; player <= 2; player++) {
     }
 }
 assert(api.isValidSavedSetup({ activePlayers: [true, true, false, false], board: smallSetup }));
+for (const size of [10, 14]) {
+    assert(!api.isValidSavedSetup({
+        activePlayers: [true, true, false, false],
+        board: Array.from({ length: size }, () => Array(size).fill(null))
+    }), `${size}x${size} saved setups are no longer supported`);
+}
 assert(!api.isValidSavedSetup({
     activePlayers: [true, true, false, false],
     board: Array.from({ length: 11 }, () => Array(11).fill(null))

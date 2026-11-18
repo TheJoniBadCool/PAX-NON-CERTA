@@ -88,6 +88,7 @@ function renderBoard() {
             square.className = sqClass;
             square.title = `${biome[0].toUpperCase()}${biome.slice(1)} · ${coordsToNotation(r, c)}`;
             if (!visibility[r][c]) square.title += ' · Fog of war';
+            renderProvinceResource(square, r, c, gameState.provinceResources, gameState.boardSize);
 
             if (gameState.selectedSquare && gameState.selectedSquare[0] === r && gameState.selectedSquare[1] === c) {
                 square.classList.add('sq-selected');
@@ -149,6 +150,10 @@ function renderBoard() {
                     const routed = getRoutedStats(unit);
                     return `${unit.castleLabel || getUnitName(unit)}${isPrisoner(unit) ? ` · ${getUnitStats(unit)}` : routed ? ` · ${routed}` : ''}`;
                 }).join(', ');
+                for (const resource of getProvinceResources(gameState.provinceResources,
+                    getProvinceIndex(r, c, gameState.boardSize))) {
+                    pieceWrapper.title += ` · ${getProvinceResourceTooltip(resource)}`;
+                }
                 const attackerSiege = getSiegeForAttacker(piece.id);
                 pieceWrapper.innerHTML = attackerSiege ? PIECE_SVGS.catapult : PIECE_SVGS[piece.type];
                 const prisoners = contents.filter(isPrisoner);

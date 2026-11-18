@@ -135,6 +135,70 @@ function getProvinceOwners(board) {
     });
 }
 
+function getProvinceResourceTooltip(resource) {
+    const type = RESOURCE_TYPES.find(type => type.key === resource.type);
+    return `${type.label} · Production chance: ${resource.productionChance}% every 4 rounds`;
+}
+
+function getProvinceResources(resources, province) {
+    // Generated maps store one resource; sandbox maps store lists of positioned sites.
+    const value = resources?.[province];
+    return Array.isArray(value) ? value : value ? [value] : [];
+}
+
+function getResourcePosition(resource, province, size, biomes) {
+    if (Number.isInteger(resource.row) && Number.isInteger(resource.column)) {
+        return [resource.row, resource.column];
+    }
+    const minRow = Math.floor(Math.floor(province / 4) * size / 4);
+    const minColumn = Math.floor((province % 4) * size / 4);
+    const maxRow = Math.floor((Math.floor(province / 4) + 1) * size / 4);
+    const maxColumn = Math.floor((province % 4 + 1) * size / 4);
+    for (let row = minRow; row < maxRow; row++) {
+        for (let column = minColumn; column < maxColumn; column++) {
+            if (biomes[row][column] !== 'mountain') return [row, column];
+        }
+    }
+    throw new Error(`No non-mountain square for resource in province ${province + 1}`);
+}
+
+function renderProvinceResource(square, r, c, resources, size, biomes = gameState.biomes) {
+    const province = getProvinceIndex(r, c, size);
+    let marker;
+    for (const resource of getProvinceResources(resources, province)) {
+        const title = getProvinceResourceTooltip(resource);
+        square.title += ` · ${title}`;
+        const [row, column] = getResourcePosition(resource, province, size, biomes);
+        if (r !== row || c !== column) continue;
+        if (!marker) {
+            marker = document.createElement('span');
+            marker.className = 'province-resource';
+            marker.setAttribute('role', 'img');
+            square.appendChild(marker);
+        } else marker.classList.add('province-resource-multiple');
+        marker.innerText += RESOURCE_TYPES.find(type => type.key === resource.type).icon;
+        marker.title += `${marker.title ? '; ' : ''}${title}`;
+        marker.setAttribute('aria-label', marker.title);
+    }
+}
+
+function resolveResourceProduction(completedRound, random = Math.random) {
+    if (completedRound < 1 || completedRound % 4 !== 0 ||
+        gameState.lastResourceProductionRound >= completedRound) return false;
+    const owners = getProvinceOwners(gameState.board);
+    gameState.provinceResources.forEach((_, province) => {
+        const owner = owners[province];
+        for (const resource of getProvinceResources(gameState.provinceResources, province)) {
+            if (owner && gameState.activePlayers[owner - 1] &&
+                !gameState.eliminated[owner - 1] && random() * 100 < resource.productionChance) {
+                gameState.resources[owner - 1][resource.type]++;
+            }
+        }
+    });
+    gameState.lastResourceProductionRound = completedRound;
+    return true;
+}
+
 function towersAreSpaced(board) {
     const towers = [];
     for (let r = 0; r < board.length; r++) {

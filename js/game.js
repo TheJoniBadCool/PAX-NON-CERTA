@@ -260,10 +260,10 @@
             }
         }
 
-        function startNewGame(selectedPlayers, customBoard = null, boardSize = gameState.boardSize, seed = null) {
+        function startNewGame(selectedPlayers, customBoard = null, boardSize = gameState.boardSize, seed = null, customMap = null) {
             gameState.activePlayers = selectedPlayers;
             btnEditNames.classList.remove('hidden');
-            initBoard(customBoard, boardSize, seed);
+            initBoard(customBoard, boardSize, seed, customMap);
             gameState.turnIndex = gameState.activePlayers.findIndex(isSelected => isSelected);
             gameState.round = 1;
             gameState.phase = 'PLANNING';
@@ -303,29 +303,40 @@
             renderBoard();
         }
 
-        function showCustomSetup(selectedPlayers, setupBoard = null) {
+        function showCustomSetup(selectedPlayers, setupBoard = null, setupMap = null) {
             gameState.activePlayers = selectedPlayers;
             if (setupBoard) gameState.boardSize = setupBoard.length;
             gameState.customSetupBoard = setupBoard || createEmptySetupBoard();
             gameState.nextUnitSequence = [1, 1, 1, 1];
             gameState.customSetupPlayer = selectedPlayers.findIndex(Boolean);
             gameState.customSetupType = 'p';
+            document.getElementById('custom-edit-tool').value = 'piece';
             document.querySelectorAll('.custom-piece-option').forEach(button =>
                 button.classList.toggle('selected', button.dataset.pieceType === 'p'));
             const multiplayerSetup = Multiplayer.isEditingSetup();
+            gameState.resourceMode = document.getElementById(
+                multiplayerSetup ? 'mp-resource-mode' : 'resource-mode').value;
+            gameState.resourceBalance = document.getElementById(
+                multiplayerSetup ? 'mp-resource-balance' : 'resource-balance').value;
+            gameState.resourceCapitals = gameState.resourceMode === '16' || document.getElementById(
+                multiplayerSetup ? 'mp-resource-capitals' : 'resource-capitals').checked;
+            document.getElementById('custom-resource-options').classList.toggle('hidden', multiplayerSetup);
+            document.getElementById('custom-resource-mode').value = gameState.resourceMode;
+            document.getElementById('custom-resource-balance').value = gameState.resourceBalance;
+            document.getElementById('custom-resource-capitals').checked = gameState.resourceCapitals;
             document.getElementById('btn-custom-setup-back').classList.toggle('hidden', !multiplayerSetup);
             btnConfirmCustomSetup.innerText = multiplayerSetup ? 'Use Placement' : 'Confirm Placement';
             const priorSeed = multiplayerSetup
                 ? document.getElementById('mp-map-seed').value
                 : document.getElementById('map-seed').value;
             document.getElementById('custom-map-seed').value = priorSeed.trim();
-            customMapPreview = null;
-            document.getElementById('custom-map-preview').innerHTML = '';
-            document.getElementById('custom-map-preview-status').innerText =
-                'Generate the map preview after editing your custom placement.';
-            customSetupStatusEl.innerText = 'Every selected player needs exactly one King, at least one Queen and one Tower. Click or tap the board to place pieces.';
+            customSetupStatusEl.innerText = 'Sandbox: place any pieces, paint terrain, and add resources with custom probabilities.';
             renderCustomSetupPlayers();
-            renderCustomSetupBoard();
+            invalidateCustomMapPreview();
+            if (setupMap) {
+                ensureCustomMap(setupMap);
+                refreshCustomMapPreview();
+            }
             playerSelectionModal.classList.add('hidden');
             customSetupModal.classList.remove('hidden');
             updateCustomMapPreviewControls();
@@ -333,27 +344,8 @@
         }
 
         function confirmCustomSetup() {
-            if (!towersAreSpaced(gameState.customSetupBoard)) {
-                customSetupStatusEl.innerText = 'Towers must have at least two squares between them, including diagonally. Reset this setup to replace the towers.';
-                return;
-            }
-            const missingKing = gameState.activePlayers.findIndex((isSelected, index) =>
-                isSelected && gameState.customSetupBoard.flat()
-                    .filter(piece => piece && piece.player === index + 1)
-                    .flatMap(getPieceContents).filter(unit => unit.type === 'k').length !== 1);
-            if (missingKing !== -1) {
-                customSetupStatusEl.innerText = `${PLAYERS[missingKing].name} must have exactly one King.`;
-                return;
-            }
-            const missingObjectiveUnits = gameState.activePlayers.findIndex((isSelected, index) => {
-                const units = gameState.customSetupBoard.flat().filter(piece => piece && piece.player === index + 1)
-                    .flatMap(getPieceContents);
-                return isSelected && (!units.some(unit => unit.type === 'q') || !units.some(unit => unit.type === 'r'));
-            });
-            if (missingObjectiveUnits !== -1) {
-                customSetupStatusEl.innerText = `${PLAYERS[missingObjectiveUnits].name} needs at least one Queen and one Tower for objectives.`;
-                return;
-            }
+            ensureCustomMap();
+            refreshCustomMapPreview();
             if (Multiplayer.isEditingSetup()) {
                 Multiplayer.confirmSetup();
                 return;
@@ -366,7 +358,8 @@
             }
             customSetupModal.classList.add('hidden');
             document.getElementById('map-seed').value = seed;
-            startNewGame(gameState.activePlayers, gameState.customSetupBoard, gameState.boardSize, seed);
+            startNewGame(gameState.activePlayers, gameState.customSetupBoard, gameState.boardSize,
+                seed, customMapPreview.starting);
         }
 
         function getCustomMapSignature(seed) {
@@ -374,37 +367,88 @@
                 players: gameState.activePlayers,
                 boardSize: gameState.boardSize,
                 progression: gameState.progressionMode,
+                resources: gameState.resourceMode,
+                resourceBalance: gameState.resourceBalance,
+                resourceCapitals: gameState.resourceCapitals,
                 board: gameState.customSetupBoard,
+                map: customMapPreview?.starting,
                 seed
             });
         }
 
         function updateCustomMapPreviewControls() {
-            const multiplayerSetup = Multiplayer.isEditingSetup();
-            const seed = document.getElementById('custom-map-seed').value.trim();
-            const current = seed && customMapPreview &&
-                customMapPreview.signature === getCustomMapSignature(seed);
-            btnConfirmCustomSetup.disabled = !multiplayerSetup && !current;
+            updateCapitalResourceOption('custom-');
+            btnConfirmCustomSetup.disabled = false;
         }
 
         function invalidateCustomMapPreview() {
             customMapPreview = null;
+            renderCustomSetupBoard();
             document.getElementById('custom-map-preview').innerHTML = '';
             document.getElementById('custom-map-preview-status').innerText =
-                'Placement or seed changed. Generate a new map preview.';
+                'Generate a map, or start painting a blank sandbox map.';
+            updateCustomMapPreviewControls();
+        }
+
+        function ensureCustomMap(map = null) {
+            if (!map && customMapPreview) return;
+            const seedInput = document.getElementById('custom-map-seed');
+            const seed = seedInput.value.trim() || createRandomMapSeed();
+            seedInput.value = seed;
+            const starting = createStartingBoard(gameState.activePlayers, gameState.boardSize,
+                seed, gameState.customSetupBoard, gameState.progressionMode, gameState.resourceMode,
+                gameState.resourceBalance, gameState.resourceCapitals, map || {
+                    biomes: Array.from({ length: gameState.boardSize }, () =>
+                        Array(gameState.boardSize).fill('plains')),
+                    provinceResources: Array.from({ length: 16 }, () => [])
+                });
+            starting.provinceResources = starting.provinceResources.map((entry, province) =>
+                getProvinceResources(starting.provinceResources, province).map(resource => {
+                    const [row, column] = getResourcePosition(resource, province,
+                        gameState.boardSize, starting.biomes);
+                    return { ...resource, row, column };
+                }));
+            customMapPreview = { seed, starting };
+        }
+
+        function refreshCustomMapPreview() {
+            if (customMapPreview) {
+                const seed = document.getElementById('custom-map-seed').value.trim();
+                customMapPreview.starting = createStartingBoard(gameState.activePlayers,
+                    gameState.boardSize, seed, gameState.customSetupBoard,
+                    gameState.progressionMode, gameState.resourceMode, gameState.resourceBalance,
+                    gameState.resourceCapitals, customMapPreview.starting);
+                customMapPreview.seed = seed;
+                customMapPreview.signature = getCustomMapSignature(seed);
+                renderMapPreview(document.getElementById('custom-map-preview'),
+                    customMapPreview.starting, gameState.boardSize);
+                document.getElementById('custom-map-preview-status').innerText =
+                    'Sandbox map ready. Placement and map edits are preserved when starting or saving.';
+            }
+            renderCustomSetupBoard();
             updateCustomMapPreviewControls();
         }
 
         function generateCustomMapPreview() {
+            if (customMapPreview && !window.confirm('Replace the current terrain and resources with a newly generated map? Pieces will be kept.')) return;
             const seedInput = document.getElementById('custom-map-seed');
             const seed = seedInput.value.trim() || createRandomMapSeed();
             seedInput.value = seed;
             document.getElementById('map-seed').value = seed;
             if (Multiplayer.isEditingSetup()) document.getElementById('mp-map-seed').value = seed;
-            const starting = createStartingBoard(
-                gameState.activePlayers, gameState.boardSize, seed, gameState.customSetupBoard);
+            let starting;
+            try {
+                starting = createStartingBoard(
+                    gameState.activePlayers, gameState.boardSize, seed, gameState.customSetupBoard);
+            } catch (error) {
+                if (!(error instanceof ResourceBalanceError)) throw error;
+                document.getElementById('custom-map-preview-status').innerText = error.message;
+                updateCustomMapPreviewControls();
+                return;
+            }
             renderMapPreview(document.getElementById('custom-map-preview'), starting, gameState.boardSize);
-            customMapPreview = { seed, signature: getCustomMapSignature(seed) };
+            ensureCustomMap(starting);
+            refreshCustomMapPreview();
             document.getElementById('custom-map-preview-status').innerText =
                 'Preview ready. Confirming placement will use this exact terrain and seed.';
             updateCustomMapPreviewControls();
@@ -436,11 +480,15 @@
                 players: getSelectedHotseatPlayers(),
                 size: Number(document.getElementById('board-size').value),
                 progression: document.querySelector('input[name="progression-mode"]:checked').value,
+                resources: document.getElementById('resource-mode').value,
+                resourceBalance: document.getElementById('resource-balance').value,
+                resourceCapitals: document.getElementById('resource-capitals').checked,
                 seed
             });
         }
 
         function updateHotseatMapControls() {
+            updateCapitalResourceOption();
             const isCustom = document.querySelector('input[name="setup-mode"]:checked').value === 'custom';
             document.getElementById('hotseat-map-preview-controls').classList.toggle('hidden', isCustom);
             const seed = document.getElementById('map-seed').value.trim();
@@ -460,7 +508,20 @@
             seedInput.value = seed;
             const size = Number(document.getElementById('board-size').value);
             const progression = document.querySelector('input[name="progression-mode"]:checked').value;
-            const starting = createStartingBoard(players, size, seed, null, progression);
+            let starting;
+            try {
+                starting = createStartingBoard(players, size, seed, null, progression,
+                    document.getElementById('resource-mode').value,
+                    document.getElementById('resource-balance').value,
+                    document.getElementById('resource-capitals').checked);
+            } catch (error) {
+                if (!(error instanceof ResourceBalanceError)) throw error;
+                hotseatMapPreview = null;
+                document.getElementById('map-preview').innerHTML = '';
+                document.getElementById('map-preview-status').innerText = error.message;
+                updateHotseatMapControls();
+                return;
+            }
             renderMapPreview(document.getElementById('map-preview'), starting, size);
             hotseatMapPreview = { seed, signature: getHotseatMapSignature(seed) };
             document.getElementById('map-preview-status').innerText =
@@ -1330,6 +1391,9 @@
             updateRoundDisplay();
             processRetreatsAtRoundStart();
             const { winners, draw } = resolveObjectiveRound();
+            if (resolveResourceProduction(gameState.round - 1)) {
+                logAction('Resource production checks completed.');
+            }
             renderBoard();
 
             // Count active players remaining
@@ -1866,8 +1930,8 @@
         btnResetCustomSetup.addEventListener('click', () => {
             gameState.customSetupBoard = createEmptySetupBoard();
             gameState.nextUnitSequence = [1, 1, 1, 1];
-            customSetupStatusEl.innerText = 'Placement reset. Every selected player needs exactly one King, at least one Queen and one Tower.';
-            renderCustomSetupBoard();
+            customSetupStatusEl.innerText = 'Pieces reset. Your terrain and resources are unchanged.';
+            refreshCustomMapPreview();
         });
         btnSaveCustomSetup.addEventListener('click', saveCustomSetup);
         btnLoadCustomSetup.addEventListener('click', () => {
@@ -1886,6 +1950,10 @@
                 PLAYERS[index].name = cleanPlayerName(input.value, index);
             });
             gameState.progressionMode = document.querySelector('input[name="progression-mode"]:checked').value;
+            gameState.resourceMode = document.getElementById('resource-mode').value;
+            gameState.resourceBalance = document.getElementById('resource-balance').value;
+            gameState.resourceCapitals = gameState.resourceMode === '16' ||
+                document.getElementById('resource-capitals').checked;
             gameState.boardSize = Number(document.getElementById('board-size').value);
             const setupMode = document.querySelector('input[name="setup-mode"]:checked').value;
             if (setupMode === 'custom') {
@@ -1903,12 +1971,28 @@
         });
         document.getElementById('btn-generate-map').addEventListener('click', generateHotseatMapPreview);
         document.getElementById('btn-custom-generate-map').addEventListener('click', generateCustomMapPreview);
+        ['mode', 'balance'].forEach(setting => {
+            document.getElementById(`custom-resource-${setting}`).addEventListener('change', event => {
+                document.getElementById(`resource-${setting}`).value = event.target.value;
+                if (setting === 'mode') gameState.resourceMode = event.target.value;
+                else gameState.resourceBalance = event.target.value;
+                updateCapitalResourceOption('custom-');
+                gameState.resourceCapitals = document.getElementById('custom-resource-capitals').checked;
+                document.getElementById('resource-capitals').checked = gameState.resourceCapitals;
+                refreshCustomMapPreview();
+            });
+        });
+        document.getElementById('custom-resource-capitals').addEventListener('change', event => {
+            gameState.resourceCapitals = event.target.checked;
+            document.getElementById('resource-capitals').checked = event.target.checked;
+            refreshCustomMapPreview();
+        });
         document.getElementById('custom-map-seed').addEventListener('input', () => {
             document.getElementById('map-seed').value = document.getElementById('custom-map-seed').value;
             if (Multiplayer.isEditingSetup()) {
                 document.getElementById('mp-map-seed').value = document.getElementById('custom-map-seed').value;
             }
-            invalidateCustomMapPreview();
+            refreshCustomMapPreview();
         });
         const invalidateHotseatPreview = () => {
             hotseatMapPreview = null;
@@ -1918,7 +2002,7 @@
             updateHotseatMapControls();
         };
         document.querySelectorAll(
-            '#player-selection-list input[type="checkbox"], #board-size, #map-seed, ' +
+            '#player-selection-list input[type="checkbox"], #board-size, #map-seed, #resource-mode, #resource-balance, #resource-capitals, ' +
             'input[name="progression-mode"]'
         ).forEach(input => input.addEventListener(input.id === 'map-seed' ? 'input' : 'change',
             invalidateHotseatPreview));

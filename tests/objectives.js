@@ -7,7 +7,7 @@ function element() {
     const classes = new Set();
     const handlers = {};
     return {
-        innerHTML: '', innerText: '', style: {}, handlers,
+        innerHTML: '', innerText: '', value: '', checked: false, style: {}, handlers,
         classList: {
             add: value => classes.add(value),
             remove: value => classes.delete(value),
@@ -39,6 +39,7 @@ const context = vm.createContext({
     renderCustomSetupBoard() {}, renderCustomSetupPlayers() {},
     renderAllSavedSetups() {}, renderSavedSetups() {}, logAction() {}, logRoundHeader() {},
     Multiplayer: {
+        isEditingSetup() { return false; },
         getBadge() { return { text: 'Planning', ready: false }; },
         refreshControls() {}, broadcastResolutionStart() {},
         beginNextRound() { context.nextRound = true; },
@@ -51,10 +52,15 @@ const context = vm.createContext({
     'board-setup', 'setup-actions', 'status-ui', 'game'
 ].forEach(name => vm.runInContext(fs.readFileSync(`js/${name}.js`, 'utf8'), context));
 context.animatePlannedMovements = async () => {};
+context.renderMapPreview = () => {};
 const api = vm.runInContext(`({
     state: gameState, startNewGame, initializeObjectives, updateObjectiveScores,
     resolveObjectiveRound, resolveAllMoves, processCollisionGroup, renderObjectives,
-    confirmCustomSetup, isValidSavedSetup, showPrivacyOverlay, queueUnmergePlan, players: PLAYERS
+    confirmCustomSetup, showCustomSetup, generateCustomMapPreview, getHotseatMapSignature, isValidSavedSetup,
+    showPrivacyOverlay, queueUnmergePlan, players: PLAYERS,
+    updateCapitalResourceOption, getCustomMapSignature, ensureCustomMap, refreshCustomMapPreview,
+    editCustomSquare, placeCustomPiece, isValidCustomMap,
+    getCustomMap: () => customMapPreview?.starting
 })`, context);
 const state = api.state;
 const players = api.players;
@@ -96,6 +102,60 @@ function changeCastleOwner(castleId, player) {
 }
 
 async function run() {
+    const resourceSelector = document.getElementById('resource-mode');
+    const balanceSelector = document.getElementById('resource-balance');
+    balanceSelector.value = 'off';
+    resourceSelector.value = '8';
+    const smallerSignature = api.getHotseatMapSignature('same-seed');
+    resourceSelector.value = '12';
+    assert.notEqual(api.getHotseatMapSignature('same-seed'), smallerSignature,
+        'Changing resource mode invalidates the hotseat map preview');
+    const unbalancedSignature = api.getHotseatMapSignature('same-seed');
+    balanceSelector.value = 'allow-empty';
+    assert.notEqual(api.getHotseatMapSignature('same-seed'), unbalancedSignature,
+        'Changing resource balance invalidates the hotseat map preview');
+    const capitals = document.getElementById('resource-capitals');
+    const noCapitalsSignature = api.getHotseatMapSignature('same-seed');
+    capitals.checked = true;
+    assert.notEqual(api.getHotseatMapSignature('same-seed'), noCapitalsSignature,
+        'Changing capital eligibility invalidates the hotseat preview');
+    api.showCustomSetup([true, true, false, false], setup());
+    assert.equal(state.resourceCapitals, true);
+    assert.equal(document.getElementById('custom-resource-capitals').checked, true);
+    const customCapitalsSignature = api.getCustomMapSignature('same-seed');
+    document.getElementById('custom-resource-capitals').handlers.change({ target: { checked: false } });
+    document.getElementById('custom-resource-capitals').checked = false;
+    assert.equal(state.resourceCapitals, false);
+    assert.equal(capitals.checked, false);
+    assert.notEqual(api.getCustomMapSignature('same-seed'), customCapitalsSignature,
+        'Changing capital eligibility invalidates the custom preview');
+    for (const prefix of ['', 'custom-']) {
+        const mode = document.getElementById(`${prefix}resource-mode`);
+        const input = document.getElementById(`${prefix}resource-capitals`);
+        mode.value = '16';
+        api.updateCapitalResourceOption(prefix);
+        assert.equal(input.checked, true);
+        assert.equal(input.disabled, true);
+        mode.value = '12';
+        api.updateCapitalResourceOption(prefix);
+        assert.equal(input.disabled, false);
+        input.checked = false;
+    }
+    assert.equal(state.resourceMode, '12',
+        'Opening custom placement from a saved setup uses the selected resource mode');
+    assert.equal(state.resourceBalance, 'allow-empty');
+    document.getElementById('custom-resource-balance').handlers.change({ target: { value: 'require-all' } });
+    document.getElementById('custom-map-seed').value = 'impossible';
+    api.generateCustomMapPreview();
+    assert.match(document.getElementById('custom-map-preview-status').innerText,
+        /Cannot place a resource in every quadrant/);
+    assert.equal(document.getElementById('btn-confirm-custom-setup').disabled, false,
+        'A failed generator must not prevent starting a manually painted sandbox');
+    document.getElementById('custom-resource-balance').handlers.change({ target: { value: 'off' } });
+    assert.equal(state.resourceBalance, 'off');
+    assert.equal(balanceSelector.value, 'off');
+    resourceSelector.value = '8';
+    state.resourceMode = '8';
     for (let i = 0; i < 100; i++) {
         start(i % 2 ? 2 : 4);
         state.objectives.forEach((objectives, index) => {
@@ -122,6 +182,19 @@ async function run() {
     }
 
     start();
+    state.provinceResources[0] = { type: 'food', productionChance: 100 };
+    context.Math.random = () => 0.99;
+    for (let completed = 1; completed <= 4; completed++) {
+        await api.resolveAllMoves();
+        assert.equal(state.resources[0].food, completed === 4 ? 1 : 0,
+            'Production happens after the fourth resolved round, not at the start of round four');
+    }
+    assert.equal(state.round, 5);
+    assert.equal(state.lastResourceProductionRound, 4);
+    context.Math.random = Math.random;
+    start();
+    assert.equal(state.resources[0].food, 0, 'New games reset accumulated resources');
+    assert.equal(state.lastResourceProductionRound, null, 'New games reset production history');
     const blueCastle = state.objectives[0].find(objective => objective.kind === 'conquer');
     const blueLoss = state.objectives[1].find(objective => objective.castleId === blueCastle.castleId);
     changeCastleOwner(blueCastle.castleId, 1);
@@ -157,8 +230,74 @@ async function run() {
     state.customSetupBoard = setup();
     state.customSetupBoard[4][9] = null;
     api.confirmCustomSetup();
-    assert(document.getElementById('custom-setup-status').innerText.includes('Blue needs'));
+    assert.equal(state.phase, 'PLANNING', 'Sandbox matches may start without required objective units');
+    assert(state.objectives.flat().every(objective => objective.kind !== 'death' || objective.unitId),
+        'Missing sandbox units must not create invalid death objectives');
     assert(!api.isValidSavedSetup({ activePlayers: [true, true, false, false], board: state.customSetupBoard }));
+    assert(api.isValidSavedSetup({ sandbox: true,
+        activePlayers: [true, true, false, false], board: state.customSetupBoard }));
+
+    for (const size of [12, 16]) {
+        state.boardSize = size;
+        api.showCustomSetup([true, true, false, false]);
+        document.getElementById('custom-map-seed').value = 'sandbox-persistence';
+        api.generateCustomMapPreview();
+        const mapBefore = JSON.stringify(api.getCustomMap().biomes);
+        const resourcesBefore = JSON.stringify(api.getCustomMap().provinceResources);
+        for (const [type, column] of [['k', 0], ['k', 0], ['r', 1], ['r', 2]]) {
+            state.customSetupType = type;
+            api.placeCustomPiece(0, column);
+        }
+        assert.equal(JSON.stringify(api.getCustomMap().biomes), mapBefore,
+            'Adding duplicate kings and adjacent towers must preserve generated terrain');
+        assert.equal(JSON.stringify(api.getCustomMap().provinceResources), resourcesBefore);
+        document.getElementById('custom-edit-tool').value = 'biome';
+        document.getElementById('custom-biome').value = 'mountain';
+        api.editCustomSquare(0, 0);
+        assert.equal(api.getCustomMap().biomes[0][0], 'mountain',
+            'Sandbox terrain may be painted even underneath pieces');
+        document.getElementById('custom-edit-tool').value = 'resource';
+        const chance = document.getElementById('custom-resource-chance');
+        chance.checkValidity = () => true;
+        chance.value = '100';
+        document.getElementById('custom-resource-type').value = 'gold';
+        api.editCustomSquare(0, 0);
+        chance.value = '0';
+        document.getElementById('custom-resource-type').value = 'wood';
+        api.editCustomSquare(0, 0);
+        chance.value = '12.5';
+        document.getElementById('custom-resource-type').value = 'gold';
+        api.editCustomSquare(0, 0);
+        let resources = api.getCustomMap().provinceResources[0];
+        assert.equal(resources.length, 2, 'Different resource types may share a square');
+        assert.equal(resources.find(resource => resource.type === 'gold').productionChance, 12.5,
+            'Painting the same resource updates its individual probability');
+        assert(api.isValidCustomMap(api.getCustomMap(), size));
+        const expectedMap = JSON.parse(JSON.stringify(api.getCustomMap()));
+        api.confirmCustomSetup();
+        assert.equal(JSON.stringify(state.biomes), JSON.stringify(expectedMap.biomes));
+        assert.equal(JSON.stringify(state.provinceResources), JSON.stringify(expectedMap.provinceResources));
+        assert.equal(state.board[0][0].contents.filter(unit => unit.type === 'k').length, 2);
+        api.showCustomSetup([true, true, false, false], state.customSetupBoard, expectedMap);
+        document.getElementById('custom-edit-tool').value = 'erase-resource';
+        api.editCustomSquare(0, 0);
+        assert.equal(api.getCustomMap().provinceResources[0].length, 0);
+        document.getElementById('custom-edit-tool').value = 'erase-piece';
+        api.editCustomSquare(0, 0);
+        assert.equal(state.customSetupBoard[0][0], null);
+        assert.equal(api.getCustomMap().biomes[0][0], 'mountain',
+            'Erasing pieces and resources must leave painted biomes intact');
+        state.customSetupType = 'p';
+        for (const column of [3, 4, 5]) api.placeCustomPiece(1, column);
+        document.getElementById('custom-edit-tool').value = 'erase-piece';
+        api.editCustomSquare(1, 4);
+        api.placeCustomPiece(1, 6);
+        const names = state.customSetupBoard.flat().filter(Boolean)
+            .flatMap(piece => piece.contents).map(unit => unit.name);
+        assert.equal(new Set(names).size, names.length,
+            'Erasing and replacing pieces must not duplicate existing unit names');
+    }
+    state.boardSize = 16;
 
     start();
     api.renderObjectives();

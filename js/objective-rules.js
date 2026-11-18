@@ -31,14 +31,14 @@ function initializeObjectives() {
         const ownKing = unitsByPlayer[index].find(unit => getUnitType(unit) === 'k');
         return [
             { kind: 'defeat', targetPlayer: defeatTarget.id, points: 4, label: `${defeatTarget.name} is defeated` },
-            { kind: 'death', unitId: king.id, targetPlayer: kingTarget.id, unitType: 'king', points: 3, label: `${kingTarget.name} king is dead` },
-            { kind: 'death', unitId: queen.id, targetPlayer: queenTarget.id, unitType: 'queen', unitName: queen.name, points: 2, label: `${queenTarget.name} queen ${queen.name} is dead` },
-            {
+            ...(king ? [{ kind: 'death', unitId: king.id, targetPlayer: kingTarget.id, unitType: 'king', points: 3, label: `${kingTarget.name} king is dead` }] : []),
+            ...(queen ? [{ kind: 'death', unitId: queen.id, targetPlayer: queenTarget.id, unitType: 'queen', unitName: queen.name, points: 2, label: `${queenTarget.name} queen ${queen.name} is dead` }] : []),
+            ...(castle ? [{
                 kind: 'conquer', castleId: castle.castleId, castlePlayer: castle.player,
                 castleLetter: castle.castleLetter, castleSquare: castle.castleSquare,
                 points: 1, label: `Control ${castle.castleLabel}`
-            },
-            { kind: 'death', unitId: ownKing.id, targetPlayer: player.id, unitType: 'king', self: true, points: -4, label: 'Your king is dead' },
+            }] : []),
+            ...(ownKing ? [{ kind: 'death', unitId: ownKing.id, targetPlayer: player.id, unitType: 'king', self: true, points: -4, label: 'Your king is dead' }] : []),
             ...castlesByPlayer[index].map(tower => ({
                 kind: 'lose', castleId: tower.castleId, castlePlayer: tower.player,
                 castleLetter: tower.castleLetter, castleSquare: tower.castleSquare,

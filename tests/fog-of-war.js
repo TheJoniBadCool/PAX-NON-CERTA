@@ -50,7 +50,7 @@ function reset(size = 16) {
     logs.length = 0;
 }
 
-for (const size of [10, 12, 14, 16]) {
+for (const size of [12, 16]) {
     reset(size);
     state.board[0][0] = piece(1, 'r');
     let visibility = api.getFogVisibility(1);

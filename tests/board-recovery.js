@@ -106,9 +106,9 @@ assert.match(styles, /\.prisoner-board-badge\s*\{[^}]*top:\s*2px;[^}]*left:\s*au
     'Prisoner chain badge must appear in the top-right corner');
 assert.match(styles, /\.routed-recovery-badge\s*\{[^}]*pointer-events:\s*none;/,
     'Recovery badge must not interfere with board interaction');
-state.boardSize = 10;
-state.board = Array.from({ length: 10 }, () => Array(10).fill(null));
+state.boardSize = 12;
+state.board = Array.from({ length: 12 }, () => Array(12).fill(null));
 api.renderBoard();
-assert.equal(boardEl.children.length, 100, 'The rendered grid must use the selected board size');
-assert.equal(boardEl.style.gridTemplateColumns, 'repeat(10, 1fr)');
+assert.equal(boardEl.children.length, 144, 'The rendered grid must use the selected board size');
+assert.equal(boardEl.style.gridTemplateColumns, 'repeat(12, 1fr)');
 console.log('Board recovery badge checks passed');

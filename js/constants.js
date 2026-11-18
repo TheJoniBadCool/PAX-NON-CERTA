@@ -18,7 +18,24 @@ const PLAYERS = [
 const REBEL_PLAYER_ID = 5;
 const REBEL_PLAYER = { id: REBEL_PLAYER_ID, name: 'Rebels', colorName: 'Grey', color: '#94a3b8', class: 'piece-p1 piece-eliminated' };
 const PLAYER_CODES = ['A', 'B', 'C', 'D', 'R'];
-const BOARD_SIZES = [10, 12, 14, 16];
+const BOARD_SIZES = [12, 16];
+const RESOURCE_TYPES = [
+    { key: 'horse', label: 'Horse', icon: '🐎' },
+    { key: 'food', label: 'Food', icon: '🌾' },
+    { key: 'wood', label: 'Wood', icon: '🪵' },
+    { key: 'metal', label: 'Metal', icon: '⚙️' },
+    { key: 'gold', label: 'Gold', icon: '🪙' }
+];
+const RESOURCE_MODES = {
+    '8': { counts: [1, 3, 2, 1, 1] },
+    '12': { counts: [2, 4, 3, 2, 1] },
+    '16': { counts: [3, 5, 4, 3, 1] }
+};
+
+function createResourceStockpiles() {
+    return Array.from({ length: 4 }, () =>
+        Object.fromEntries(RESOURCE_TYPES.map(resource => [resource.key, 0])));
+}
 
 function getPlayerInfo(playerId) {
     return playerId === REBEL_PLAYER_ID ? REBEL_PLAYER : PLAYERS[playerId - 1];

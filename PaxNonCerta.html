@@ -36,6 +36,7 @@
                         <span id="badge-p1" class="status-badge">Planning</span>
                         <div id="retreat-p1" class="retreat-row" aria-label="Red retreating units"></div>
                         <div id="dead-p1" class="dead-row" aria-label="Red dead pieces"></div>
+                        <div id="resources-p1" class="resources-row hidden" aria-label="Red resources"></div>
                     </div>
                     <div class="board-top-controls">
                         <section id="objectives-panel" class="objectives-panel hidden" aria-labelledby="objectives-title">
@@ -54,6 +55,7 @@
                         <span id="badge-p2" class="status-badge">Waiting</span>
                         <div id="retreat-p2" class="retreat-row" aria-label="Blue retreating units"></div>
                         <div id="dead-p2" class="dead-row" aria-label="Blue dead pieces"></div>
+                        <div id="resources-p2" class="resources-row hidden" aria-label="Blue resources"></div>
                     </div>
                 </div>
             <div class="board-wrapper">
@@ -133,8 +135,20 @@
                         <span id="badge-p4" class="status-badge">Waiting</span>
                         <div id="retreat-p4" class="retreat-row" aria-label="Yellow retreating units"></div>
                         <div id="dead-p4" class="dead-row" aria-label="Yellow dead pieces"></div>
+                        <div id="resources-p4" class="resources-row hidden" aria-label="Yellow resources"></div>
                     </div>
                     <div class="plan-actions">
+                        <div id="round-clock" class="plan-action round-clock" role="img" aria-label="Round clock: 0 of 4 rounds completed">
+                            <svg class="plan-action-icon round-clock-face" viewBox="0 0 32 32" aria-hidden="true">
+                                <circle cx="16" cy="16" r="14"></circle>
+                                <path class="round-clock-ticks" d="M16 3v3 M29 16h-3 M16 29v-3 M3 16h3"></path>
+                                <g id="round-clock-hand">
+                                    <path d="M16 16V8"></path>
+                                </g>
+                                <circle class="round-clock-pivot" cx="16" cy="16" r="1.5"></circle>
+                            </svg>
+                            <span id="round-clock-status">0 / 4</span>
+                        </div>
                         <button id="btn-finish-plan" class="plan-action plan-commit" type="button" aria-label="Commit Plans">
                             <span id="commit-plan-icon" class="plan-action-icon" aria-hidden="true">✓</span>
                             <span id="commit-plan-label">Commit Plans</span>
@@ -149,6 +163,7 @@
                         <span id="badge-p3" class="status-badge">Waiting</span>
                         <div id="retreat-p3" class="retreat-row" aria-label="Green retreating units"></div>
                         <div id="dead-p3" class="dead-row" aria-label="Green dead pieces"></div>
+                        <div id="resources-p3" class="resources-row hidden" aria-label="Green resources"></div>
                     </div>
                 </div>
             </div>
@@ -233,18 +248,26 @@
                     <div class="setup-option">
                         <label class="mp-field" for="mp-board-size">Board size
                             <select id="mp-board-size">
-                                <option value="10">10 × 10</option>
                                 <option value="12">12 × 12</option>
-                                <option value="14">14 × 14</option>
                                 <option value="16" selected>16 × 16</option>
                             </select>
                         </label>
                     </div>
-                    <div class="setup-option">
-                        <strong>Unit progression</strong>
-                        <label><input type="radio" name="mp-progression" value="zero" checked> All level 0</label>
-                        <label><input type="radio" name="mp-progression" value="random"> Random levels 1-3</label>
-                    </div>
+                    <label class="mp-field" for="mp-resource-mode">Resources
+                        <select id="mp-resource-mode">
+                            <option value="8" selected>8 resources (rebel count minus four)</option>
+                            <option value="12">12 resources (rebel count)</option>
+                            <option value="16">16 resources (1 per province)</option>
+                        </select>
+                    </label>
+                    <label><input id="mp-resource-capitals" type="checkbox"> Allow resources in player capitals (always on with 16 resources)</label>
+                    <label class="mp-field" for="mp-resource-balance">Resource balance
+                        <select id="mp-resource-balance">
+                            <option value="off">Unbalanced (default)</option>
+                            <option value="allow-empty">Balanced: allow empty quadrants</option>
+                            <option value="require-all">Balanced: at least one resource per quadrant</option>
+                        </select>
+                    </label>
                     <div class="map-preview-controls">
                         <label class="mp-field" for="mp-map-seed">Map seed
                             <input id="mp-map-seed" type="text" maxlength="64" placeholder="Generate one or enter a seed">
@@ -252,6 +275,11 @@
                         <button id="btn-mp-generate-map" class="btn btn-secondary" type="button">🗺️ Generate Map</button>
                         <div id="mp-map-preview" class="map-preview-grid" role="img" aria-label="Map preview"></div>
                         <div id="mp-map-preview-status" class="mp-status" aria-live="polite">Generate a map to preview the starting layout.</div>
+                    </div>
+                    <div class="setup-option">
+                        <strong>Unit progression</strong>
+                        <label><input type="radio" name="mp-progression" value="zero" checked> All level 0</label>
+                        <label><input type="radio" name="mp-progression" value="random"> Random levels 1-3</label>
                     </div>
                     <label class="mp-field">Starting position
                         <select id="mp-setup-mode">
@@ -302,12 +330,33 @@
                 <div class="setup-option">
                     <label class="mp-field" for="board-size">Board size
                         <select id="board-size">
-                            <option value="10">10 × 10</option>
                             <option value="12">12 × 12</option>
-                            <option value="14">14 × 14</option>
                             <option value="16" selected>16 × 16</option>
                         </select>
                     </label>
+                </div>
+                <label class="mp-field" for="resource-mode">Resources
+                    <select id="resource-mode">
+                        <option value="8" selected>8 resources (rebel count minus four)</option>
+                        <option value="12">12 resources (rebel count)</option>
+                        <option value="16">16 resources (1 per province)</option>
+                    </select>
+                </label>
+                <label><input id="resource-capitals" type="checkbox"> Allow resources in player capitals (always on with 16 resources)</label>
+                <label class="mp-field" for="resource-balance">Resource balance
+                    <select id="resource-balance">
+                        <option value="off">Unbalanced (default)</option>
+                        <option value="allow-empty">Balanced: allow empty quadrants</option>
+                        <option value="require-all">Balanced: at least one resource per quadrant</option>
+                    </select>
+                </label>
+                <div id="hotseat-map-preview-controls" class="map-preview-controls">
+                    <label class="mp-field" for="map-seed">Map seed
+                        <input id="map-seed" type="text" maxlength="64" placeholder="Generate one or enter a seed">
+                    </label>
+                    <button id="btn-generate-map" class="btn btn-secondary" type="button">🗺️ Generate Map</button>
+                    <div id="map-preview" class="map-preview-grid" role="img" aria-label="Map preview"></div>
+                    <div id="map-preview-status" class="mp-status" aria-live="polite">Generate a map to preview the starting layout.</div>
                 </div>
                 <div class="setup-option">
                     <strong>Unit progression</strong>
@@ -319,20 +368,13 @@
                     <label><input type="radio" name="setup-mode" value="random" checked> Default random corner positions</label>
                     <label><input type="radio" name="setup-mode" value="custom"> Custom placement</label>
                 </div>
-                <div id="hotseat-map-preview-controls" class="map-preview-controls">
-                    <label class="mp-field" for="map-seed">Map seed
-                        <input id="map-seed" type="text" maxlength="64" placeholder="Generate one or enter a seed">
-                    </label>
-                    <button id="btn-generate-map" class="btn btn-secondary" type="button">🗺️ Generate Map</button>
-                    <div id="map-preview" class="map-preview-grid" role="img" aria-label="Map preview"></div>
-                    <div id="map-preview-status" class="mp-status" aria-live="polite">Generate a map to preview the starting layout.</div>
-                </div>
                 <div class="saved-setup-section">
                     <strong>Saved custom setups</strong>
                     <div id="saved-setup-list" class="saved-setup-list"></div>
                 </div>
             </div>
             <button id="btn-start-selected-game" class="btn btn-primary">Start Game</button>
+            <button id="btn-selection-menu" class="btn btn-secondary">Exit to Menu</button>
         </div>
     </div>
 
@@ -344,6 +386,24 @@
             </div>
             <div class="modal-body custom-setup-body">
                 <div id="custom-setup-status">Select a player and piece, then click or tap a board square to place it. Same-player pieces stack.</div>
+                <div id="custom-resource-options">
+                    <div class="mp-status">Generation settings apply when you press Generate Map. Painting resources overrides these counts and balance rules.</div>
+                    <label class="mp-field" for="custom-resource-mode">Resources
+                        <select id="custom-resource-mode">
+                            <option value="8">8 resources (rebel count minus four)</option>
+                            <option value="12">12 resources (rebel count)</option>
+                            <option value="16">16 resources (1 per province)</option>
+                        </select>
+                    </label>
+                    <label><input id="custom-resource-capitals" type="checkbox"> Allow resources in player capitals (always on with 16 resources)</label>
+                    <label class="mp-field" for="custom-resource-balance">Resource balance
+                        <select id="custom-resource-balance">
+                            <option value="off">Unbalanced (default)</option>
+                            <option value="allow-empty">Balanced: allow empty quadrants</option>
+                            <option value="require-all">Balanced: at least one resource per quadrant</option>
+                        </select>
+                    </label>
+                </div>
                 <div class="map-preview-controls">
                     <label class="mp-field" for="custom-map-seed">Map seed
                         <input id="custom-map-seed" type="text" maxlength="64" placeholder="Generate one or enter a seed">
@@ -351,10 +411,42 @@
                     <button id="btn-custom-generate-map" class="btn btn-secondary" type="button">🗺️ Generate Map</button>
                     <div id="custom-map-preview" class="map-preview-grid" role="img" aria-label="Custom setup map preview"></div>
                     <div id="custom-map-preview-status" class="mp-status" aria-live="polite">
-                        Generate the map preview after editing your custom placement.
+                        Generate a map, or start painting a blank sandbox map.
                     </div>
                 </div>
                 <div id="custom-player-list" class="custom-player-list"></div>
+                <div class="custom-editor-tools">
+                    <label class="mp-field" for="custom-edit-tool">Editor tool
+                        <select id="custom-edit-tool">
+                            <option value="piece">Place pieces (same-player pieces stack)</option>
+                            <option value="erase-piece">Remove pieces</option>
+                            <option value="biome">Paint biome</option>
+                            <option value="resource">Add / update resource</option>
+                            <option value="erase-resource">Remove resources on square</option>
+                        </select>
+                    </label>
+                    <label class="mp-field" for="custom-biome">Biome
+                        <select id="custom-biome">
+                            <option value="plains">Plains</option>
+                            <option value="forest">Forest</option>
+                            <option value="hill">Hill</option>
+                            <option value="mountain">Mountain</option>
+                        </select>
+                    </label>
+                    <label class="mp-field" for="custom-resource-type">Resource
+                        <select id="custom-resource-type">
+                            <option value="horse">Horse</option>
+                            <option value="food">Food</option>
+                            <option value="wood">Wood</option>
+                            <option value="metal">Metal</option>
+                            <option value="gold">Gold</option>
+                        </select>
+                    </label>
+                    <label class="mp-field" for="custom-resource-chance">Production chance (% / 4 rounds)
+                        <input id="custom-resource-chance" type="number" min="0" max="100" step="any" value="25">
+                    </label>
+                </div>
+                <div class="mp-status">Sandbox: any army composition, terrain, or resource layout, including mountains. With the piece tool selected, click a resource icon to copy its type and chance. Use the resource tool to update it. Multiple resource types may share a square. Erase then repaint to move resources.</div>
                 <div class="custom-piece-list">
                     <button class="custom-piece-option selected" data-piece-type="p">Pawn</button>
                     <button class="custom-piece-option" data-piece-type="r">Tower</button>
@@ -366,6 +458,7 @@
                 <div id="custom-setup-board" class="custom-setup-board"></div>
             </div>
             <div class="custom-setup-actions">
+                <button id="btn-custom-menu" class="btn btn-secondary">Exit to Menu</button>
                 <button id="btn-custom-setup-back" class="btn btn-secondary hidden">Back to Lobby</button>
                 <button id="btn-reset-custom-setup" class="btn btn-secondary">Reset</button>
                 <button id="btn-save-custom-setup" class="btn btn-secondary">Save Setup</button>
@@ -378,65 +471,32 @@
 
     <!-- Rules Modal -->
     <div id="rules-modal" class="modal-overlay hidden">
-        <div class="modal-card">
+        <div class="modal-card rules-card" role="dialog" aria-modal="true" aria-labelledby="rules-title">
             <div class="modal-header">
-                <h3>PaxNonCerta Rules</h3>
-                <button id="btn-close-rules" class="btn btn-secondary" style="padding: 0.2rem 0.5rem;">✕</button>
+                <div>
+                    <h3 id="rules-title">📖 How to play</h3>
+                    <p id="rules-subtitle" class="rules-subtitle">A quick guide, with more detail when you need it.</p>
+                </div>
+                <button id="btn-close-rules" class="btn btn-secondary" type="button" aria-label="Close rules">✕</button>
             </div>
-            <div class="modal-body">
-                <div class="rule-box">
-                    <h4>1. Board Size and Player Corners</h4>
-                    Choose a 10×10, 12×12, 14×14, or 16×16 board before starting. Players spawn in the 4 corners: Red (Top-Left), Blue (Top-Right), Green (Bottom-Right), Yellow (Bottom-Left).
+            <div class="rules-controls">
+                <div class="rules-control-group" aria-label="Guide language">
+                    <button class="rules-choice" type="button" data-rules-language="en" aria-pressed="true">English</button>
+                    <button class="rules-choice" type="button" data-rules-language="pt" aria-pressed="false">Português</button>
                 </div>
-                <div class="rule-box">
-                    <h4>2. Movement Rules & Unmovable Towers</h4>
-                    • <strong>Movable pieces</strong> (Pawn, Knight, Bishop, Queen, King) move <strong>exactly 1 square</strong> in any direction.<br>
-                    • <strong>Pawns move on odd-numbered rounds only</strong> (Rounds 1, 3, 5…). On even-numbered rounds, pawns cannot initiate movement, merging, unmerging, transfers, or attacks, but remain valid attack targets and may receive non-Pawn units. A ready siege assault and a Sally Out are exceptions.<br>
-                    • A stack containing any Pawn can move as a whole only on odd-numbered rounds. On even-numbered rounds, non-Pawn units in that stack may still be unmerged, moved, or transferred individually; the stack may receive non-Pawn units and remains a valid attack target. New sieges may be deployed only on odd-numbered rounds.<br>
-                    • <strong>Towers (Rooks) are UNMOVABLE</strong>: Each tower has one randomly chosen gate, marked by an arrow pointing north, south, east, or west. Merging, transfers, unmerging, and sieges can only enter or exit through that adjacent square. Towers start with at least two squares between them in every direction, including diagonals.
-                </div>
-                <div class="rule-box">
-                    <h4>3. Multi-Piece Turns</h4>
-                    During your turn, you can move <strong>0, 1, or MULTIPLE</strong> of your movable surviving pieces at once!
-                </div>
-                <div class="rule-box">
-                    <h4>Terrain</h4>
-                    Generate a map preview before starting, then reuse its seed to recreate starting positions, tower gates, levels and terrain. Seeds control map generation only; objectives and combat rolls remain random. Each map has roughly 50% plains, 20% forests (🌲), 20% hills (⛰) and 10% mountains (▲), rounded to whole squares. Castles always start on plains and mountain squares cannot be entered or used for retreat re-entry. Starting units and castle gates are never blocked by mountains.
-                    Forest forces are hidden from opponents and gain +25% strength when they remain there and are attacked. A force that held a hill for the entire previous round gains +25% strength when it stays and is attacked. Arriving forces and opposing swaps receive no terrain defence. Bonuses apply before the odds curve; plains have no effect.
-                    Entering an unseen enemy's square resolves normally, including the usual rules for prisoners. Concealment is visual; multiplayer guests receive the board data and the host can inspect it.
-                </div>
-                <div class="rule-box">
-                    <h4>Fog of War</h4>
-                    You see your owned provinces and all eight neighboring provinces, including diagonals. Each friendly piece also reveals the surrounding 3×3 area; a stack containing a non-prisoner Bishop reveals a 5×5 area. Sight follows actual positions and castle ownership, not queued plans, and disappears when no longer provided.<br>
-                    Outside your sight, opposing and rebel troops are hidden. Towers and gates remain visible, but concealed garrisons and their badges do not. Terrain and province colors remain visible. Revealing a forest never cancels forest concealment.<br>
-                    Hotseat resolution combines active players' fog sight without lifting forest hiding; multiplayer always keeps your own sight. Battles reveal participants, game over reveals everything, and setup previews have no fog. Hidden movements are not animated, and the shared log omits non-battle coordinates concealed from any active player. Fog is visual, not network secrecy.
-                </div>
-                <div class="rule-box">
-                    <h4>4. Same-Player Merging</h4>
-                    Move onto one of your own pieces to choose <strong>Merge</strong> or <strong>Cancel</strong>. Accepted merges commit the involved pieces for the turn, and multiple pieces can merge into one stack. If two or more same-player pieces plan the same destination, they merge automatically. Towers take priority; otherwise the result follows Tower, Pawn, Horse, Bishop, King, Queen precedence. Same-player paths never intercept each other. Click or tap a piece to select the whole stack. Right-click or long-press it to open its unit list; clicking a catapult or besieged Tower also opens the list and its siege action. Select a movable unit, then click or tap an adjacent square to unmerge it. Choosing an adjacent same-player piece prompts for transfer confirmation.
-                </div>
-                <div class="rule-box">
-                    <h4>5. Simultaneous Resolution & Collisions</h4>
-                    All players submit their secret plans. All moves happen at the exact same instant.<br>
-                    Resolution follows this order: planned prisoner releases and executions are announced and applied first, pieces leave their original squares, opposing swaps are resolved, same-player pieces merge on each planned square, then every remaining opposing stack on that square fights.<br>
-                    • <strong>Target Collision:</strong> 2+ pieces move into the same square.<br>
-                    • <strong>Swap Interception:</strong> Piece A moves to S2 while Piece B moves to S1 (crossing paths).<br>
-                    • <strong>Stationary Collision:</strong> Piece A moves into Piece B which stayed stationary.<br>
-                    Same-player candidates at a destination become one stack before fighting. All opposing stacks then fight using weighted odds: counted units provide stack strength, a side receives a 20% bonus for each counted unit it has above the strongest opposing stack, and the final strength is curved to make larger stacks more influential without removing randomness. King, Queen, Bishop morale, experience, armour, and stationary Tower bonuses are also shown on the battle cards.
-                    A defeated Queen or King fighting alone has a base capture risk of 60% or 75%, respectively, before the usual battle modifiers; prisoners do not count as escorts. Defeated casualties are <strong>captured</strong> instead of dying: the winning player chooses <strong>Prisoner</strong> or <strong>Execute</strong> for each captured unit before proceeding. Winner casualties still die. Other surviving losers retreat for 3 rounds. Every retreat adds one <strong>Routed</strong> stack to each fleeing unit (maximum 3): -20% battle strength and +25 percentage points casualty/capture risk per stack. Routed lasts for the re-entry round and the next five rounds, then expires. Merging, splitting, and transferring do not reset penalties.
-                    <br><strong>Prisoners:</strong> Keep their original artwork and color, with chains in their captor's color. They belong to the captor, move/unmerge/transfer only on odd rounds, and can merge into friendly stacks, including Towers through their gates. Prisoner-only stacks cannot attack, always lose when attacked, and all their units are captured, never routed or killed by battle. In mixed stacks they provide no battle bonuses, suffer no casualties, and follow the winner's custody. Recapturing your original units restores them to normal service. Conflicting moves between prisoner-only stacks are cancelled if neither side can fight.
-                    <br>Click a prisoner-containing piece to open its unit list, then use <strong>Execute</strong> (skull) or <strong>Release</strong> (white flag) to queue a private decision. <strong>Reset Plans</strong> cancels it. Existing prisoner releases and executions are announced in the combat log and resolved <strong>first, before movement</strong>. The remaining stack may also move that round; the scheduled prisoner cannot also unmerge or transfer. Release returns units to their original player through the 3-round re-entry system without routed penalties; if no square is free, they wait rather than die. Released units of defeated players remain stationary. Prisoners count as alive for objectives until executed. Newly captured units still receive the winner's fate choice during battle resolution.
-                </div>
-                <div class="rule-box">
-                    <h4>6. Sieges</h4>
-                    A Tower attack requires at least one attacking non-prisoner Pawn and starts a siege instead of an immediate battle; new sieges may be deployed only on odd-numbered rounds. The attacker remains on its source square as a catapult, with an assault timer of 3 rounds; when it reaches 0, it may launch at the adjacent Tower even on an even-numbered round. The besieged Tower displays a 6-round timer and crossed marks. After the Tower timer reaches 0, it loses one random non-prisoner, non-Tower unit each round. Defenders cannot move, transfer, merge, or unmerge units out of the Tower square while it is under siege. Defending non-Tower units may instead choose <strong>Sally Out</strong> if at least one can fight, including on even rounds. Defeated casualties are captured; surviving defenders return inside the Tower, and the siege continues if the catapult survives. Counterattacks exclude the Tower. Tower conquest remains automatic; non-Tower siege defenders are captured instead of forcibly killed.
-                </div>
-                <div class="rule-box">
-                    <h4>7. Objectives and Victory</h4>
-                    Your private checklist awards +4 for a target enemy's defeat, +3 for a target enemy King's death, +2 for a target enemy Queen's death, and +1 for controlling a specific enemy castle. Targets are randomly chosen at match start. Lose 4 points if your King dies and 3 for each starting castle you lose. Castle points reverse when ownership changes back; retreating units are still alive. Scores are checked after the whole round, including siege casualties and retreat re-entry. Players reaching -10 points are permanently defeated together, then enemy-defeat rewards are awarded. Reach 10 points to win; simultaneous winners share victory. Losing your King alone does not eliminate you, and being the last player does not automatically win. If everyone is defeated, the match is a draw.
+                <div class="rules-control-group" aria-label="Guide detail">
+                    <button class="rules-choice" type="button" data-rules-level="basic" aria-pressed="true">Quick guide</button>
+                    <button class="rules-choice" type="button" data-rules-level="detailed" aria-pressed="false">Detailed rules</button>
                 </div>
             </div>
-            <button id="btn-ack-rules" class="btn btn-primary">Got It!</button>
+            <div class="rules-layout">
+                <nav id="rules-chapters" class="rules-chapters" aria-label="Rules chapters"></nav>
+                <div id="rules-content" class="rules-content" tabindex="0" aria-live="polite"></div>
+            </div>
+            <div class="rules-footer">
+                <span id="rules-page-hint"></span>
+                <button id="btn-ack-rules" class="btn btn-primary" type="button">Got it</button>
+            </div>
         </div>
     </div>
 
@@ -476,6 +536,7 @@
     <script src="js/plan-renderer.js"></script>
     <script src="js/board-setup.js"></script>
     <script src="js/setup-actions.js"></script>
+    <script src="js/rules-guide.js"></script>
     <script src="js/game.js"></script>
     <script src="js/multiplayer.js"></script>
     <!--

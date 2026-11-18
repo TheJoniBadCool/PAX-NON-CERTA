@@ -34,6 +34,12 @@ class GameState {
         this.objectives = [[], [], [], []];
         this.scores = [0, 0, 0, 0];
         this.pendingCapture = null;
+        this.resourceMode = '8';
+        this.resourceBalance = 'off';
+        this.resourceCapitals = false;
+        this.provinceResources = Array(16).fill(null);
+        this.resources = createResourceStockpiles();
+        this.lastResourceProductionRound = null;
     }
 }
 

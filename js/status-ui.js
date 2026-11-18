@@ -51,6 +51,14 @@ function showPrivacyOverlay() {
 
 function updateRoundDisplay() {
     roundTagEl.innerText = `Round ${gameState.round}`;
+    const completedRounds = gameState.round - 1;
+    const cycleProgress = completedRounds % 4;
+    const clock = document.getElementById('round-clock');
+    const description = `Round clock: ${cycleProgress} of 4 rounds completed; resource production in ${4 - cycleProgress} rounds`;
+    document.getElementById('round-clock-hand').style.transform = `rotate(${completedRounds * 90}deg)`;
+    document.getElementById('round-clock-status').innerText = `${cycleProgress} / 4`;
+    clock.setAttribute('aria-label', description);
+    clock.title = description;
     renderObjectives();
 }
 
@@ -103,6 +111,13 @@ function updatePlayerCards() {
             badge.style.background = 'rgba(255,255,255,0.05)';
             badge.style.color = 'var(--text-muted)';
         }
+        const resources = document.getElementById(`resources-p${i + 1}`);
+        const visible = i === gameState.turnIndex && gameState.activePlayers[i] &&
+            (gameState.multiplayer || gameState.phase === 'PLANNING');
+        resources.classList.toggle('hidden', !visible);
+        resources.innerHTML = visible ? RESOURCE_TYPES.map(resource =>
+            `<span class="resource-stock" title="${resource.label}" aria-label="${resource.label}: ${gameState.resources[i][resource.key]}"><span aria-hidden="true">${resource.icon}</span><span>${gameState.resources[i][resource.key]}</span></span>`
+        ).join('') : '';
     }
 
     const p = PLAYERS[gameState.turnIndex];
