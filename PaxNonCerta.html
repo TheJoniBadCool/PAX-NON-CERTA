@@ -59,8 +59,7 @@
                     </div>
                 </div>
             <div class="board-wrapper">
-                <div id="board" class="chessboard"></div>
-                <div class="province-lines" role="img" aria-label="Board divided into 16 provinces"></div>
+                <div id="board" class="chessboard" aria-label="Board divided into 16 provinces"></div>
                 <svg id="plan-arrows" class="plan-arrows" viewBox="0 0 16 16" aria-hidden="true"></svg>
                 <div id="movement-animation-layer" class="movement-animation-layer"></div>
                 <svg id="battle-connector" class="battle-connector hidden" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
@@ -126,6 +125,10 @@
                     <button id="btn-cancel-siege" class="btn btn-secondary" hidden>🏹 Cancel Siege</button>
                     <button id="btn-sally-out" class="btn btn-amber" hidden>⚔️ Sally Out</button>
                     <div id="piece-tooltip-units" class="piece-tooltip-units"></div>
+                    <div class="piece-tooltip-selection">
+                        <span id="piece-tooltip-count" role="status" aria-live="polite">0 selected</span>
+                        <button id="btn-choose-destination" class="btn btn-amber" type="button" disabled>Choose destination</button>
+                    </div>
                     <button id="btn-close-piece-tooltip" class="piece-tooltip-close" type="button" aria-label="Close unit list">×</button>
                 </div>
             </div>
@@ -253,6 +256,13 @@
                             </select>
                         </label>
                     </div>
+                    <label class="mp-field" for="mp-fog-sight">Fog of war sight
+                        <select id="mp-fog-sight">
+                            <option value="small">Small</option>
+                            <option value="medium" selected>Medium (default)</option>
+                            <option value="large">Large</option>
+                        </select>
+                    </label>
                     <label class="mp-field" for="mp-resource-mode">Resources
                         <select id="mp-resource-mode">
                             <option value="8" selected>8 resources (rebel count minus four)</option>
@@ -283,8 +293,10 @@
                     </div>
                     <label class="mp-field">Starting position
                         <select id="mp-setup-mode">
-                            <option value="random">Default random corner positions</option>
+                            <option value="corner">Corner Position (default)</option>
                             <option value="custom">Custom placement</option>
+                            <option value="random">Random</option>
+                            <option value="agreement">Gentleman's Agreement</option>
                         </select>
                     </label>
                     <div id="mp-custom-options" class="hidden">
@@ -335,6 +347,13 @@
                         </select>
                     </label>
                 </div>
+                <label class="mp-field" for="fog-sight">Fog of war sight
+                    <select id="fog-sight">
+                        <option value="small">Small</option>
+                        <option value="medium" selected>Medium (default)</option>
+                        <option value="large">Large</option>
+                    </select>
+                </label>
                 <label class="mp-field" for="resource-mode">Resources
                     <select id="resource-mode">
                         <option value="8" selected>8 resources (rebel count minus four)</option>
@@ -365,8 +384,10 @@
                 </div>
                 <div class="setup-option">
                     <strong>Starting position</strong>
-                    <label><input type="radio" name="setup-mode" value="random" checked> Default random corner positions</label>
+                    <label><input type="radio" name="setup-mode" value="corner" checked> Corner Position (default)</label>
                     <label><input type="radio" name="setup-mode" value="custom"> Custom placement</label>
+                    <label><input type="radio" name="setup-mode" value="random"> Random</label>
+                    <label><input type="radio" name="setup-mode" value="agreement"> Gentleman's Agreement</label>
                 </div>
                 <div class="saved-setup-section">
                     <strong>Saved custom setups</strong>
@@ -375,6 +396,22 @@
             </div>
             <button id="btn-start-selected-game" class="btn btn-primary">Start Game</button>
             <button id="btn-selection-menu" class="btn btn-secondary">Exit to Menu</button>
+        </div>
+    </div>
+
+    <div id="starting-position-modal" class="modal-overlay hidden">
+        <div class="modal-card custom-setup-card">
+            <div class="modal-header"><h3>Gentleman's Agreement</h3></div>
+            <div class="modal-body">
+                <p>Choose an unclaimed province. Click it again to deselect, or choose another.
+                    Terrain and resources stay unchanged, including resources in chosen capitals.</p>
+                <div id="starting-position-players" class="player-selection-list"></div>
+                <div id="starting-position-board" class="map-preview-grid starting-position-grid"
+                    role="group" aria-label="Choose starting provinces"></div>
+                <div id="starting-position-status" class="mp-status" aria-live="polite"></div>
+            </div>
+            <button id="btn-confirm-starting-position" class="btn starting-position-confirm" disabled>Good luck, good Sirs!</button>
+            <button id="btn-exit-starting-position" class="btn btn-secondary">Exit / Restart</button>
         </div>
     </div>
 
@@ -535,6 +572,7 @@
     <script src="js/planning-rules.js"></script>
     <script src="js/plan-renderer.js"></script>
     <script src="js/board-setup.js"></script>
+    <script src="js/starting-position.js"></script>
     <script src="js/setup-actions.js"></script>
     <script src="js/rules-guide.js"></script>
     <script src="js/game.js"></script>

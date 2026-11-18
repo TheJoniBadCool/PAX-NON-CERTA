@@ -113,11 +113,12 @@ function generateBiomes(board, random = Math.random) {
     return biomes;
 }
 
-// Place each player's full roster in one castle in their corner province.
+// Place each player's full roster in one castle in their starting province.
 function generatePlayerPieces(playerIdx, random = Math.random, board = gameState.board,
-    boardSize = gameState.boardSize, progressionMode = gameState.progressionMode) {
-    const provinceRow = playerIdx >= 2 ? 3 : 0;
-    const provinceColumn = playerIdx === 1 || playerIdx === 2 ? 3 : 0;
+    boardSize = gameState.boardSize, progressionMode = gameState.progressionMode,
+    province = [0, 3, 15, 12][playerIdx]) {
+    const provinceRow = Math.floor(province / 4);
+    const provinceColumn = province % 4;
     const minRow = Math.floor(provinceRow * boardSize / 4);
     const maxRow = Math.floor((provinceRow + 1) * boardSize / 4);
     const minColumn = Math.floor(provinceColumn * boardSize / 4);
@@ -137,6 +138,10 @@ function generatePlayerPieces(playerIdx, random = Math.random, board = gameState
     }
 
     const [r, c] = coords[0];
+    board[r][c] = createPlayerCastle(playerIdx, random, progressionMode);
+}
+
+function createPlayerCastle(playerIdx, random, progressionMode) {
     const pieceId = `p${playerIdx + 1}_castle`;
     const pieceTypes = ['r', 'b', 'p', 'p', 'n', 'q', 'r', 'b', 'p', 'p', 'n', 'k'];
     const typeCounts = {};
@@ -152,7 +157,7 @@ function generatePlayerPieces(playerIdx, random = Math.random, board = gameState
             randomLevel(random, progressionMode)
         );
     });
-    board[r][c] = {
+    return {
         id: pieceId,
         player: playerIdx + 1,
         type: 'r',
@@ -291,15 +296,25 @@ function generateProvinceResources(board, mode, random, balance = 'off', resourc
 function createStartingBoard(activePlayers, boardSize, seed, customBoard = null,
     progressionMode = gameState.progressionMode, resourceMode = gameState.resourceMode,
     resourceBalance = gameState.resourceBalance, resourceCapitals = gameState.resourceCapitals,
-    customMap = null) {
+    customMap = null, startingPosition = 'corner') {
     resourceCapitals = resourceMode === '16' || resourceCapitals;
     const random = createSeededRandom(seed);
     const board = customBoard
         ? cloneSetupBoard(customBoard)
         : Array(boardSize).fill(null).map(() => Array(boardSize).fill(null));
     if (!customBoard) {
+        const provinces = Array.from({ length: 16 }, (_, index) => index);
+        if (startingPosition === 'random') {
+            for (let i = provinces.length - 1; i > 0; i--) {
+                const j = Math.floor(random() * (i + 1));
+                [provinces[i], provinces[j]] = [provinces[j], provinces[i]];
+            }
+        }
         for (let p = 0; p < 4; p++) {
-            if (activePlayers[p]) generatePlayerPieces(p, random, board, boardSize, progressionMode);
+            if (activePlayers[p] && startingPosition !== 'agreement') {
+                generatePlayerPieces(p, random, board, boardSize, progressionMode,
+                    startingPosition === 'random' ? provinces[p] : undefined);
+            }
         }
         generateRebelPieces(random, board, boardSize);
     }
@@ -330,7 +345,7 @@ function initBoard(customBoard = null, boardSize = gameState.boardSize, seed = n
     const starting = createStartingBoard(
         gameState.activePlayers, gameState.boardSize, gameState.mapSeed, customBoard,
         gameState.progressionMode, gameState.resourceMode, gameState.resourceBalance,
-        gameState.resourceCapitals, customMap);
+        gameState.resourceCapitals, customMap, gameState.startingPosition);
     gameState.board = starting.board;
     gameState.biomes = starting.biomes;
     gameState.provinceResources = starting.provinceResources;

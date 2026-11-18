@@ -89,7 +89,7 @@ const Multiplayer = (() => {
             starting = createStartingBoard(
                 activePlayers, m.boardSize, seed, custom ? m.setupBoard : null, progression,
                 $('mp-resource-mode').value, $('mp-resource-balance').value,
-                $('mp-resource-capitals').checked, custom ? m.setupMap : null);
+                $('mp-resource-capitals').checked, custom ? m.setupMap : null, $('mp-setup-mode').value);
         } catch (error) {
             if (!(error instanceof ResourceBalanceError)) throw error;
             invalidateLobbyMapPreview(error.message);
@@ -129,7 +129,8 @@ const Multiplayer = (() => {
     }
 
     function hideAllModals() {
-        [mainMenuModal, mpModal, gameOverModal, playerSelectionModal, customSetupModal, playerNamesModal]
+        [mainMenuModal, mpModal, gameOverModal, playerSelectionModal, customSetupModal, playerNamesModal,
+            $('starting-position-modal')]
             .forEach(modal => modal.classList.add('hidden'));
     }
 
@@ -345,6 +346,9 @@ const Multiplayer = (() => {
             renderCaptureChoices();
             renderBoard();
             syncNow();
+        } else if (message.type === 'starting-province' || message.type === 'starting-confirm') {
+            if (message.gameId !== m.gameId) return;
+            handleStartingPosition(index, message.type === 'starting-confirm', message.province);
         }
     }
 
@@ -397,6 +401,7 @@ const Multiplayer = (() => {
         if (!plan.every(entry => entry && isSquare(entry.from) && isSquare(entry.to)) ||
             !validatePrisonerPlans(index + 1, plan)) return null;
         const result = [];
+        const detachedIds = new Set();
         for (const entry of plan) {
             if (!entry || !isSquare(entry.from) || !isSquare(entry.to)) return null;
             if (Math.max(Math.abs(entry.from[0] - entry.to[0]), Math.abs(entry.from[1] - entry.to[1])) > 1) return null;
@@ -418,10 +423,20 @@ const Multiplayer = (() => {
             const clean = { ...entry };
             if (entry.isUnmerge) {
                 if (entry.sourcePieceId !== piece.id) return null;
-                const heldUnit = getPieceContents(piece).find(unit => unit.id === entry.unitId);
-                if (!heldUnit || !plannedContents.includes(heldUnit) || !canMoveHeldUnit(heldUnit, plan)) return null;
-                clean.contents = [heldUnit];
-                clean.pieceType = heldUnit.type;
+                const ids = entry.unitIds || [entry.unitId];
+                if (!Array.isArray(ids) || !ids.length || new Set(ids).size !== ids.length) return null;
+                const units = ids.map(id => getPieceContents(piece).find(unit => unit.id === id));
+                if (units.some(unit => !unit || unit.type === 'r' || !plannedContents.includes(unit) ||
+                    !canMoveHeldUnit(unit, plan) || detachedIds.has(unit.id)) ||
+                    getSiegeAtSquare(entry.from)) return null;
+                units.forEach(unit => detachedIds.add(unit.id));
+                clean.unitIds = units.map(unit => unit.id);
+                clean.contents = units;
+                clean.pieceType = getMergedPieceType(units);
+                clean.pieceId = `${piece.id}::unmerge::${clean.unitIds.join('::')}`;
+                if (entry.from[0] === entry.to[0] && entry.from[1] === entry.to[1]) return null;
+                const destination = gameState.board[entry.to[0]][entry.to[1]];
+                if (destination && destination.player !== index + 1 && isTowerPiece(destination)) return null;
             } else {
                 if (entry.pieceId !== piece.id) return null;
                 if (entry.siegeAssault) {
@@ -477,6 +492,7 @@ const Multiplayer = (() => {
             PLAYERS[index].name = entry ? cleanName(entry.name, PLAYERS[index].colorName) : PLAYERS[index].colorName;
         });
         gameState.progressionMode = document.querySelector('input[name="mp-progression"]:checked').value;
+        gameState.fogSight = $('mp-fog-sight').value;
         gameState.resourceMode = $('mp-resource-mode').value;
         gameState.resourceBalance = $('mp-resource-balance').value;
         gameState.resourceCapitals = gameState.resourceMode === '16' || $('mp-resource-capitals').checked;
@@ -485,15 +501,40 @@ const Multiplayer = (() => {
         gameState.multiplayer = true;
         gameState.committed = [false, false, false, false];
         startNewGame([0, 1, 2, 3].map(i => i < m.count),
-            custom ? m.setupBoard : null, m.boardSize, m.mapSeed, custom ? m.setupMap : null);
+            custom ? m.setupBoard : null, m.boardSize, m.mapSeed, custom ? m.setupMap : null,
+            $('mp-setup-mode').value);
         gameState.turnIndex = m.myIndex;
-        gameState.phase = 'PLANNING';
         hideAllModals();
+        renderStartingPositionSelection();
         btnGameOverRestart.classList.remove('hidden');
         updatePlayerCards();
         renderBoard();
         hintTextEl.innerText = 'Plan your moves, then press Commit Plans. The round resolves when everyone has committed.';
         syncNow();
+    }
+
+    function handleStartingPosition(index, confirming, province) {
+        if (!m.started || gameState.phase !== 'STARTING_POSITION') return;
+        const error = confirming ? confirmStartingProvince(index) : chooseStartingProvince(index, province);
+        if (error) {
+            if (index === m.myIndex) $('starting-position-status').innerText = error;
+            else send(m.slots[index]?.conn, { type: 'notice', text: error });
+            syncTo(index);
+            return;
+        }
+        if (allStartingProvincesConfirmed()) finishStartingPositionSelection();
+        else renderStartingPositionSelection();
+        syncNow();
+    }
+
+    function requestStartingProvince(province) {
+        if (isHost()) handleStartingPosition(m.myIndex, false, province);
+        else send(m.conn, { type: 'starting-province', gameId: m.gameId, province });
+    }
+
+    function requestStartingConfirmation() {
+        if (isHost()) handleStartingPosition(m.myIndex, true);
+        else send(m.conn, { type: 'starting-confirm', gameId: m.gameId });
     }
 
     function hostSetCommit(index, value, plan = null) {
@@ -587,12 +628,16 @@ const Multiplayer = (() => {
                 activePlayers: gameState.activePlayers,
                 round: gameState.round,
                 phase: gameState.phase === 'COMMITTED' ? 'PLANNING' : gameState.phase,
+                startingPosition: gameState.startingPosition,
+                startingProvinces: gameState.startingProvinces,
+                startingConfirmed: gameState.startingConfirmed,
                 sieges: gameState.sieges,
                 retreating: gameState.retreating,
                 deadPieces: gameState.deadPieces,
                 nextUnitSequence: gameState.nextUnitSequence,
                 progressionMode: gameState.progressionMode,
                 boardSize: gameState.boardSize,
+                fogSight: gameState.fogSight,
                 mapSeed: gameState.mapSeed,
                 resourceMode: gameState.resourceMode,
                 resourceBalance: gameState.resourceBalance,
@@ -817,6 +862,7 @@ const Multiplayer = (() => {
             nextUnitSequence: game.nextUnitSequence,
             progressionMode: game.progressionMode,
             boardSize: game.boardSize,
+            fogSight: game.fogSight ?? 'medium',
             mapSeed: game.mapSeed || '',
             resourceMode: game.resourceMode,
             resourceBalance: game.resourceBalance,
@@ -828,12 +874,16 @@ const Multiplayer = (() => {
             scores: game.scores,
             committed: message.committed,
             pendingCapture: game.pendingCapture || null,
+            startingPosition: game.startingPosition || 'corner',
+            startingProvinces: game.startingProvinces || [null, null, null, null],
+            startingConfirmed: game.startingConfirmed || [false, false, false, false],
             turnIndex: message.you
         });
         $('map-seed-display').innerText = `Map seed: ${gameState.mapSeed}`;
         gameState.phase = game.phase === 'PLANNING' && (message.committed[message.you] || game.eliminated[message.you])
             ? 'COMMITTED'
             : game.phase;
+        renderStartingPositionSelection();
         renderCaptureChoices();
         if (message.myPlan && !gameState.plans[message.you].length) gameState.plans[message.you] = message.myPlan;
         if (gameState.phase !== 'PLANNING') {
@@ -989,6 +1039,10 @@ const Multiplayer = (() => {
         const entry = getRosterEntry(index);
         if (!entry) return { text: 'Open', ready: false };
         if (!entry.connected) return { text: 'Disconnected', ready: false };
+        if (gameState.phase === 'STARTING_POSITION') {
+            return { text: gameState.startingConfirmed[index] ? 'Province confirmed' : 'Choosing province…',
+                ready: gameState.startingConfirmed[index] };
+        }
         if (gameState.phase === 'RESOLVING') return { text: 'Resolving', ready: false };
         if (gameState.committed[index]) return { text: 'Locked in ✔', ready: true };
         return { text: 'Planning…', ready: false };
@@ -996,6 +1050,7 @@ const Multiplayer = (() => {
 
     function describePhase() {
         const me = m.myIndex;
+        if (gameState.phase === 'STARTING_POSITION') return 'Choose your starting province and confirm the agreement.';
         if (gameState.phase === 'RESOLVING') return 'Resolving the round: move, merge, then battles.';
         if (gameState.phase === 'GAME_OVER') return 'Game over.';
         if (gameState.eliminated[me]) return 'You were eliminated. Spectating until the match ends.';
@@ -1112,6 +1167,8 @@ const Multiplayer = (() => {
         toggleCommit,
         requestArmourUpgrade,
         requestCaptureDecision,
+        requestStartingProvince,
+        requestStartingConfirmation,
         onBoardRendered,
         broadcastResolutionStart,
         beginNextRound,

@@ -59,6 +59,10 @@ class PaxRelay {
         Promise.resolve().then(() => this.handlers.open());
     }
     on(event, handler) { this.handlers[event] = handler; }
+    connect() {
+        this.connection = new FakeConnection('host-id');
+        return this.connection;
+    }
     rpc(name, args) {
         assert(name === 'pax_host_turn', 'Host must persist its plan');
         savedTurn = args;
@@ -85,6 +89,7 @@ let resolutions = 0;
 let captureRequest;
 let prisonerRequest;
 let starts = 0;
+let agreementsFinished = 0;
 const ctx = {
     document, PaxRelay,
     BOARD_SIZES: [12, 16],
@@ -106,7 +111,7 @@ const ctx = {
     mergePrompt: element(), pieceTooltip: element(), btnMergeConfirm: element(),
     btnFinishPlan: element(), btnRestart: element(), activePlayerDescEl: element(),
     hintTextEl: element(), btnStartBattle: element(), btnProceedBattle: element(),
-    startNewGame(players, board, size, seed, map) {
+    startNewGame(players, board, size, seed, map, startingPosition = 'corner') {
         starts++;
         state.activePlayers = players;
         state.board = board ? JSON.parse(JSON.stringify(board)) :
@@ -118,6 +123,10 @@ const ctx = {
         }
         state.plans = [[], [], [], []];
         state.eliminated = [false, false, true, true];
+        state.phase = startingPosition === 'agreement' ? 'STARTING_POSITION' : 'PLANNING';
+        state.startingPosition = startingPosition;
+        state.startingProvinces = [null, null, null, null];
+        state.startingConfirmed = [false, false, false, false];
     },
     updatePlayerCards() {}, renderBoard() {}, logAction() {}, showPlayerSelection() {},
     showCustomSetup(players, board, map) {
@@ -127,11 +136,17 @@ const ctx = {
             ? { seed: 'painted-map', starting: JSON.parse(JSON.stringify(map)) } : null;
         ctx.customSetupModal.classList.remove('hidden');
     },
-    isTowerGateMove: () => true, canMoveWholePiece: () => true,
+    isTowerGateMove: () => true, canMoveWholePiece: () => true, getSiegeAtSquare: () => null,
     isEliminatedPiece: piece => Boolean(state.eliminated[piece.player - 1]),
     createRandomMapSeed: () => 'test-seed',
     createStartingBoard: () => ({ board: [], biomes: [] }),
     renderMapPreview() {},
+    renderStartingPositionSelection() {},
+    finishStartingPositionSelection() {
+        assert(ctx.allStartingProvincesConfirmed(), 'All players must confirm before agreement completes');
+        agreementsFinished++;
+        state.phase = 'PLANNING';
+    },
     isPassableSquare: (r, c) => state.biomes?.[r]?.[c] !== 'mountain',
     getVisiblePiece: (r, c) => state.board[r][c],
     getPieceContents: piece => piece.contents || [{ id: 'unit', type: 'p' }],
@@ -148,12 +163,16 @@ const ctx = {
     resolveAllMoves() { resolutions++; state.phase = 'RESOLVING'; return Promise.resolve(); }
 };
 Object.assign(ctx, new Function('ctx', `with (ctx) {
+    ${readSource('js/starting-position.js')}
+    return { chooseStartingProvince, confirmStartingProvince, allStartingProvincesConfirmed };
+}`)(ctx));
+Object.assign(ctx, new Function('ctx', `with (ctx) {
     ${readSource('js/setup-utils.js')}
     return { isValidSavedSetup, cloneSetupBoard, updateCapitalResourceOption };
 }`)(ctx));
 Object.assign(ctx, new Function('ctx', `with (ctx) {
     ${readSource('js/board-utils.js')}
-    return { towersAreSpaced, getProvinceResources, getProvinceIndex };
+    return { towersAreSpaced, getProvinceResources, getProvinceIndex, isTowerPiece };
 }`)({
     REBEL_PLAYER_ID: 5,
     getPieceContents: piece => piece.contents,
@@ -163,7 +182,8 @@ Object.assign(ctx, new Function('ctx', `with (ctx) {
     ${readSource('js/prisoner-rules.js')}
     ${readSource('js/models.js')}
     ${readSource('js/movement-rules.js')}
-    return { validatePrisonerPlans, getPlannedPieceContents, isPrisoner, canMoveWholePiece, canMoveHeldUnit };
+    return { validatePrisonerPlans, getPlannedPieceContents, isPrisoner, canMoveWholePiece, canMoveHeldUnit,
+        getMergedPieceType };
 }`)(ctx));
 
 async function run() {
@@ -173,6 +193,7 @@ async function run() {
     document.getElementById('mp-resource-mode').value = '12';
     document.getElementById('mp-resource-balance').value = 'require-all';
     document.getElementById('mp-resource-capitals').checked = true;
+    document.getElementById('mp-fog-sight').value = 'large';
     document.getElementById('btn-mp-create').handlers.click();
     await Promise.resolve();
 
@@ -310,6 +331,8 @@ async function run() {
         'The host-selected balance must be used and synchronized');
     assert(state.resourceCapitals === true && sync.game.resourceCapitals === true,
         'Capital eligibility must be used and synchronized');
+    assert(state.fogSight === 'large' && sync.game.fogSight === 'large',
+        'The host-selected fog sight must be used and synchronized to guests');
     assert(sync.game.provinceResources === state.provinceResources &&
         sync.game.lastResourceProductionRound === state.lastResourceProductionRound &&
         sync.game.provinceResources[0][0].productionChance === 75 &&
@@ -367,6 +390,28 @@ async function run() {
     commitPlan([decision, { ...guestPlan[0], isUnmerge: true,
         unitId: prisoner.id, sourcePieceId: 'guest-piece' }]);
     assert(!state.committed[1], 'Prisoners cannot both leave custody and transfer');
+    const groupPlan = { ...guestPlan[0], isUnmerge: true, sourcePieceId: 'guest-piece',
+        unitIds: ['unit', prisoner.id], contents: [{ id: 'forged' }], pieceType: 'r' };
+    commitPlan([groupPlan]);
+    assert(!state.committed[1], 'Grouped resting prisoners must be rejected');
+    commitPlan([{ ...groupPlan, unitIds: ['unit', 'unit'] }]);
+    assert(!state.committed[1], 'Duplicate members within a group must be rejected');
+    commitPlan([{ ...groupPlan, unitIds: ['unit', 'missing'] }]);
+    assert(!state.committed[1], 'Unknown group members must be rejected');
+    commitPlan([decision, groupPlan]);
+    assert(!state.committed[1], 'Grouped prisoners cannot also receive custody decisions');
+    const secondFighter = { id: 'second-fighter', player: 2, type: 'b' };
+    guestPiece.contents.push(secondFighter);
+    const mobileGroup = { ...groupPlan, unitIds: ['unit', 'second-fighter'] };
+    commitPlan([mobileGroup, { ...mobileGroup, unitIds: ['unit'], to: [1, 0] }]);
+    assert(!state.committed[1], 'The same unit cannot appear in two groups');
+    commitPlan([mobileGroup]);
+    assert(state.committed[1] && state.plans[1].length === 1, 'Non-pawn groups can move on even rounds');
+    assert(state.plans[1][0].contents.length === 2 && state.plans[1][0].pieceType === 'n' &&
+        state.plans[1][0].contents[1] === secondFighter,
+        'Host must reconstruct group members and display type from authoritative units');
+    guest.emit('data', { type: 'unlock', gameId: 1, round: 2 });
+    guestPiece.contents.pop();
     commitPlan([guestPlan[0], decision]);
     assert(state.committed[1] && state.plans[1].length === 2,
         'Movement and a prisoner decision must be accepted regardless of plan order');
@@ -403,7 +448,73 @@ async function run() {
     document.getElementById('btn-mp-generate-map').handlers.click();
     document.getElementById('btn-mp-start').handlers.click();
     assert(starts === 2 && state.board[4][0] === null,
-        'Default random mode must not reuse a previously confirmed custom board');
+        'Random mode must not reuse a previously confirmed custom board');
+    assert(state.startingPosition === 'random', 'Random mode must reach board initialization');
+    state.phase = 'GAME_OVER';
+    multiplayer.onNewGameRequested();
+    setupMode.value = 'agreement';
+    setupMode.handlers.change();
+    assert(document.getElementById('btn-mp-start').disabled, 'Changing starting mode invalidates the preview');
+    document.getElementById('btn-mp-generate-map').handlers.click();
+    document.getElementById('btn-mp-start').handlers.click();
+    assert(starts === 3 && state.phase === 'STARTING_POSITION',
+        'Agreement must not enter normal planning when the match starts');
+    guest.emit('data', { type: 'starting-confirm', gameId: 3 });
+    assert(!state.startingConfirmed[1], 'Guest cannot confirm before selecting');
+    guest.emit('data', { type: 'starting-province', gameId: 2, province: 5 });
+    assert(state.startingProvinces[1] === null, 'Stale match selections must be rejected');
+    multiplayer.requestStartingProvince(5);
+    guest.emit('data', { type: 'starting-province', gameId: 3, province: 5 });
+    assert(state.startingProvinces[1] === null, 'A simultaneous duplicate claim must be rejected by the host');
+    multiplayer.requestStartingProvince(null);
+    guest.emit('data', { type: 'starting-province', gameId: 3, province: 5, player: 1 });
+    assert(state.startingProvinces[1] === 5 && state.startingProvinces[0] === null,
+        'Province authority must use the authenticated guest slot');
+    guest.emit('data', { type: 'starting-province', gameId: 3, province: null });
+    assert(state.startingProvinces[1] === null, 'Guests can deselect before confirmation');
+    guest.emit('data', { type: 'starting-province', gameId: 3, province: 5 });
+    guest.emit('data', { type: 'starting-confirm', gameId: 3 });
+    assert(state.startingConfirmed[1] && agreementsFinished === 0,
+        'One confirmation must wait for the other players');
+    guest.emit('data', { type: 'starting-province', gameId: 3, province: 6 });
+    assert(state.startingProvinces[1] === 5, 'Confirmed guests cannot change provinces');
+    guest.emit('data', { type: 'commit', gameId: 3, round: 1, plan: [] });
+    assert(!state.committed[1], 'Normal planning is unavailable during province selection');
+    guest.close();
+    guest.open = true;
+    relay.handlers.connection(guest);
+    guest.emit('data', { type: 'join', name: 'Guest' });
+    const agreementSync = JSON.parse(JSON.stringify(guest.sent.filter(message => message.type === 'sync').pop()));
+    assert(agreementSync.game.phase === 'STARTING_POSITION' &&
+        agreementSync.game.startingProvinces[1] === 5 && agreementSync.game.startingConfirmed[1],
+        'Rejoining guests must recover their province and confirmation');
+    multiplayer.requestStartingProvince(6);
+    multiplayer.requestStartingConfirmation();
+    assert(agreementsFinished === 1 && state.phase === 'PLANNING',
+        'The final confirmation begins play exactly once');
+    guest.emit('data', { type: 'starting-confirm', gameId: 3 });
+    assert(agreementsFinished === 1, 'Duplicate confirmations must not restart play');
+    document.getElementById('mp-code').value = 'ABCDE';
+    document.getElementById('btn-mp-join').handlers.click();
+    await Promise.resolve();
+    state.fogSight = 'small';
+    relay.connection.emit('data', sync);
+    assert(state.fogSight === 'large', 'A guest must restore the host-selected fog sight from a snapshot');
+    const oldSnapshot = { ...sync, game: { ...sync.game } };
+    delete oldSnapshot.game.fogSight;
+    relay.connection.emit('data', oldSnapshot);
+    assert(state.fogSight === 'medium', 'Older snapshots must retain the original Medium sight rules');
+    relay.connection.emit('data', sync);
+    assert(state.fogSight === 'large', 'Reconnecting guests must restore the host-selected fog sight');
+    relay.connection.emit('data', agreementSync);
+    assert(state.phase === 'STARTING_POSITION' && state.startingConfirmed[1] &&
+        state.startingProvinces[1] === 5, 'Clients must restore authoritative agreement state');
+    multiplayer.requestStartingProvince(null);
+    multiplayer.requestStartingConfirmation();
+    const requests = relay.connection.sent.slice(-2);
+    assert(requests[0].type === 'starting-province' && requests[0].province === null &&
+        requests[1].type === 'starting-confirm' && requests.every(message => message.gameId === 3),
+        'Client selection and confirmation requests must carry the current match identity');
     print('Multiplayer turn checks passed');
 }
 

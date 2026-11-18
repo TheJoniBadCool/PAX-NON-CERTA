@@ -14,19 +14,34 @@ chess rules.
 - At game start, the host/player chooses a 12x12 or 16x16 board.
 - A new game starts with a player-selection modal.
 - At least two of four players must be selected.
-- Players are fixed to board corners:
-  - Red / Player 1: top-left 4x4 zone.
-  - Blue / Player 2: top-right 4x4 zone.
-  - Green / Player 3: bottom-right 4x4 zone.
-  - Yellow / Player 4: bottom-left 4x4 zone.
-- Each selected player receives two randomly placed castle stacks in their 4x4
-  zone, spaced at least two squares apart in every direction:
-  - One Tower, Bishop, two Pawns, Horse, and Queen in one castle.
-  - One Tower, Bishop, two Pawns, Horse, and King in the other.
-- Each castle occupies one board cell and holds six units, for 12 units total
-  per selected player.
+- **Corner Position** is the default: Red starts top-left, Blue top-right,
+  Green bottom-right, and Yellow bottom-left. Each corner province is 3x3 on
+  a 12x12 board or 4x4 on a 16x16 board.
+- Each selected player receives one castle stack holding their full 12-unit
+  roster: two Towers, two Bishops, four Pawns, two Horses, a Queen, and a King.
 - Unselected players have no pieces and are marked eliminated from the start.
-- Setup can use either the default random corner positions or custom placement.
+- Starting-position options in Hotseat and the Multiplayer lobby are **Corner
+  Position**, **Custom placement**, **Random**, and **Gentleman's Agreement**.
+- Random assigns each active player a distinct province anywhere on the map;
+  the seed reproduces provinces, armies, gates, terrain, and resources.
+- Gentleman's Agreement generates an initially all-rebel map. After Start Game,
+  players select/deselect unclaimed provinces on the complete, unfogged map.
+  Online, each player selects only their own province and locks it with the green
+  **Good luck, good Sirs!** button; play starts after all active players confirm.
+  The host serializes competing claims and rejects duplicate, stale, invalid,
+  or locked changes. Rejoining restores the selection and confirmation state;
+  disconnected players are not automatically assigned or skipped.
+- In Hotseat agreement, one person switches between active players, assigns
+  distinct provinces to everyone, then confirms once for all players.
+- Agreement replaces each chosen province's rebel garrison with the normal
+  player roster in its existing castle and removes its outside rebel Pawn.
+  Castle squares, gates, terrain, resources, and unchosen rebels stay unchanged.
+  Resources are generated while all 16 provinces are rebel-owned (12 sites in
+  the default resource mode, 16 in the other modes); choosing a resource province
+  keeps its resource even when capital resources were disabled. This is disclosed
+  in the selection screen. Objectives are initialized for the final armies.
+- Normal planning is blocked until agreement completes. Starting a new match
+  clears all selections and confirmations; changing mode invalidates previews.
 - Custom placement is performed by one player before the game starts:
   - The user selects a player and piece type, then clicks or taps board squares to place pieces.
   - Sandbox piece types and quantities are unrestricted, including multiple or no Kings, Queens, or Towers; rebels may also be placed.
@@ -121,13 +136,18 @@ chess rules.
 
 ### Fog of war
 
-- Each player sees their owned provinces and all eight neighboring provinces,
-  including diagonally touching ones. Sight does not chain through neighbors.
-  Ownership uses the same castle-based rules as province coloring; empty,
-  rebel, and contested provinces grant no ownership sight.
-- Every friendly piece reveals its square and the eight surrounding squares.
-  A stack containing a non-prisoner Bishop instead reveals all squares within
-  two steps in any direction (a 5x5 area), clipped at the board edge.
+- Fog sight is selected before the match in Hotseat or by the Multiplayer host;
+  Medium is the default, and snapshots and reconnects carry the selection.
+- Medium and Large reveal owned provinces and all eight neighboring provinces,
+  including diagonally touching ones. Small reveals owned provinces and only
+  squares up to two steps from them in any direction, including diagonals.
+  Sight does not chain through neighbors. Ownership uses the same castle-based
+  rules as province coloring; empty, rebel, and contested provinces grant no
+  ownership sight.
+- On Small and Medium, every friendly piece reveals its square and the eight
+  surrounding squares; a stack with a non-prisoner Bishop reveals a 5x5 area.
+  On Large these areas become 5x5 and 7x7, respectively. All sight is clipped
+  at the board edge.
 - Fog hides enemy and rebel troops, but terrain, province ownership, Towers,
   and Tower gates remain visible. A concealed castle exposes only its Tower
   units, not its garrison, garrison count, prisoners, or recovery badges.
@@ -180,8 +200,11 @@ chess rules.
 - Clicking or tapping an adjacent valid destination performs the selected move,
   merge, transfer, or unmerge action, taking priority over selecting that piece.
 - Right-clicking a friendly piece opens its unit list without queuing an action.
-  On touchscreens, holding a piece for 500 ms opens the same popup. Selecting a
-  movable unit from the list changes the selection to that unit.
+  On touchscreens, holding a piece for 500 ms opens the same popup. Clicking
+  movable units toggles their selection, with highlights and a selected count.
+  **Choose destination** closes the popup and selects that group for one order.
+  Clicking outside, closing the popup, or pressing Escape dismisses it without
+  issuing an order or retaining an unconfirmed selection.
 - Long presses must not also trigger a tap action; dragging, scrolling, or
   cancelling the pointer cancels the pending long press.
 - Custom setup uses click or tap for placement; right-click does not place pieces.
@@ -296,14 +319,18 @@ chess rules.
 
 ### Unmerge and held-piece transfer
 
-- Right-clicking a friendly stack exposes its held pieces individually.
-- A held Tower cannot be unmerged or transferred.
-- A movable held piece can be selected and sent to an adjacent square.
-- A selected held piece can be transferred into an adjacent friendly stack after
-  confirmation.
-- Unmerge and transfer plans are resolved as separate movement intents.
-- The selected held unit is removed from its source stack before destinations
-  resolve.
+- Right-clicking or long-pressing a friendly stack exposes its held pieces.
+- Toggle one or more units, press **Choose destination**, then click an adjacent
+  square to move, transfer, or attack with that group. Unselected units remain.
+- Towers, resting Pawns/prisoners, units with existing split/prisoner orders, and
+  garrisons under siege cannot be selected; disabled buttons explain why.
+- A selected group can be transferred into an adjacent friendly stack after
+  one confirmation. Gate, terrain, and prisoner targeting rules still apply.
+- Each selected group is one movement intent and one combat participant,
+  including during opposing swaps; it is not split into individual attacks.
+- Selected units are removed atomically from their source before destinations
+  resolve. Empty sources disappear; remaining stacks retain their units.
+- Split groups cannot initiate Tower attacks; use a whole Pawn-containing stack.
 - If an unmerge destination is contested, it participates in collision handling.
 
 ### Simultaneous resolution

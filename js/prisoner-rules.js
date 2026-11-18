@@ -73,7 +73,7 @@ function managePrisoner(player, unitId, action) {
             const unit = contents.find(entry => entry.id === unitId && entry.prisonerOf === player);
             if (!unit) continue;
             const plans = gameState.plans[player - 1];
-            if (plans.some(move => move.isUnmerge && move.unitId === unitId)) return false;
+            if (plans.some(move => move.isUnmerge && (move.unitIds || [move.unitId]).includes(unitId))) return false;
             gameState.plans[player - 1] = plans.filter(move =>
                 !(move.prisonerAction && move.unitId === unitId));
             gameState.plans[player - 1].push({
@@ -94,7 +94,8 @@ function validatePrisonerPlans(player, plans) {
         const piece = gameState.board[plan.from[0]][plan.from[1]];
         const unit = piece && getPieceContents(piece).find(unit => unit.id === plan.unitId);
         if (!piece || piece.id !== plan.pieceId || piece.player !== player ||
-            !unit || unit.prisonerOf !== player || plans.some(move => move.isUnmerge && move.unitId === unit.id)) return false;
+            !unit || unit.prisonerOf !== player || plans.some(move =>
+                move.isUnmerge && (move.unitIds || [move.unitId]).includes(unit.id))) return false;
         ids.add(unit.id);
         return true;
     });

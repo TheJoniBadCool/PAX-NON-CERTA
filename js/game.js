@@ -49,8 +49,28 @@
         const btnMergeCancel = document.getElementById('btn-merge-cancel');
         const pieceTooltip = document.getElementById('piece-tooltip');
         const pieceTooltipUnits = document.getElementById('piece-tooltip-units');
-        document.getElementById('btn-close-piece-tooltip').addEventListener('click', () => {
+        const pieceTooltipCount = document.getElementById('piece-tooltip-count');
+        const btnChooseDestination = document.getElementById('btn-choose-destination');
+        function dismissPieceTooltip() {
             pieceTooltip.classList.add('hidden');
+            gameState.selectedHeldPiece = null;
+            gameState.selectedSquare = null;
+            gameState.validMoves = [];
+            hintTextEl.innerText = 'Unit selection cancelled. Select a piece to plan another order.';
+            renderBoard();
+        }
+        document.getElementById('btn-close-piece-tooltip').addEventListener('click', dismissPieceTooltip);
+        window.addEventListener('click', event => {
+            if (pieceTooltip.classList.contains('hidden') || pieceTooltip.contains(event.target) ||
+                boardEl.contains(event.target)) return;
+            event.stopImmediatePropagation();
+            event.preventDefault();
+            dismissPieceTooltip();
+        }, true);
+        window.addEventListener('keydown', event => {
+            if (event.key === 'Escape' && !pieceTooltip.classList.contains('hidden')) {
+                dismissPieceTooltip();
+            }
         });
         const battleLogEl = document.getElementById('battle-log');
         const combatLogPanel = document.getElementById('combat-log-panel');
@@ -260,13 +280,18 @@
             }
         }
 
-        function startNewGame(selectedPlayers, customBoard = null, boardSize = gameState.boardSize, seed = null, customMap = null) {
+        function startNewGame(selectedPlayers, customBoard = null, boardSize = gameState.boardSize, seed = null,
+            customMap = null, startingPosition = 'corner') {
             gameState.activePlayers = selectedPlayers;
+            gameState.startingPosition = customBoard ? 'custom' : startingPosition;
+            gameState.startingProvinces = [null, null, null, null];
+            gameState.startingConfirmed = [false, false, false, false];
             btnEditNames.classList.remove('hidden');
             initBoard(customBoard, boardSize, seed, customMap);
             gameState.turnIndex = gameState.activePlayers.findIndex(isSelected => isSelected);
+            startingPositionPlayer = gameState.turnIndex;
             gameState.round = 1;
-            gameState.phase = 'PLANNING';
+            gameState.phase = gameState.startingPosition === 'agreement' ? 'STARTING_POSITION' : 'PLANNING';
             gameState.plans = [[], [], [], []];
             gameState.selectedSquare = null;
             gameState.validMoves = [];
@@ -280,7 +305,12 @@
             gameState.pendingCapture = null;
             renderCaptureChoices();
             gameState.nextUnitSequence = [1, 1, 1, 1];
-            initializeObjectives();
+            if (gameState.phase === 'STARTING_POSITION') {
+                gameState.objectives = [[], [], [], []];
+                gameState.scores = [0, 0, 0, 0];
+            } else {
+                initializeObjectives();
+            }
             btnMergeConfirm.innerText = 'Merge';
 
             battleLogEl.innerHTML = `
@@ -301,6 +331,7 @@
 
             updatePlayerCards();
             renderBoard();
+            renderStartingPositionSelection();
         }
 
         function showCustomSetup(selectedPlayers, setupBoard = null, setupMap = null) {
@@ -314,6 +345,7 @@
             document.querySelectorAll('.custom-piece-option').forEach(button =>
                 button.classList.toggle('selected', button.dataset.pieceType === 'p'));
             const multiplayerSetup = Multiplayer.isEditingSetup();
+            if (!multiplayerSetup) gameState.fogSight = document.getElementById('fog-sight').value;
             gameState.resourceMode = document.getElementById(
                 multiplayerSetup ? 'mp-resource-mode' : 'resource-mode').value;
             gameState.resourceBalance = document.getElementById(
@@ -483,6 +515,7 @@
                 resources: document.getElementById('resource-mode').value,
                 resourceBalance: document.getElementById('resource-balance').value,
                 resourceCapitals: document.getElementById('resource-capitals').checked,
+                startingPosition: document.querySelector('input[name="setup-mode"]:checked').value,
                 seed
             });
         }
@@ -513,7 +546,8 @@
                 starting = createStartingBoard(players, size, seed, null, progression,
                     document.getElementById('resource-mode').value,
                     document.getElementById('resource-balance').value,
-                    document.getElementById('resource-capitals').checked);
+                    document.getElementById('resource-capitals').checked, null,
+                    document.querySelector('input[name="setup-mode"]:checked').value);
             } catch (error) {
                 if (!(error instanceof ResourceBalanceError)) throw error;
                 hotseatMapPreview = null;
@@ -587,6 +621,11 @@
 
             const pendingIndices = getPendingHeldIndices(piece, gameState.plans[gameState.turnIndex]);
             const contents = getPieceContents(piece);
+            const selectedIds = new Set();
+            gameState.selectedHeldPiece = null;
+            gameState.validMoves = [];
+            pieceTooltipCount.innerText = '0 selected';
+            btnChooseDestination.disabled = true;
             const siege = getSiegeAtSquare([r, c]);
             btnCancelSiege.hidden = !getSiegeForAttacker(piece.id);
             btnSallyOut.hidden = !(siege && contents.some(unit => !isPrisoner(unit) && getUnitType(unit) !== 'r'));
@@ -600,49 +639,60 @@
                     ${isPrisoner(unit) ? `<button class="prisoner-action-button" data-prisoner-index="${index}" data-action="execute" title="Plan execution of ${escapeHtml(getUnitName(unit))}" aria-label="Execute ${escapeHtml(getUnitName(unit))}">${PRISONER_EXECUTE_SVG}</button><button class="prisoner-action-button" data-prisoner-index="${index}" data-action="release" title="Plan release of ${escapeHtml(getUnitName(unit))}" aria-label="Release ${escapeHtml(getUnitName(unit))}">${PRISONER_RELEASE_SVG}</button>` : ''}
                 </span>`)
                 .join('');
-            if (isPawnRestTurn()) {
-                pieceTooltip.querySelectorAll('.held-piece-button').forEach((button, index) => {
-                    if (!canMoveHeldUnit(contents[index])) {
-                        button.disabled = true;
-                        button.title = `${getUnitName(contents[index])}: Pawns and prisoners cannot move on even-numbered rounds`;
-                    }
-                });
-            }
+            pieceTooltip.querySelectorAll('.held-piece-button').forEach((button, index) => {
+                const reason = getHeldSelectionUnavailableReason(piece, contents[index], [r, c]);
+                button.disabled = Boolean(reason);
+                button.classList.toggle('disabled', Boolean(reason));
+                button.setAttribute('aria-pressed', 'false');
+                button.title = `${getUnitName(contents[index])}: ${reason || 'Select or deselect unit'}`;
+            });
+            btnChooseDestination.onclick = () => {
+                if (!canEditPlans() || !selectedIds.size) return;
+                const units = contents.filter(unit => selectedIds.has(unit.id));
+                if (units.some(unit => getHeldSelectionUnavailableReason(piece, unit, [r, c]))) {
+                    dismissPieceTooltip();
+                    hintTextEl.innerText = 'Selection is no longer available. Reopen the unit list.';
+                    return;
+                }
+                gameState.selectedHeldPiece = {
+                    from: [r, c], sourceId: piece.id, unitIds: units.map(unit => unit.id)
+                };
+                gameState.selectedSquare = [r, c];
+                gameState.validMoves = getAdjacentMoves(r, c)
+                    .filter(destination => isPassableSquare(...destination) &&
+                        isTowerGateMove([r, c], destination) &&
+                        canUnitsTarget(units, getVisiblePiece(...destination, piece.player), piece.player))
+                    .filter(destination => {
+                        const target = getVisiblePiece(...destination, piece.player);
+                        return !target || target.player === piece.player || !isTowerPiece(target);
+                    });
+                pieceTooltip.classList.add('hidden');
+                hintTextEl.innerText = `${units.length} unit(s) selected. Choose an adjacent square to move, transfer, or attack as a group.`;
+                renderBoard();
+            };
+            renderBoard();
+            const anchor = boardEl.children[r * gameState.boardSize + c] || square;
             pieceTooltip.classList.remove('hidden');
-            pieceTooltip.style.left = `${Math.max(8, Math.min(square.offsetLeft + square.offsetWidth, boardEl.clientWidth - pieceTooltip.offsetWidth - 8))}px`;
-            const above = square.offsetTop - pieceTooltip.offsetHeight - 4;
-            pieceTooltip.style.top = `${above >= 8 ? above : Math.min(square.offsetTop + square.offsetHeight + 4, boardEl.clientHeight - pieceTooltip.offsetHeight - 8)}px`;
+            pieceTooltip.style.left = `${Math.max(8, Math.min(anchor.offsetLeft + anchor.offsetWidth, boardEl.clientWidth - pieceTooltip.offsetWidth - 8))}px`;
+            const above = anchor.offsetTop - pieceTooltip.offsetHeight - 4;
+            pieceTooltip.style.top = `${above >= 8 ? above : Math.min(anchor.offsetTop + anchor.offsetHeight + 4, boardEl.clientHeight - pieceTooltip.offsetHeight - 8)}px`;
 
             pieceTooltip.querySelectorAll('.held-piece-button').forEach(button => {
                 button.addEventListener('click', (event) => {
                     event.stopPropagation();
                     if (!canEditPlans()) return;
-                    const heldIndex = Number(button.dataset.heldIndex);
-                    const heldUnit = getPieceContents(piece)[heldIndex];
-                    if (heldUnit.type === 'r' || !canMoveHeldUnit(heldUnit)) {
-                        hintTextEl.innerText = heldUnit.type === 'r'
-                            ? "Towers are unmovable and cannot be unmerged or transferred."
-                            : gameState.plans[gameState.turnIndex].some(plan => plan.prisonerAction && plan.unitId === heldUnit.id)
-                            ? "This prisoner is scheduled for release or execution. Reset Plans before moving it."
-                            : "Pawns and prisoners cannot be moved, unmerged, or transferred on even-numbered rounds.";
+                    const heldUnit = contents[Number(button.dataset.heldIndex)];
+                    const reason = getHeldSelectionUnavailableReason(piece, heldUnit, [r, c]);
+                    if (reason) {
+                        hintTextEl.innerText = reason;
                         return;
                     }
-                    gameState.selectedHeldPiece = {
-                        from: [r, c],
-                        heldIndex,
-                        type: heldUnit.type,
-                        unitId: heldUnit.id,
-                        name: heldUnit.name,
-                        sourceId: piece.id
-                    };
-                    pieceTooltip.classList.add('hidden');
-                    gameState.selectedSquare = [r, c];
-                    gameState.validMoves = getAdjacentMoves(r, c)
-                        .filter(destination => isPassableSquare(...destination) &&
-                            isTowerGateMove([r, c], destination) &&
-                            canUnitsTarget([heldUnit], getVisiblePiece(...destination, piece.player), piece.player));
-                    hintTextEl.innerText = `Selected a held ${getPieceLabel(gameState.selectedHeldPiece.type)}. Pick an adjacent square or your piece to transfer it.`;
-                    renderBoard();
+                    if (selectedIds.has(heldUnit.id)) selectedIds.delete(heldUnit.id);
+                    else selectedIds.add(heldUnit.id);
+                    button.classList.toggle('selected', selectedIds.has(heldUnit.id));
+                    button.setAttribute('aria-pressed', String(selectedIds.has(heldUnit.id)));
+                    pieceTooltipCount.innerText = `${selectedIds.size} selected`;
+                    btnChooseDestination.disabled = !selectedIds.size;
                 });
             });
             pieceTooltip.querySelectorAll('.prisoner-action-button').forEach(button => {
@@ -675,7 +725,6 @@
                     unit.armour = getUnitLevel(unit, 'armour') + 1;
                     logAction(`🛡️ <b>${getUnitName(unit)}</b> armour upgraded to ${unit.armour}.`);
                     showPieceTooltip(r, c, square);
-                    renderBoard();
                 });
             });
         }
@@ -721,31 +770,17 @@
         };
 
         function queueUnmergePlan(sourcePiece, heldPiece, destination, targetPiece) {
-            const currentPlans = gameState.plans[gameState.turnIndex];
-            const alreadyPlanned = currentPlans.some(move =>
-                move.isUnmerge &&
-                move.sourcePieceId === sourcePiece.id &&
-                move.heldIndex === heldPiece.heldIndex
-            );
-            if (alreadyPlanned) return;
-
-            gameState.plans[gameState.turnIndex].push({
-                pieceId: `${sourcePiece.id}::unmerge::${heldPiece.heldIndex}`,
-                from: heldPiece.from,
-                to: destination,
-                pieceType: heldPiece.type,
-                unitId: heldPiece.unitId,
-                contents: [{ ...getPieceContents(sourcePiece)[heldPiece.heldIndex] }],
-                isUnmerge: true,
-                sourcePieceId: sourcePiece.id,
-                heldIndex: heldPiece.heldIndex,
-                transfer: Boolean(targetPiece),
-                mergeWithPieceId: targetPiece ? targetPiece.id : null
-            });
+            const queued = queueHeldGroupPlan(sourcePiece, heldPiece, destination, targetPiece);
+            if (!queued) hintTextEl.innerText = 'Group order rejected: one or more selected units are unavailable.';
+            return queued;
         }
 
         function handleSquareClick(r, c) {
             if (!canEditPlans()) return;
+            if (!pieceTooltip.classList.contains('hidden')) {
+                dismissPieceTooltip();
+                return;
+            }
             pieceTooltip.classList.add('hidden');
             if (gameState.selectedSquare && gameState.validMoves.some(m => m[0] === r && m[1] === c)) {
                 handleSquareAction(r, c);
@@ -821,10 +856,9 @@
                     renderBoard();
                     return;
                 }
-                const heldUnit = getPieceContents(sourcePiece).find(unit =>
-                    unit.id === gameState.selectedHeldPiece.unitId);
-                if (!heldUnit || !canMoveHeldUnit(heldUnit)) {
-                    hintTextEl.innerText = "Pawns and prisoners cannot be moved, unmerged, or transferred on even-numbered rounds.";
+                const heldUnits = getHeldGroupUnits(sourcePiece, gameState.selectedHeldPiece);
+                if (!heldUnits.length || heldUnits.some(unit => !canMoveHeldUnit(unit))) {
+                    hintTextEl.innerText = "One or more selected units are unavailable or resting this round.";
                     return;
                 }
                 if (getSiegeAtSquare(gameState.selectedHeldPiece.from)) {
@@ -845,18 +879,18 @@
                     gameState.selectedHeldPiece = null;
                     gameState.selectedSquare = null;
                     gameState.validMoves = [];
-                    mergePromptText.innerText = `Transfer this ${getPieceLabel(gameState.pendingTransfer.heldPiece.type)} into the selected piece?`;
+                    mergePromptText.innerText = `Transfer ${heldUnits.length} selected unit(s) into the selected piece?`;
                     btnMergeConfirm.innerText = 'Transfer';
                     mergePrompt.classList.remove('hidden');
                     renderBoard();
                     return;
                 }
 
-                queueUnmergePlan(sourcePiece, gameState.selectedHeldPiece, [r, c], null);
+                if (!queueUnmergePlan(sourcePiece, gameState.selectedHeldPiece, [r, c], null)) return;
                 gameState.selectedHeldPiece = null;
                 gameState.selectedSquare = null;
                 gameState.validMoves = [];
-                hintTextEl.innerText = "Unmerge move queued.";
+                hintTextEl.innerText = "Group move queued.";
                 renderBoard();
                 return;
             }
@@ -988,16 +1022,16 @@
             if (!canEditPlans()) return;
             if (gameState.pendingTransfer) {
                 const { sourcePiece, heldPiece } = gameState.pendingTransfer;
-                const unit = getPieceContents(sourcePiece).find(candidate => candidate.id === heldPiece.unitId);
-                if (!unit || !canMoveHeldUnit(unit)) {
-                    hintTextEl.innerText = "Pawns and prisoners cannot be moved, unmerged, or transferred on even-numbered rounds.";
+                const units = getHeldGroupUnits(sourcePiece, heldPiece);
+                if (!units.length || units.some(unit => !canMoveHeldUnit(unit))) {
+                    hintTextEl.innerText = "One or more selected units are unavailable or resting this round.";
                     gameState.pendingTransfer = null;
                     mergePrompt.classList.add('hidden');
                     btnMergeConfirm.innerText = 'Merge';
                     renderBoard();
                     return;
                 }
-                queueUnmergePlan(
+                const queued = queueUnmergePlan(
                     gameState.pendingTransfer.sourcePiece,
                     gameState.pendingTransfer.heldPiece,
                     gameState.pendingTransfer.destination,
@@ -1006,7 +1040,7 @@
                 gameState.pendingTransfer = null;
                 btnMergeConfirm.innerText = 'Merge';
                 mergePrompt.classList.add('hidden');
-                hintTextEl.innerText = "Transfer queued.";
+                if (queued) hintTextEl.innerText = "Group transfer queued.";
                 renderBoard();
                 return;
             }
@@ -1142,6 +1176,7 @@
                         sourcePieceId: m.sourcePieceId,
                         heldIndex: m.heldIndex,
                         unitId: m.unitId,
+                        unitIds: m.unitIds,
                         transfer: m.transfer,
                         siegeAssault: m.siegeAssault,
                         siegeId: m.siegeId,
@@ -1154,16 +1189,9 @@
             rejectInvalidTowerAttacks(allIntendedMoves);
             rejectPrisonerMoveConflicts(allIntendedMoves);
 
-            // Remove the selected held unit from its source stack before
+            // Remove each selected group atomically from its source stack before
             // resolving its destination.
-            const unmergeMoves = allIntendedMoves
-                .filter(item => item.isUnmerge)
-                .sort((a, b) => {
-                    if (a.sourcePieceId !== b.sourcePieceId) {
-                        return a.sourcePieceId.localeCompare(b.sourcePieceId);
-                    }
-                    return b.heldIndex - a.heldIndex;
-                });
+            const unmergeMoves = allIntendedMoves.filter(item => item.isUnmerge);
 
             for (const move of unmergeMoves) {
                 if (move.invalid) continue;
@@ -1173,29 +1201,23 @@
                     continue;
                 }
 
-                const sourceContents = getPieceContents(source).slice();
-                const heldIndex = sourceContents.findIndex(unit => unit.id === move.unitId);
-                if (heldIndex === -1) {
-                    move.invalid = true;
-                    continue;
-                }
-                const [heldUnit] = sourceContents.splice(heldIndex, 1);
                 const target = gameState.board[move.to[0]][move.to[1]];
                 if (target && target.player !== move.player && isTowerPiece(target)) {
                     move.invalid = true;
                     continue;
                 }
-                move.pieceType = heldUnit.type;
-                move.contents = [{ ...heldUnit, player: move.player }];
+                if (!detachHeldGroup(move, source)) {
+                    move.invalid = true;
+                    logAction(`Player ${move.player}'s group move cancelled: selected units are unavailable.`);
+                    continue;
+                }
 
-                if (sourceContents.length === 0) {
+                if (source.contents.length === 0) {
                     gameState.board[move.from[0]][move.from[1]] = null;
                     allIntendedMoves
                         .filter(other => !other.isUnmerge && other.pieceId === source.id)
                         .forEach(other => { other.invalid = true; });
                 } else {
-                    source.contents = sourceContents;
-                    source.type = getMergedPieceType(sourceContents);
                     allIntendedMoves
                         .filter(other => !other.isUnmerge && other.pieceId === source.id)
                         .forEach(other => {
@@ -1950,6 +1972,7 @@
                 PLAYERS[index].name = cleanPlayerName(input.value, index);
             });
             gameState.progressionMode = document.querySelector('input[name="progression-mode"]:checked').value;
+            gameState.fogSight = document.getElementById('fog-sight').value;
             gameState.resourceMode = document.getElementById('resource-mode').value;
             gameState.resourceBalance = document.getElementById('resource-balance').value;
             gameState.resourceCapitals = gameState.resourceMode === '16' ||
@@ -1967,7 +1990,7 @@
                 updateHotseatMapControls();
                 return;
             }
-            startNewGame(selectedPlayers, null, gameState.boardSize, hotseatMapPreview.seed);
+            startNewGame(selectedPlayers, null, gameState.boardSize, hotseatMapPreview.seed, null, setupMode);
         });
         document.getElementById('btn-generate-map').addEventListener('click', generateHotseatMapPreview);
         document.getElementById('btn-custom-generate-map').addEventListener('click', generateCustomMapPreview);
@@ -2007,7 +2030,7 @@
         ).forEach(input => input.addEventListener(input.id === 'map-seed' ? 'input' : 'change',
             invalidateHotseatPreview));
         document.querySelectorAll('input[name="setup-mode"]').forEach(input =>
-            input.addEventListener('change', updateHotseatMapControls));
+            input.addEventListener('change', invalidateHotseatPreview));
 
         // Start game on load
         window.onload = function() {

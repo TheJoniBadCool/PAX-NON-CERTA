@@ -76,6 +76,51 @@ for (const size of [12, 16]) {
         'Local piece sight still applies in a contested province');
 }
 
+for (const size of [12, 16]) {
+    const provinceSize = size / 4;
+    for (const [provinceRow, provinceColumn] of [[0, 0], [1, 1], [3, 3]]) {
+        reset(size);
+        state.fogSight = 'small';
+        const row = provinceRow * provinceSize;
+        const column = provinceColumn * provinceSize;
+        state.board[row + 1][column + 1] = piece(1, 'r');
+        const visibility = api.getFogVisibility(1);
+        for (let r = 0; r < size; r++) for (let c = 0; c < size; c++) {
+            assert.equal(visibility[r][c],
+                r >= row - 2 && r < row + provinceSize + 2 &&
+                c >= column - 2 && c < column + provinceSize + 2,
+                `${size}: small sight extends two squares from owned province ${provinceRow},${provinceColumn}`);
+        }
+        state.board[row + 1][column + 1].player = 2;
+        assert.equal(api.getFogVisibility(1).flat().some(Boolean), false,
+            'Small province sight is lost immediately after conquest');
+    }
+}
+
+reset();
+state.fogSight = 'small';
+state.board[5][5] = piece(1, 'r');
+state.board[13][13] = piece(1, 'r');
+let smallVisibility = api.getFogVisibility(1);
+assert(smallVisibility[2][2] && smallVisibility[15][15] && !smallVisibility[2][13],
+    'Small sight combines multiple owned provinces without chaining through neighbors');
+state.board[4][4] = piece(2, 'r');
+smallVisibility = api.getFogVisibility(1);
+assert(!smallVisibility[2][2] && smallVisibility[15][15],
+    'A contested province no longer grants Small province sight');
+state.phase = 'RESOLVING';
+state.board[4][4] = null;
+state.board[5][5].player = 2;
+assert(api.getFogVisibility()[2][2], 'Hotseat resolution combines Small sight from active players');
+state.multiplayer = true;
+assert(!api.getFogVisibility()[2][2], 'Multiplayer resolution retains only the local Small sight');
+
+reset();
+state.fogSight = 'large';
+state.board[1][1] = piece(1, 'r');
+assert(api.getFogVisibility(1)[7][7] && !api.getFogVisibility(1)[8][8],
+    'Large retains full neighboring-province sight without chaining');
+
 reset();
 state.board[6][6] = piece(1, 'n');
 for (const radius of [1, 2]) {
@@ -96,6 +141,26 @@ state.board[0][0] = null;
 state.board[15][15] = piece(1, 'n');
 assert.equal(api.getFogVisibility(1).flat().filter(Boolean).length, 4,
     'Ordinary sight is clipped at board edges');
+
+for (const sight of ['small', 'medium', 'large']) {
+    for (const [type, radius] of [['n', sight === 'large' ? 2 : 1],
+        ['b', sight === 'large' ? 3 : 2]]) {
+        reset();
+        state.fogSight = sight;
+        state.board[6][6] = piece(1, type);
+        const visibility = api.getFogVisibility(1);
+        for (let r = 0; r < 16; r++) for (let c = 0; c < 16; c++) {
+            assert.equal(visibility[r][c], Math.max(Math.abs(r - 6), Math.abs(c - 6)) <= radius,
+                `${sight} ${type} sight has radius ${radius}`);
+        }
+    }
+}
+state.board[6][6].contents[0].prisonerOf = 1;
+assert.equal(api.getFogVisibility(1)[9][9], false, 'A captive Bishop cannot provide large sight');
+state.board[6][6] = null;
+state.board[0][0] = piece(1, 'b');
+assert.equal(api.getFogVisibility(1).flat().filter(Boolean).length, 16,
+    'Large Bishop sight is clipped at board edges');
 
 reset();
 state.board[6][6] = piece(1, 'b');

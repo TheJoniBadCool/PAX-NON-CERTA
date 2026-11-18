@@ -9,10 +9,14 @@ class GameState {
         this.mapSeed = '';
         this.hillHeld = [];
         this.boardSize = 16;
+        this.fogSight = 'medium';
         this.eliminated = [false, false, false, false];
         this.turnIndex = 0;
         this.round = 1;
         this.phase = 'PLANNING';
+        this.startingPosition = 'corner';
+        this.startingProvinces = [null, null, null, null];
+        this.startingConfirmed = [false, false, false, false];
         this.activePlayers = [true, true, true, true];
         this.plans = [[], [], [], []];
         this.selectedSquare = null;

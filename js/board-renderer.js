@@ -63,11 +63,11 @@ function bindBoardInteractions() {
 
 function renderBoard() {
     boardEl.innerHTML = '';
-    boardEl.style.gridTemplateColumns = `repeat(${gameState.boardSize}, 1fr)`;
-    boardEl.style.gridTemplateRows = `repeat(${gameState.boardSize}, 1fr)`;
+    boardEl.style.gridTemplateColumns = `repeat(${gameState.boardSize}, minmax(0, 1fr))`;
+    boardEl.style.gridTemplateRows = `repeat(${gameState.boardSize}, minmax(0, 1fr))`;
+    const provinceBoundaries = new Set();
     for (let boundary = 1; boundary < 4; boundary++) {
-        boardEl.parentElement.style.setProperty(`--province-boundary-${boundary}`,
-            `${Math.floor(boundary * gameState.boardSize / 4) / gameState.boardSize * 100}%`);
+        provinceBoundaries.add(Math.floor(boundary * gameState.boardSize / 4));
     }
     const provinceOwners = getProvinceOwners(gameState.board);
     const visibility = getFogVisibility();
@@ -80,6 +80,10 @@ function renderBoard() {
             const biome = getBiome(r, c);
 
             let sqClass = `square ${isLight ? 'sq-light' : 'sq-dark'} biome-${biome}`;
+            if (provinceBoundaries.has(r)) sqClass += ' province-border-top';
+            if (provinceBoundaries.has(r + 1)) sqClass += ' province-border-bottom';
+            if (provinceBoundaries.has(c)) sqClass += ' province-border-left';
+            if (provinceBoundaries.has(c + 1)) sqClass += ' province-border-right';
             if (!visibility[r][c]) sqClass += ' sq-fog';
 
             const provinceOwner = provinceOwners[getProvinceIndex(r, c, gameState.boardSize)];

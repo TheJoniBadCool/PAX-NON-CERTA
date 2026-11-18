@@ -13,17 +13,20 @@ function element() {
         get innerHTML() { return html; },
         classList: {
             add(value) { classes.add(value); }, remove(value) { classes.delete(value); },
-            contains(value) { return classes.has(value); }, toggle() {}
+            contains(value) { return classes.has(value); },
+            toggle(value, force) { if (force) classes.add(value); else classes.delete(value); }
         },
         addEventListener(event, handler) { (handlers[event] ||= []).push(handler); },
         querySelectorAll(selector) { return this.queries[selector] || []; },
-        setAttribute() {}, getAttribute() { return 'false'; },
+        setAttribute(name, value) { this[name] = value; }, getAttribute() { return 'false'; },
+        contains(target) { return this === target || Object.values(this.queries).some(list => list.includes(target)); },
         appendChild(child) { this.children.push(child); },
         remove() {}
     };
 }
 const elements = new Map();
 const logs = [];
+const windowHandlers = {};
 const context = vm.createContext({
     console, Math: Object.create(Math),
     document: {
@@ -33,7 +36,8 @@ const context = vm.createContext({
         },
         createElement: element, querySelectorAll() { return []; }
     },
-    window: { addEventListener() {} }, setTimeout(fn) { fn(); }, requestAnimationFrame() {},
+    window: { addEventListener(name, handler) { windowHandlers[name] = handler; } },
+    setTimeout(fn) { fn(); }, clearTimeout() {}, requestAnimationFrame() {},
     bindBoardInteractions() {}, renderBoard() {}, renderBattleCandidates() {}, renderBattleRolls() {},
     renderCaptureChoices() {}, renderRetreatTable() {}, updatePlayerCards() {},
     logAction(message) { logs.push(message); }, logRoundHeader() {}, saveCustomSetup() {},
@@ -50,7 +54,8 @@ const api = vm.runInContext(`({
     rejectPrisonerMoveConflicts, applySiegeRoundProgress, processCollisionGroup,
     processSallyBattle, getUnitDisplayClass, prisonerChain, isValidSallyOutPlan, updateObjectiveScores,
     showPieceTooltip, resolvePrisonerPlans, validatePrisonerPlans, resolveAllMoves, getAllPlannedMoves,
-    handleSquareAction, animatePlannedMovements
+    handleSquareAction, handleSquareClick, animatePlannedMovements,
+    queueHeldGroupPlan, detachHeldGroup, getPendingHeldIndices
 })`, context);
 const state = api.state;
 const unit = (player, type, id) => api.createUnit(player, type, id, id, 3, 3);
@@ -436,6 +441,177 @@ async function run() {
     });
     assert(logs.at(-1).includes('MERGE') && logs.at(-1).includes('fog of war'),
         'Concealed friendly consolidation must not log its position or stack size');
+
+    reset();
+    const groupUnits = [unit(1, 'q', 'group-queen'), unit(1, 'n', 'group-horse'), captive()];
+    const groupSource = piece(1, groupUnits, 'group-source');
+    state.board[8][8] = groupSource;
+    const groupPopup = elements.get('piece-tooltip');
+    const groupButtons = groupUnits.map((entry, index) => {
+        const button = element();
+        button.dataset = { heldIndex: String(index) };
+        return button;
+    });
+    groupPopup.queries = { '.held-piece-button': groupButtons };
+    const choose = elements.get('btn-choose-destination');
+    const count = elements.get('piece-tooltip-count');
+    const clickUnit = index => groupButtons[index].handlers.click.at(-1)({ stopPropagation() {} });
+    api.showPieceTooltip(8, 8, element());
+    assert.equal(choose.disabled, true);
+    clickUnit(0);
+    clickUnit(1);
+    assert.equal(count.innerText, '2 selected');
+    assert.equal(groupButtons[1]['aria-pressed'], 'true');
+    assert(groupButtons[1].classList.contains('selected'));
+    assert.equal(groupPopup.classList.contains('hidden'), false, 'Toggling must leave the popup open');
+    assert.equal(state.selectedHeldPiece, null, 'Selection must not be armed until Choose destination');
+    assert.equal(state.validMoves.length, 0, 'Popup must not retain whole-stack destinations');
+    assert.equal(state.plans[0].length, 0);
+    clickUnit(1);
+    assert.equal(count.innerText, '1 selected');
+    assert.equal(groupButtons[1]['aria-pressed'], 'false');
+    clickUnit(1);
+    let prevented = false;
+    windowHandlers.click({
+        target: element(), stopImmediatePropagation() {}, preventDefault() { prevented = true; }
+    });
+    assert(prevented && groupPopup.classList.contains('hidden'), 'Outside click only dismisses the popup');
+    assert.equal(state.plans[0].length, 0);
+    assert.equal(state.selectedSquare, null);
+    api.showPieceTooltip(8, 8, element());
+    assert.equal(count.innerText, '0 selected', 'Reopening must clear unconfirmed selection');
+    clickUnit(0);
+    windowHandlers.keydown({ key: 'Escape' });
+    assert(groupPopup.classList.contains('hidden'), 'Escape dismisses without an order');
+    assert.equal(state.plans[0].length, 0);
+
+    api.showPieceTooltip(8, 8, element());
+    clickUnit(0);
+    api.handleSquareClick(8, 9);
+    assert(groupPopup.classList.contains('hidden'), 'Clicking a board square only dismisses the popup');
+    assert.equal(state.plans[0].length, 0, 'An outside board click must never issue an order');
+    assert.equal(state.selectedHeldPiece, null);
+
+    api.showPieceTooltip(8, 8, element());
+    clickUnit(0);
+    clickUnit(1);
+    choose.onclick();
+    assert(groupPopup.classList.contains('hidden'));
+    assert.deepEqual(Array.from(state.selectedHeldPiece.unitIds), ['group-queen', 'group-horse']);
+    api.handleSquareAction(8, 9);
+    assert.equal(state.plans[0].length, 1, 'Multiple units must queue one intent');
+    assert.equal(state.plans[0][0].contents.length, 2);
+    assert.equal(state.plans[0][0].pieceType, 'n');
+    assert.equal(api.getPendingHeldIndices(groupSource, state.plans[0]).size, 2);
+    api.showPieceTooltip(8, 8, element());
+    assert(groupButtons[0].disabled && groupButtons[1].disabled, 'Planned units cannot be queued twice');
+    assert(groupButtons[0].title.includes('already has'));
+    assert.equal(api.queueHeldGroupPlan(groupSource,
+        { from: [8, 8], unitIds: ['group-queen'] }, [9, 8], null), false);
+    context.animatePlannedMovements = async moves => {
+        assert.equal(moves.length, 1);
+        assert.equal(moves[0].contents.length, 2, 'Animation must use the complete group');
+    };
+    await api.resolveAllMoves();
+    assert.equal(state.board[8][9].contents.length, 2, 'Selected units move together');
+    assert.equal(state.board[8][8].contents.length, 1, 'Unselected units stay behind');
+    assert.equal(state.board[8][8].contents[0].id, 'captive');
+
+    reset();
+    state.board[8][8] = piece(1, [unit(1, 'q', 'transfer-q'), unit(1, 'b', 'transfer-b')]);
+    state.board[8][9] = piece(1, [unit(1, 'n', 'receiver')], 'receiver-stack');
+    const transferSelection = { from: [8, 8], sourceId: 'piece-1', unitIds: ['transfer-q', 'transfer-b'] };
+    state.selectedHeldPiece = transferSelection;
+    state.selectedSquare = [8, 8];
+    state.validMoves = [[8, 9]];
+    api.handleSquareAction(8, 9);
+    assert.equal(state.plans[0].length, 0, 'Friendly transfers require confirmation');
+    assert(elements.get('merge-prompt-text').innerText.includes('2 selected'));
+    elements.get('btn-merge-confirm').handlers.click[0]();
+    assert.equal(state.plans[0].length, 1, 'One confirmation queues the whole transfer');
+    assert.equal(state.plans[0][0].transfer, true);
+    context.animatePlannedMovements = async () => {};
+    await api.resolveAllMoves();
+    assert.equal(state.board[8][8], null, 'Selecting all units empties the source');
+    assert.equal(state.board[8][9].contents.length, 3, 'Friendly target receives the complete group');
+
+    reset();
+    const restricted = piece(1, [
+        { ...unit(1, 'r', 'fixed-tower'), gate: [0, 1] },
+        unit(1, 'p', 'resting-pawn'), unit(1, 'q', 'mobile-queen'), captive()
+    ]);
+    state.board[8][8] = restricted;
+    state.round = 2;
+    const restrictedButtons = restricted.contents.map((entry, index) => {
+        const button = element();
+        button.dataset = { heldIndex: String(index) };
+        return button;
+    });
+    groupPopup.queries = { '.held-piece-button': restrictedButtons };
+    api.showPieceTooltip(8, 8, element());
+    assert(restrictedButtons[0].disabled && restrictedButtons[0].title.includes('Towers'));
+    assert(restrictedButtons[1].disabled && restrictedButtons[1].title.includes('even-numbered'));
+    assert(restrictedButtons[3].disabled && restrictedButtons[3].title.includes('even-numbered'));
+    assert.equal(restrictedButtons[2].disabled, false);
+    restrictedButtons[2].handlers.click.at(-1)({ stopPropagation() {} });
+    choose.onclick();
+    assert.deepEqual(Array.from(state.validMoves, square => Array.from(square)), [[8, 9]],
+        'Selected groups leaving a Tower must use its gate');
+    const missingGroup = { unitIds: ['mobile-queen', 'missing'], player: 1 };
+    assert.equal(api.detachHeldGroup(missingGroup, restricted), false);
+    assert.equal(restricted.contents.length, 4, 'Invalid groups must not partially remove their units');
+    state.round = 1;
+    state.plans[0] = [{ isUnmerge: true, sourcePieceId: restricted.id, unitIds: ['captive', 'mobile-queen'] }];
+    assert.equal(api.managePrisoner(1, 'captive', 'release'), false, 'Group movement locks prisoner decisions');
+    assert.equal(api.validatePrisonerPlans(1, [...state.plans[0], {
+        from: [8, 8], to: [8, 8], pieceId: restricted.id, unitId: 'captive', prisonerAction: 'execute'
+    }]), false);
+
+    reset();
+    state.board[8][8] = piece(1, [unit(1, 'q', 'swap-q'), unit(1, 'b', 'swap-b')], 'swap-source');
+    state.board[8][9] = piece(2, [unit(2, 'n', 'swap-enemy')], 'enemy-source');
+    assert(api.queueHeldGroupPlan(state.board[8][8],
+        { from: [8, 8], unitIds: ['swap-q', 'swap-b'] }, [8, 9], null));
+    state.plans[1] = [{ pieceId: 'enemy-source', from: [8, 9], to: [8, 8] }];
+    const originalProcess = context.processCollisionGroup;
+    const groups = [];
+    context.processCollisionGroup = async group => { groups.push(group); };
+    await api.resolveAllMoves();
+    context.processCollisionGroup = originalProcess;
+    const swapGroup = groups.find(group => group.type === 'SWAP');
+    assert(swapGroup);
+    assert.equal(swapGroup.candidates.length, 2, 'A selected group must be one swap participant');
+    assert.equal(swapGroup.candidates.find(candidate => candidate.player === 1).contents.length, 2);
+
+    reset();
+    const boardSource = fs.readFileSync('js/board-renderer.js', 'utf8');
+    vm.runInContext(boardSource.slice(0, boardSource.indexOf('\nfunction renderBoard')), context);
+    vm.runInContext('bindBoardInteractions()', context);
+    const board = elements.get('board');
+    const sourceSquare = element();
+    sourceSquare.parentElement = board;
+    sourceSquare.closest = () => sourceSquare;
+    board.children = [sourceSquare];
+    board.contains = target => target === sourceSquare;
+    let popupOpened = 0;
+    let squareClicked = 0;
+    context.handleSquarePopup = () => { popupOpened++; groupPopup.classList.remove('hidden'); };
+    context.handleSquareClick = () => { squareClicked++; };
+    board.handlers.pointerdown[0]({
+        target: sourceSquare, isPrimary: true, button: 0, pointerType: 'touch',
+        pointerId: 1, clientX: 0, clientY: 0
+    });
+    assert.equal(popupOpened, 1, 'A touch hold opens the unit list');
+    windowHandlers.pointerup({ pointerId: 1 });
+    const ghostClick = {
+        target: sourceSquare, preventDefault() {}, stopPropagation() {},
+        stopImmediatePropagation() { throw new Error('Long-press release must reach board suppression'); }
+    };
+    windowHandlers.click(ghostClick);
+    board.handlers.click[0](ghostClick);
+    assert.equal(squareClicked, 0, 'Long-press release must not become a destination click');
+    assert.equal(groupPopup.classList.contains('hidden'), false,
+        'The popup must survive the synthetic click following a touch hold');
     console.log('Prisoner rules and battle integration checks passed');
 }
 run().catch(error => { console.error(error); process.exitCode = 1; });

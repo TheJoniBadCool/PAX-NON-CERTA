@@ -47,8 +47,22 @@ function checkRendering(expectedOwners) {
             const index = r * state.boardSize + c;
             assert.equal(tint(boardEl.children[index]), expected, `Board tint at ${r},${c}`);
             assert.equal(tint(preview.children[index]), expected, `Preview tint at ${r},${c}`);
+            const borders = {
+                top: r > 0 && api.getProvinceIndex(r - 1, c, state.boardSize) !== province,
+                bottom: r < state.boardSize - 1 &&
+                    api.getProvinceIndex(r + 1, c, state.boardSize) !== province,
+                left: c > 0 && api.getProvinceIndex(r, c - 1, state.boardSize) !== province,
+                right: c < state.boardSize - 1 &&
+                    api.getProvinceIndex(r, c + 1, state.boardSize) !== province
+            };
+            for (const [edge, expectedBorder] of Object.entries(borders)) {
+                assert.equal(boardEl.children[index].className.split(' ').includes(`province-border-${edge}`),
+                    expectedBorder, `Province ${edge} border at ${r},${c}`);
+            }
         }
     }
+    assert.equal(boardEl.style.gridTemplateColumns, `repeat(${state.boardSize}, minmax(0, 1fr))`);
+    assert.equal(boardEl.style.gridTemplateRows, `repeat(${state.boardSize}, minmax(0, 1fr))`);
     assert.equal(JSON.stringify(state.board), before, 'Rendering must not mutate castle ownership');
 }
 
@@ -72,12 +86,6 @@ for (const size of [12, 16]) {
             }
         }
     }
-    for (let boundary = 1; boundary < 4; boundary++) {
-        assert.equal(boardEl.parentElement.style[`--province-boundary-${boundary}`],
-            `${Math.floor(boundary * size / 4) / size * 100}%`,
-            'Province lines must align with the tinted squares on every board size');
-    }
-
     const castle = state.board.flatMap((row, r) =>
         row.map((piece, c) => piece && api.isTowerPiece(piece) &&
             api.getProvinceIndex(r, c, size) === 1 ? piece : null)).find(Boolean);
@@ -130,6 +138,12 @@ expected[5] = null;
 checkRendering(expected);
 
 const styles = fs.readFileSync('styles.css', 'utf8');
+for (const edge of ['top', 'bottom', 'left', 'right']) {
+    assert.match(styles, new RegExp(
+        `\\.province-border-${edge}\\s*\\{\\s*border-${edge}: 1px solid rgba\\(3, 7, 14, 0\\.95\\);\\s*\\}`),
+    'Province dividers must use tile borders instead of independently positioned overlays');
+}
+assert(!styles.includes('.province-lines'), 'The percentage-based province overlay must not be used');
 for (let player = 1; player <= 4; player++) {
     const rule = styles.match(new RegExp(`\\.zone-p${player}\\s*\\{([^}]+)\\}`))[1];
     assert(!rule.includes('!important'), 'Province tint must not override selection highlights');

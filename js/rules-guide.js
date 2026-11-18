@@ -13,7 +13,7 @@
                     title: '1. The goal',
                     art: 'board',
                     basic: [
-                        'Choose 2–4 players. Each player commands a color and starts in a corner.',
+                        'Choose 2–4 players. Each player commands a color. Corner Position is the default; Random assigns distinct provinces anywhere, and Gentleman\'s Agreement lets players choose before play.',
                         'Plan in secret. When everyone is ready, all moves resolve together.',
                         'Complete objectives to score. Reach 10 points to win; a score of −10 eliminates you.'
                     ],
@@ -67,13 +67,13 @@
                     art: 'merge',
                     basic: [
                         'Move onto a friendly piece to merge, or choose two friendly pieces moving to the same square and they merge automatically.',
-                        'A stack moves together as one piece, or you can select a unit inside it to split that unit off.',
+                        'A stack moves together as one piece, or you can select several units inside it to split off as a group.',
                         'Friendly pieces never fight each other.'
                     ],
                     detailed: [
                         'Moving onto a friendly piece asks whether to merge or cancel. An accepted merge commits the involved pieces for the round. Friendly pieces planned to the same square merge automatically.',
                         'Same-player pieces arriving together form one stack before combat. The resulting piece type is chosen by priority: Tower, Pawn, Horse, Bishop, King, then Queen.',
-                        'Select a piece to plan for its whole stack. Right-click or long-press to open its unit list; select a movable unit, then choose an adjacent square to split it off. A transfer to a friendly piece requires confirmation.',
+                        'Select a piece to plan for its whole stack. Right-click or long-press to open its unit list; toggle one or more movable units, press Choose destination, then choose an adjacent square to move or attack as one group. A friendly transfer requires one confirmation. Clicking outside or pressing Escape closes the list without issuing an order.',
                         'Towers can only receive or release units through their marked gate. Pawns and prisoners follow the odd-round restriction.'
                     ]
                 },
@@ -119,7 +119,7 @@
                     detailed: [
                         'Maps contain roughly 50% plains, 20% forests, 20% hills, and 10% mountains. Castles start on plains. Mountains are impassable and cannot be used for retreat re-entry.',
                         'A force that stays in a forest and is attacked gains +25% strength. A force gets the same hill bonus only if it held that square throughout the previous round. Arriving forces and opposing swaps do not receive terrain defence. Plains have no effect.',
-                        'You see your owned provinces and the eight provinces around them, including diagonals. Each friendly piece reveals a 3×3 area; a stack with a non-prisoner Bishop reveals a 5×5 area. Sight follows current positions and castle ownership, not planned moves.',
+                        'Choose fog sight before starting: Medium reveals owned provinces and all eight neighboring provinces, plus a 3×3 area around each friendly piece (5×5 for a stack with a non-prisoner Bishop). Small limits neighboring province sight to two squares from owned provinces, including diagonally, with the same piece sight. Large keeps Medium province sight and increases piece sight to 5×5, or 7×7 with a Bishop. Sight follows current positions and castle ownership, not planned moves.',
                         'Enemy and rebel troops outside sight are hidden; Towers and gates remain visible, but hidden garrisons do not. Forest troops remain hidden even when the square is revealed. Battles reveal participants; game over reveals the board. Fog is visual, not network secrecy. Province tints and terrain stay visible under fog.',
                         'The map preview shows the starting castles and terrain. A seed reproduces the generated starting positions, Tower gates, initial levels, and terrain; it does not fix objectives or battle rolls. Map generation aims to keep passable terrain connected, though crowded custom placements can affect terrain ratios.'
                     ]
@@ -166,7 +166,8 @@
                     detailed: [
                         'Hotseat uses one device. Each player plans privately before passing it on. Multiplayer uses one browser per player; the host creates a room, chooses 2–4 players, and shares the five-letter code.',
                         'The host’s browser runs the authoritative game and should stay open. Players lock in plans; after resolution, the next round begins. Guests may reconnect with the room code from the same browser tab session.',
-                        'Before starting, choose the board size and player names. Generate a map preview to see its seed; for a generated setup, entering it recreates starting positions, Tower gates, levels, and terrain. Custom placement keeps the generated map while you edit; saved sandbox maps preserve manual changes as well.',
+                        'Before starting, choose the board size, player names, and starting position: Corner Position (default), Custom placement, Random, or Gentleman\'s Agreement. Generate a map preview to see its seed; for a generated setup, entering it recreates starting positions, Tower gates, levels, and terrain. Custom placement keeps the generated map while you edit; saved sandbox maps preserve manual changes as well.',
+                        'In Gentleman\'s Agreement, Start Game opens an unfogged province-selection map. Select or deselect an unclaimed province. Online, each player locks their own province with Good luck, good Sirs!; play waits for all confirmations, including disconnected players. In Hotseat, one person assigns all provinces and confirms once. Chosen provinces replace rebels with the normal army in the existing castle and remove the outside rebel Pawn. Terrain, gates, resources, and unchosen rebels stay unchanged. Resources are generated with all 16 provinces rebel-owned, and chosen capitals keep any resources even if capital resources were disabled.',
                         'Choose unit progression: all units start at level 0, or each unit gets a random experience and armour level from 1 to 3. Custom placement is an unrestricted sandbox: place or erase any armies, including rebels, paint biomes, and place resources with individual 0–100% production probabilities. Multiple resource types may share a square. No King/Queen/Tower requirements or tower-spacing checks apply. Objectives for absent units are omitted, so normal victory may be unattainable. Save/Load preserves the edited map; Reset clears only pieces. Generate Map replaces terrain/resources after confirmation. Exit to Menu leaves setup.',
                         'In Multiplayer, the host chooses the board, player count, progression, map seed, and starting position. For custom placement, use Place Pieces / Load Setup, then Use Placement to return to the lobby; the saved setup must match the room’s players. Everyone must be connected before the host can start.',
                         'During a game, use Names to edit player names (in Multiplayer, each player can edit only their own). Player cards show status, retreating units, and losses; the private objective panel shows only your objectives and score. Menu returns to mode selection; New Game/Play Again starts another setup, but only the Multiplayer host can restart the room. The host can skip disconnected players; eliminated players become spectators and are not asked to plan.'
@@ -183,7 +184,7 @@
                     detailed: [
                         'Experience increases by one level for each non-prisoner survivor after a battle, up to level 3. Each experience level adds 5% strength and reduces that unit’s casualty risk by 5%. The setup option can instead start units at random experience and armour levels 1–3.',
                         'During planning, open a friendly piece’s unit list with right-click or a 500 ms long-press. A unit in a stack containing a Tower can be upgraded with the shield button, up to armour level 3; each level adds 5% strength and reduces casualty risk by 5%. Multiplayer upgrades are applied by the host.',
-                        'Click or tap a friendly piece and then an adjacent square to act. Select a held unit from the unit list to move it alone or transfer it. Prisoner-containing pieces expose Execute and Release; catapults and besieged Towers expose siege actions. Reset Plans cancels queued moves, siege actions, and prisoner decisions, but does not undo armour upgrades already applied.',
+                        'Click or tap a friendly piece and then an adjacent square to act. In the unit list, toggle units and press Choose destination to move or transfer the selected group. Prisoner-containing pieces expose Execute and Release; catapults and besieged Towers expose siege actions. Reset Plans cancels queued moves, siege actions, and prisoner decisions, but does not undo armour upgrades already applied.',
                         'The objective checklist is private and is cleared during Hotseat handoffs and resolution. Edit names with Names above the board. The combat log can be collapsed; its entries remain available when reopened. Battle cards show odds, bonus sources, casualties, capture choices, and rolls.'
                     ]
                 }
@@ -256,13 +257,13 @@
                     art: 'merge',
                     basic: [
                         'Mova uma peça para junto de outra aliada para juntar os grupos. As peças aliadas que planearem a mesma casa juntam-se automaticamente.',
-                        'Um grupo pode mover-se em conjunto; também pode selecionar uma unidade para a separar do grupo.',
+                        'Um grupo pode mover-se em conjunto; também pode selecionar várias unidades para as separar como um novo grupo.',
                         'As peças aliadas nunca combatem entre si.'
                     ],
                     detailed: [
                         'Ao mover uma peça para junto de outra aliada, escolha «Juntar» ou «Cancelar». Depois de confirmada a junção, as peças envolvidas ficam comprometidas nessa ronda. As peças aliadas planeadas para a mesma casa juntam-se automaticamente.',
                         'As peças aliadas que chegam juntas formam um grupo antes do combate. O tipo da peça resultante segue esta prioridade: Torre, Peão, Cavalo, Bispo, Rei e, por fim, Dama.',
-                        'Selecione uma peça para planear os movimentos de todo o grupo. Clique com o botão direito do rato ou mantenha a peça premida para abrir a lista de unidades. Escolha uma unidade que se possa mover e, em seguida, uma casa adjacente para a separar. A transferência para outra peça aliada requer confirmação.',
+                        'Selecione uma peça para planear os movimentos de todo o grupo. Clique com o botão direito do rato ou mantenha a peça premida para abrir a lista de unidades. Selecione ou desselecione unidades, prima Choose destination e escolha uma casa adjacente para mover ou atacar como um grupo. Uma transferência aliada requer uma confirmação. Clicar fora ou premir Escape fecha a lista sem dar uma ordem.',
                         'As Torres só recebem ou libertam unidades pela entrada assinalada. Os Peões e os prisioneiros estão sujeitos à regra das rondas ímpares.'
                     ]
                 },
@@ -399,7 +400,7 @@
             score: ['−10: eliminado', 'Objetivos alteram a pontuação', '+10: vitória'],
             modes: ['Hotseat: um dispositivo', 'Multijogador: um dispositivo por jogador', 'Configuração: posicione as peças']
         } : {
-            board: ['Four starting corners', 'Goal: 10 points'],
+            board: ['Choose starting provinces', 'Goal: 10 points'],
             plans: ['Each player plans', 'Plans stay secret', 'Everyone commits', 'Resolve simultaneously'],
             movement: ['1 square per move', 'Eight directions', 'Pawns: odd rounds', 'Tower: stationary'],
             merge: ['Friendly piece', 'Planned move', 'One stack', 'Join before combat'],

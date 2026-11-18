@@ -26,10 +26,25 @@ function getFogVisibility(viewer = null) {
         viewers.includes(other) &&
         Math.max(Math.abs(Math.floor(province / 4) - Math.floor(index / 4)),
             Math.abs(province % 4 - index % 4)) <= 1));
+    if (gameState.fogSight === 'small') {
+        owners.forEach((owner, index) => {
+            if (!viewers.includes(owner)) return;
+            const row = Math.floor(index / 4);
+            const column = index % 4;
+            const startRow = Math.max(0, Math.floor(row * size / 4) - 2);
+            const endRow = Math.min(size, Math.floor((row + 1) * size / 4) + 2);
+            const startColumn = Math.max(0, Math.floor(column * size / 4) - 2);
+            const endColumn = Math.min(size, Math.floor((column + 1) * size / 4) + 2);
+            for (let r = startRow; r < endRow; r++) {
+                for (let c = startColumn; c < endColumn; c++) visible[r][c] = true;
+            }
+        });
+    }
     gameState.board.forEach((row, r) => row.forEach((piece, c) => {
-        if (visibleProvinces[getProvinceIndex(r, c, size)]) visible[r][c] = true;
+        if (gameState.fogSight !== 'small' && visibleProvinces[getProvinceIndex(r, c, size)]) visible[r][c] = true;
         if (!piece || !viewers.includes(piece.player)) return;
-        const radius = getCombatContents(piece).some(unit => getUnitType(unit) === 'b') ? 2 : 1;
+        const radius = (gameState.fogSight === 'large' ? 2 : 1) +
+            (getCombatContents(piece).some(unit => getUnitType(unit) === 'b') ? 1 : 0);
         for (let rr = Math.max(0, r - radius); rr <= Math.min(size - 1, r + radius); rr++) {
             for (let cc = Math.max(0, c - radius); cc <= Math.min(size - 1, c + radius); cc++) {
                 visible[rr][cc] = true;

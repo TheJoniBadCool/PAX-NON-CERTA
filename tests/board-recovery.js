@@ -110,5 +110,5 @@ state.boardSize = 12;
 state.board = Array.from({ length: 12 }, () => Array(12).fill(null));
 api.renderBoard();
 assert.equal(boardEl.children.length, 144, 'The rendered grid must use the selected board size');
-assert.equal(boardEl.style.gridTemplateColumns, 'repeat(12, 1fr)');
+assert.equal(boardEl.style.gridTemplateColumns, 'repeat(12, minmax(0, 1fr))');
 console.log('Board recovery badge checks passed');

@@ -49,7 +49,7 @@ const context = vm.createContext({
 [
     'constants', 'models', 'game-state', 'setup-utils', 'board-utils', 'battle-rules',
     'siege-rules', 'movement-rules', 'planning-rules', 'retreat-rules', 'prisoner-rules', 'objective-rules',
-    'board-setup', 'setup-actions', 'status-ui', 'game'
+    'board-setup', 'starting-position', 'setup-actions', 'status-ui', 'game'
 ].forEach(name => vm.runInContext(fs.readFileSync(`js/${name}.js`, 'utf8'), context));
 context.animatePlannedMovements = async () => {};
 context.renderMapPreview = () => {};
@@ -239,7 +239,9 @@ async function run() {
 
     for (const size of [12, 16]) {
         state.boardSize = size;
+        document.getElementById('fog-sight').value = 'small';
         api.showCustomSetup([true, true, false, false]);
+        assert.equal(state.fogSight, 'small', 'Custom setup uses the selected Hotseat sight');
         document.getElementById('custom-map-seed').value = 'sandbox-persistence';
         api.generateCustomMapPreview();
         const mapBefore = JSON.stringify(api.getCustomMap().biomes);
@@ -275,6 +277,7 @@ async function run() {
         assert(api.isValidCustomMap(api.getCustomMap(), size));
         const expectedMap = JSON.parse(JSON.stringify(api.getCustomMap()));
         api.confirmCustomSetup();
+        assert.equal(state.fogSight, 'small', 'Starting a custom game preserves the selected Hotseat sight');
         assert.equal(JSON.stringify(state.biomes), JSON.stringify(expectedMap.biomes));
         assert.equal(JSON.stringify(state.provinceResources), JSON.stringify(expectedMap.provinceResources));
         assert.equal(state.board[0][0].contents.filter(unit => unit.type === 'k').length, 2);
