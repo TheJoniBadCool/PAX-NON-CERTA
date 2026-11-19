@@ -61,6 +61,25 @@
             renderBoard();
         }
         document.getElementById('btn-close-piece-tooltip').addEventListener('click', dismissPieceTooltip);
+        document.querySelectorAll('.resource-purchases').forEach(panel =>
+            panel.addEventListener('click', event => {
+                const button = event.target.closest('.resource-purchase-button');
+                if (!button || button.disabled || !canEditPlans()) return;
+                const action = button.dataset.purchase;
+                const targetId = button.dataset.target ?? null;
+                const player = gameState.turnIndex + 1;
+                if (gameState.multiplayer && !Multiplayer.isHost()) {
+                    Multiplayer.requestPurchase(action, targetId);
+                    return;
+                }
+                if (!purchaseResourceAction(player, action, targetId)) {
+                    hintTextEl.innerText = 'Purchase rejected. Check the turn, resources, and target requirements.';
+                    updatePlayerCards();
+                    return;
+                }
+                updatePlayerCards();
+                renderBoard();
+            }));
         window.addEventListener('click', event => {
             if (pieceTooltip.classList.contains('hidden') || pieceTooltip.contains(event.target) ||
                 boardEl.contains(event.target)) return;
@@ -287,6 +306,8 @@
             gameState.activePlayers = selectedPlayers;
             gameState.startingPosition = customBoard ? 'custom' : startingPosition;
             gameState.startingArmy = startingArmy;
+            gameState.capitalTowerIds = [null, null, null, null];
+            gameState.horde = [false, false, false, false];
             gameState.startingProvinces = [null, null, null, null];
             gameState.startingConfirmed = [false, false, false, false];
             btnEditNames.classList.remove('hidden');
@@ -298,6 +319,9 @@
             gameState.plans = [[], [], [], []];
             gameState.diplomacy = createDiplomacyState();
             gameState.diplomacyReviewer = null;
+            gameState.resourceTrades = [];
+            gameState.nextResourceTradeId = 1;
+            document.getElementById('resource-trade-modal').classList.add('hidden');
             gameState.pendingSpoils = null;
             document.getElementById('allied-spoils-modal').classList.add('hidden');
             document.getElementById('alliance-review-modal').classList.add('hidden');
@@ -317,8 +341,12 @@
             if (gameState.phase === 'STARTING_POSITION') {
                 gameState.objectives = [[], [], [], []];
                 gameState.scores = [0, 0, 0, 0];
+                gameState.missionBatches = [null, null, null, null];
+                gameState.missionPoints = [0, 0, 0, 0];
             } else {
+                initializeCapitals();
                 initializeObjectives();
+                if (typeof initializeMissions === 'function') initializeMissions();
             }
             btnMergeConfirm.innerText = 'Merge';
 
@@ -658,7 +686,10 @@
                     ${!isPrisoner(unit) ? `<span class="unit-levels" title="${escapeHtml(`${getUnitName(unit)} · ${getUnitStats(unit)}`)}">
                         <span class="experience-level">${['0', 'I', 'II', 'III'][getUnitLevel(unit, 'experience')]}</span> 🛡️${getUnitLevel(unit, 'armour')}${getRoutedStacks(unit) ? ` · ⚑${getRoutedStacks(unit)} (${unit.routedUntilRound - gameState.round})` : ''}
                     </span>` : ''}
-                    ${!isPrisoner(unit) && contents.some(other => other.type === 'r') && getUnitLevel(unit, 'armour') < 3 ? `<button class="armor-upgrade-button" data-armour-index="${index}" title="Upgrade armour">🛡️</button>` : ''}
+                    ${piece.player === gameState.turnIndex + 1 && !isPrisoner(unit) &&
+                        contents.some(other => other.type === 'r') &&
+                        getUnitLevel(unit, 'armour') === 0 && isResourcePurchaseRound()
+                        ? `<button class="armor-upgrade-button" data-armour-index="${index}" title="Buy level 1 armour · ${formatResourceCost(RESOURCE_PURCHASE_COSTS.armour)}"${canPurchaseResourceAction(gameState.turnIndex + 1, 'armour', unit.id) ? '' : ' disabled'}>🛡️</button>` : ''}
                     ${isPrisoner(unit) ? `<button class="prisoner-action-button" data-prisoner-index="${index}" data-action="execute" title="Plan execution of ${escapeHtml(getUnitName(unit))}" aria-label="Execute ${escapeHtml(getUnitName(unit))}">${PRISONER_EXECUTE_SVG}</button><button class="prisoner-action-button" data-prisoner-index="${index}" data-action="release" title="Plan release of ${escapeHtml(getUnitName(unit))}" aria-label="Release ${escapeHtml(getUnitName(unit))}">${PRISONER_RELEASE_SVG}</button>` : ''}
                 </span>`)
                 .join('');
@@ -745,8 +776,11 @@
                         pieceTooltip.classList.add('hidden');
                         return;
                     }
-                    unit.armour = getUnitLevel(unit, 'armour') + 1;
-                    logAction(`🛡️ <b>${getUnitName(unit)}</b> armour upgraded to ${unit.armour}.`);
+                    if (!purchaseResourceAction(gameState.turnIndex + 1, 'armour', unit.id)) {
+                        hintTextEl.innerText = 'Armour upgrade rejected. Check the turn, resources, and Tower stack.';
+                        return;
+                    }
+                    updatePlayerCards();
                     showPieceTooltip(r, c, square);
                 });
             });
@@ -1185,6 +1219,29 @@
 
         document.querySelectorAll('.diplomacy-actions, #alliance-review-requests').forEach(panel => {
             panel.addEventListener('click', event => {
+                const tradeButton = event.target.closest('button[data-trade-action]');
+                if (tradeButton && !tradeButton.disabled) {
+                    const target = Number(tradeButton.dataset.target);
+                    const action = tradeButton.dataset.tradeAction;
+                    if (action === 'propose') showResourceTradeProposal(target);
+                    else if (gameState.multiplayer) {
+                        Multiplayer.requestResourceTrade(target, action, null, Number(tradeButton.dataset.tradeId));
+                    } else {
+                        const error = applyResourceTradeAction(gameState.turnIndex, target, action,
+                            null, Number(tradeButton.dataset.tradeId));
+                        if (error) {
+                            hintTextEl.innerText = error;
+                            document.getElementById('alliance-review-error').innerText = error;
+                            return;
+                        }
+                        updatePlayerCards();
+                        if (gameState.phase === 'ALLIANCE_REVIEW') {
+                            if (hasPendingPlayerRequests(gameState.turnIndex)) renderAllianceReview();
+                            else beginAllianceReview();
+                        }
+                    }
+                    return;
+                }
                 const button = event.target.closest('button[data-diplomacy-action]');
                 if (!button || button.disabled) return;
                 const target = Number(button.dataset.target);
@@ -1200,10 +1257,37 @@
                 }
                 updatePlayerCards();
                 if (gameState.phase === 'ALLIANCE_REVIEW') {
-                    if (getPendingAllianceRequests(gameState.turnIndex).length) renderAllianceReview();
+                    if (hasPendingPlayerRequests(gameState.turnIndex)) renderAllianceReview();
                     else beginAllianceReview();
                 }
             });
+        });
+
+        document.getElementById('btn-cancel-resource-trade').addEventListener('click', () => {
+            document.getElementById('resource-trade-modal').classList.add('hidden');
+        });
+        document.getElementById('resource-trade-form').addEventListener('submit', async event => {
+            event.preventDefault();
+            const form = event.currentTarget;
+            const target = Number(document.getElementById('resource-trade-target').value);
+            const terms = {};
+            for (const side of ['give', 'receive']) {
+                terms[side] = Object.fromEntries(RESOURCE_TYPES.map(({ key }) =>
+                    [key, form.elements.namedItem(`${side}-${key}`).valueAsNumber]));
+            }
+            if (gameState.multiplayer) {
+                if (await Multiplayer.requestResourceTrade(target, 'propose', terms)) {
+                    document.getElementById('resource-trade-modal').classList.add('hidden');
+                }
+                return;
+            }
+            const error = applyResourceTradeAction(gameState.turnIndex, target, 'propose', terms);
+            if (error) {
+                document.getElementById('resource-trade-error').innerText = error;
+                return;
+            }
+            document.getElementById('resource-trade-modal').classList.add('hidden');
+            updatePlayerCards();
         });
 
         // --- SIMULTANEOUS TURN RESOLUTION & COMBAT ENGINE ---
@@ -1479,9 +1563,11 @@
                     });
                 }
                 await processCollisionGroup(group);
+                if (typeof recordMissionCastleOwnership === 'function') recordMissionCastleOwnership();
                 renderBoard();
             }
             await resolveRemainingSharedConflicts();
+            if (typeof recordMissionCastleOwnership === 'function') recordMissionCastleOwnership();
 
             // Reset planned moves for next turn
             gameState.plans = [[], [], [], []];
@@ -1490,10 +1576,15 @@
             gameState.round++;
             updateRoundDisplay();
             processRetreatsAtRoundStart();
-            const { winners, draw } = resolveObjectiveRound();
+            reconcileCapitals();
+            refreshResourceTotals();
             if (resolveResourceProduction(gameState.round - 1)) {
                 logAction('Resource production checks completed.');
             }
+            if (typeof finishMissionRound === 'function') finishMissionRound(gameState.round - 1);
+            const { winners, draw } = resolveObjectiveRound();
+            if (typeof issueMissionBatches === 'function' && (gameState.round - 1) % 16 === 0 &&
+                !winners.length && !draw) issueMissionBatches(gameState.round);
             renderBoard();
 
             // Count active players remaining
@@ -1504,7 +1595,7 @@
                 const winnerNames = winners.map(index => PLAYERS[index].name).join(' & ');
                 document.getElementById('gameover-title').innerText = draw ? 'Draw!' :
                     `${winnerNames} ${winners.length === 1 ? 'Wins' : 'Win'}!`;
-                document.getElementById('gameover-desc').innerText = draw ? 'All players reached -10 points and were defeated.' :
+                document.getElementById('gameover-desc').innerText = draw ? 'All players reached -20 points and were defeated.' :
                     winners.map(index => `${PLAYERS[index].name}: ${gameState.scores[index]} points`).join(' · ');
                 document.getElementById('gameover-modal').classList.remove('hidden');
                 updatePlayerCards();
@@ -1638,6 +1729,7 @@
                 renderBattleCandidates(group);
                 battleRollsEl.innerHTML = '';
                 const activeCandidateData = getBattleCandidateData(group);
+                if (typeof recordMissionBattle === 'function') recordMissionBattle(group.candidates);
                 const captureOnly = activeCandidateData.filter(entry => entry.combatContents.length).length === 1 &&
                     activeCandidateData.some(entry => !entry.combatContents.length);
                 clashResult.innerText = "Ready";
@@ -1787,6 +1879,8 @@
                             }
                         }
                         retreatEntries.forEach(entry => queueRetreat(entry.player, entry.contents, destination));
+                        candidateResults.forEach(result => result.casualties.forEach(unit =>
+                            transferStoredUnitResources([survivor.player], unit)));
                         recordDeadPieces(gameState, [...candidateResults.values()].flatMap(result => result.casualties));
                         const capturedUnits = [...candidateResults.values()].flatMap(result => result.captured);
                         if (survivor.player === REBEL_PLAYER_ID) {
@@ -1867,6 +1961,7 @@
                     return;
                 }
                 const activeCandidateData = getBattleCandidateData(group);
+                if (typeof recordMissionBattle === 'function') recordMissionBattle(group.candidates);
                 const captureOnly = activeCandidateData.filter(entry => entry.combatContents.length).length === 1 &&
                     activeCandidateData.some(entry => !entry.combatContents.length);
                 clashOverlay.classList.remove('hidden');
@@ -1973,6 +2068,8 @@
                         }
 
                         retreatEntries.forEach(entry => queueRetreat(entry.player, entry.contents, group.targetSquare));
+                        candidateResults.forEach(result => result.casualties.forEach(unit =>
+                            transferStoredUnitResources([survivor.player], unit)));
                         recordDeadPieces(gameState, [...candidateResults.values()].flatMap(result => result.casualties));
                         const capturedUnits = [...candidateResults.values()].flatMap(result => result.captured);
                         beginCaptureChoices(survivor.player, capturedUnits,
@@ -2065,6 +2162,8 @@
                 Number(document.getElementById('resource-production-interval').value || 1);
             gameState.resourceCapitals = gameState.resourceMode === '16' ||
                 document.getElementById('resource-capitals').checked;
+            gameState.showResourcesToOthers =
+                document.getElementById('show-resources-to-others').checked;
             gameState.startingArmy = document.getElementById('starting-army').value;
             gameState.boardSize = Number(document.getElementById('board-size').value);
             const setupMode = document.querySelector('input[name="setup-mode"]:checked').value;

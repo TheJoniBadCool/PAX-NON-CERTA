@@ -317,7 +317,7 @@ const Multiplayer = (() => {
         }
         const index = conn._slot;
         if (index === undefined || !m.slots[index] || m.slots[index].conn !== conn) return;
-        if (['draft', 'commit', 'unlock', 'diplomacy', 'armour'].includes(message.type) &&
+        if (['draft', 'commit', 'unlock', 'diplomacy', 'resource-trade', 'armour', 'purchase'].includes(message.type) &&
             PlanningTimer.expired()) {
             expirePlanning();
             syncTo(index);
@@ -341,6 +341,9 @@ const Multiplayer = (() => {
         } else if (message.type === 'diplomacy') {
             if (message.gameId !== m.gameId || message.round !== gameState.round) return;
             handleDiplomacy(index, message.target, message.action);
+        } else if (message.type === 'resource-trade') {
+            if (message.gameId !== m.gameId || message.round !== gameState.round) return;
+            handleResourceTrade(index, message.target, message.action, message.terms, message.id);
         } else if (message.type === 'allied-spoils') {
             if (message.gameId !== m.gameId || message.round !== gameState.round) return;
             if (!decideAlliedSpoils(index + 1, message.id, message.action, message.target)) {
@@ -359,6 +362,16 @@ const Multiplayer = (() => {
         } else if (message.type === 'armour') {
             if (message.gameId !== m.gameId || message.round !== gameState.round) return;
             handleArmourRequest(index, message.unitId);
+        } else if (message.type === 'purchase') {
+            if (message.gameId !== m.gameId || message.round !== gameState.round) return;
+            if (!purchaseResourceAction(index + 1, message.action, message.targetId)) {
+                send(conn, { type: 'notice', text: 'Purchase rejected. Check the turn, resources, and target requirements.' });
+                syncTo(index);
+                return;
+            }
+            updatePlayerCards();
+            renderBoard();
+            syncNow();
         } else if (message.type === 'capture-choice') {
             if (message.gameId !== m.gameId || message.round !== gameState.round) return;
             const accepted = decideCapture(index + 1, message.captureId, message.unitId, message.fate);
@@ -461,12 +474,20 @@ const Multiplayer = (() => {
                 if (destination && destination.player !== index + 1 && isTowerPiece(destination)) return null;
             } else {
                 if (entry.pieceId !== piece.id) return null;
+                const target = getVisiblePiece(...entry.to, index + 1);
+                const paidSiegeStart = isPawnRestTurn() && piece.type !== 'r' &&
+                    target && !arePlayersFriendly(target.player, index + 1) &&
+                    isTowerPiece(target) &&
+                    getCombatContents(plannedPiece).some(unit => getUnitType(unit) === 'p') &&
+                    (getSiegeAtSquare(entry.to) ||
+                        hasPlayerResources(index + 1, { food: 2, wood: 2 }));
                 if (entry.siegeAssault) {
                     const siege = getReadySiegeAssault(piece, entry.from, entry.to);
                     if (!siege || entry.siegeId !== siege.id) return null;
                 } else if (entry.sallyOut) {
                     if (!isValidSallyOutPlan(piece, entry.from, entry.to, index + 1, entry.siegeId)) return null;
-                } else if (!entry.siegeCancel && !canMoveWholePiece(plannedPiece, [])) {
+                } else if (!entry.siegeCancel && !canMoveWholePiece(plannedPiece, []) &&
+                    !paidSiegeStart) {
                     return null;
                 }
                 clean.pieceType = piece.type;
@@ -482,19 +503,10 @@ const Multiplayer = (() => {
     }
 
     function handleArmourRequest(index, unitId) {
-        if (!['PLANNING', 'COMMITTED'].includes(gameState.phase) || gameState.eliminated[index]) return;
-        for (const row of gameState.board) {
-            for (const piece of row.flatMap(getSquarePieces)) {
-                if (!piece || piece.player !== index + 1) continue;
-                const contents = getPieceContents(piece);
-                const unit = contents.find(candidate => candidate.id === unitId);
-                if (!unit || isPrisoner(unit) || !contents.some(other => other.type === 'r') || getUnitLevel(unit, 'armour') >= 3) continue;
-                unit.armour = getUnitLevel(unit, 'armour') + 1;
-                logAction(`🛡️ <b>${getUnitName(unit)}</b> armour upgraded to ${unit.armour}.`);
-                renderBoard();
-                return;
-            }
-        }
+        if (!purchaseResourceAction(index + 1, 'armour', unitId)) return;
+        updatePlayerCards();
+        renderBoard();
+        syncNow();
     }
 
     function startMatch() {
@@ -522,6 +534,7 @@ const Multiplayer = (() => {
         gameState.resourceBalance = $('mp-resource-balance').value;
         gameState.resourceProductionInterval = Number($('mp-resource-production-interval').value || 1);
         gameState.resourceCapitals = gameState.resourceMode === '16' || $('mp-resource-capitals').checked;
+        gameState.showResourcesToOthers = $('mp-show-resources-to-others').checked;
         gameState.startingArmy = $('mp-starting-army').value;
         gameState.planningTimeSeconds = planningTime;
         m.started = true;
@@ -592,7 +605,8 @@ const Multiplayer = (() => {
         });
         gameState.phase = 'COMMITTED';
         getPendingAllianceRequests().forEach(pair => { pair.requestedBy = null; });
-        const text = 'Planning time expired. Plans committed; unanswered alliance requests declined.';
+        gameState.resourceTrades = [];
+        const text = 'Planning time expired. Plans committed; unanswered alliance and exchange requests declined.';
         logAction(text);
         toast(text);
         broadcastToClients({ type: 'notice', text });
@@ -607,7 +621,7 @@ const Multiplayer = (() => {
         for (let i = 0; i < 4; i++) {
             if (!gameState.eliminated[i] && !gameState.committed[i]) return;
         }
-        if (getPendingAllianceRequests().length) return;
+        if (hasPendingPlayerRequests()) return;
         resolveAllMoves().catch(error => {
             console.error(error);
             toast('Resolution error — see console.');
@@ -629,8 +643,11 @@ const Multiplayer = (() => {
         const declined = getPendingAllianceRequests().filter(pair =>
             pair.players.some(index => m.roster[index] && !m.roster[index].connected));
         declined.forEach(pair => { pair.requestedBy = null; });
-        if (declined.length) {
-            const text = 'Pending alliance requests involving skipped disconnected players were declined.';
+        const declinedTrades = getPendingResourceTrades().filter(trade =>
+            [trade.from, trade.to].some(index => m.roster[index] && !m.roster[index].connected));
+        gameState.resourceTrades = getPendingResourceTrades().filter(trade => !declinedTrades.includes(trade));
+        if (declined.length || declinedTrades.length) {
+            const text = 'Pending alliance and exchange requests involving skipped disconnected players were declined.';
             toast(text);
             broadcastToClients({ type: 'notice', text });
         }
@@ -675,6 +692,47 @@ const Multiplayer = (() => {
         } catch (error) {
             console.error('Could not send diplomacy action:', error);
             toast(`Could not send diplomacy action: ${error.message}`);
+        }
+    }
+
+    function handleResourceTrade(index, target, action, terms, id) {
+        if (!m.started) return false;
+        if (PlanningTimer.expired()) {
+            expirePlanning();
+            return false;
+        }
+        const error = applyResourceTradeAction(index, target, action, terms, id);
+        if (error) {
+            if (index === m.myIndex) {
+                toast(error);
+                $('resource-trade-error').innerText = error;
+            } else send(m.slots[index]?.conn, { type: 'notice', text: error });
+        }
+        updatePlayerCards();
+        renderBoard();
+        syncNow();
+        if (!error) checkAllCommitted();
+        return !error;
+    }
+
+    async function requestResourceTrade(target, action, terms = null, id = null) {
+        if (PlanningTimer.expired()) {
+            expirePlanning();
+            return false;
+        }
+        if (isHost()) return handleResourceTrade(m.myIndex, target, action, terms, id);
+        if (!m.conn || !m.conn.open) {
+            toast('Not connected to the host. Exchange action was not sent.');
+            return false;
+        }
+        try {
+            await m.conn.send({ type: 'resource-trade', target, action, terms, id,
+                gameId: m.gameId, round: gameState.round });
+            return true;
+        } catch (error) {
+            console.error('Could not send exchange action:', error);
+            toast(`Could not send exchange action: ${error.message}`);
+            return false;
         }
     }
 
@@ -727,11 +785,13 @@ const Multiplayer = (() => {
         };
         if (m.started) {
             message.game = {
-                board: gameState.board,
+                board: cloneBoardWithoutResourceStores(),
                 biomes: gameState.biomes,
                 hillHeld: gameState.hillHeld,
                 eliminated: gameState.eliminated,
                 activePlayers: gameState.activePlayers,
+                capitalTowerIds: gameState.capitalTowerIds,
+                horde: gameState.horde,
                 round: gameState.round,
                 phase: gameState.phase === 'COMMITTED' ? 'PLANNING' : gameState.phase,
                 startingPosition: gameState.startingPosition,
@@ -739,9 +799,14 @@ const Multiplayer = (() => {
                 startingProvinces: gameState.startingProvinces,
                 startingConfirmed: gameState.startingConfirmed,
                 diplomacy: gameState.diplomacy,
+                resourceTrades: getPendingResourceTrades().map(trade =>
+                    trade.from === index || trade.to === index ? trade :
+                        { id: trade.id, from: trade.from, to: trade.to }),
                 sieges: gameState.sieges,
-                retreating: gameState.retreating,
-                deadPieces: gameState.deadPieces,
+                retreating: (gameState.retreating || [[], [], [], []]).map(entries => entries.map(entry => ({
+                    ...entry, contents: entry.contents.map(stripResourceStore)
+                }))),
+                deadPieces: gameState.deadPieces.map(units => units.map(stripResourceStore)),
                 nextUnitSequence: gameState.nextUnitSequence,
                 progressionMode: gameState.progressionMode,
                 boardSize: gameState.boardSize,
@@ -750,15 +815,25 @@ const Multiplayer = (() => {
                 resourceMode: gameState.resourceMode,
                 resourceBalance: gameState.resourceBalance,
                 resourceCapitals: gameState.resourceCapitals,
+                showResourcesToOthers: gameState.showResourcesToOthers,
                 resourceProductionInterval: gameState.resourceProductionInterval,
                 planningTimeSeconds: gameState.planningTimeSeconds,
                 planningDeadline: gameState.planningDeadline,
                 provinceResources: gameState.provinceResources,
-                resources: gameState.resources.map((resources, i) => i === index ? resources : null),
+                provinceRecruitmentUsed: gameState.provinceRecruitmentUsed || Array(16).fill(false),
+                resources: gameState.resources.map((resources, i) =>
+                    gameState.showResourcesToOthers || i === index ? resources : null),
                 lastResourceProductionRound: gameState.lastResourceProductionRound,
                 objectives: gameState.objectives.map((objectives, i) => i === index ? objectives : []),
+                missionBatches: (gameState.missionBatches || [null, null, null, null])
+                    .map((batch, i) => i === index ? batch : null),
+                missionPoints: (gameState.missionPoints || [0, 0, 0, 0])
+                    .map((points, i) => i === index ? points : null),
                 scores: gameState.scores,
-                pendingCapture: gameState.pendingCapture,
+                pendingCapture: gameState.pendingCapture ? {
+                    ...gameState.pendingCapture,
+                    contents: gameState.pendingCapture.contents.map(stripResourceStore)
+                } : null,
                 pendingSpoils: gameState.pendingSpoils,
                 gameOver: gameState.phase === 'GAME_OVER' ? {
                     title: $('gameover-title').innerText,
@@ -820,7 +895,7 @@ const Multiplayer = (() => {
         clearTimeout(m.syncTimer);
         m.syncTimer = null;
         broadcastSync(true);
-        broadcastToClients({ type: 'anim', moves: JSON.parse(JSON.stringify(moves)) });
+        broadcastToClients({ type: 'anim', moves: moves.map(stripResourceStoresFromPlan) });
     }
 
     function battleMessage() {
@@ -832,7 +907,10 @@ const Multiplayer = (() => {
             color: clashResult.style.color,
             rolls: battleRollsEl.innerHTML,
             target: battleTargetSquare,
-            pendingCapture: gameState.pendingCapture
+            pendingCapture: gameState.pendingCapture ? {
+                ...gameState.pendingCapture,
+                contents: gameState.pendingCapture.contents.map(stripResourceStore)
+            } : null
         };
     }
 
@@ -984,15 +1062,19 @@ const Multiplayer = (() => {
         const previousReleasedIds = new Set(gameState.retreating.flat()
             .filter(entry => entry.released).flatMap(entry => entry.contents.map(unit => unit.id)));
         Object.assign(gameState, {
-            board: game.board,
+            board: cloneBoardWithoutResourceStores(game.board),
             biomes: game.biomes,
             hillHeld: game.hillHeld,
             eliminated: game.eliminated,
             activePlayers: game.activePlayers,
+            capitalTowerIds: game.capitalTowerIds || [null, null, null, null],
+            horde: game.horde || [false, false, false, false],
             round: game.round,
             sieges: game.sieges,
-            retreating: game.retreating,
-            deadPieces: game.deadPieces || [[], [], [], []],
+            retreating: (game.retreating || [[], [], [], []]).map(entries => entries.map(entry => ({
+                ...entry, contents: entry.contents.map(stripResourceStore)
+            }))),
+            deadPieces: (game.deadPieces || [[], [], [], []]).map(units => units.map(stripResourceStore)),
             nextUnitSequence: game.nextUnitSequence,
             progressionMode: game.progressionMode,
             boardSize: game.boardSize,
@@ -1001,22 +1083,30 @@ const Multiplayer = (() => {
             resourceMode: game.resourceMode,
             resourceBalance: game.resourceBalance,
             resourceCapitals: game.resourceCapitals,
+            showResourcesToOthers: game.showResourcesToOthers ?? false,
             resourceProductionInterval: game.resourceProductionInterval ?? 1,
             planningTimeSeconds: game.planningTimeSeconds ?? 0,
             planningDeadline: game.planningDeadline ?? null,
             provinceResources: game.provinceResources,
+            provinceRecruitmentUsed: game.provinceRecruitmentUsed || Array(16).fill(false),
             resources: game.resources,
             lastResourceProductionRound: game.lastResourceProductionRound,
             objectives: game.objectives,
+            missionBatches: game.missionBatches || [null, null, null, null],
+            missionPoints: game.missionPoints || [0, 0, 0, 0],
             scores: game.scores,
             committed: message.committed,
-            pendingCapture: game.pendingCapture || null,
+            pendingCapture: game.pendingCapture ? {
+                ...game.pendingCapture,
+                contents: game.pendingCapture.contents.map(stripResourceStore)
+            } : null,
             pendingSpoils: game.pendingSpoils || null,
             startingPosition: game.startingPosition || 'corner',
             startingArmy: game.startingArmy || 'default',
             startingProvinces: game.startingProvinces || [null, null, null, null],
             startingConfirmed: game.startingConfirmed || [false, false, false, false],
             diplomacy: game.diplomacy ?? createDiplomacyState(),
+            resourceTrades: game.resourceTrades || [],
             turnIndex: message.you
         });
         $('map-seed-display').innerText = `Map seed: ${gameState.mapSeed}`;
@@ -1151,8 +1241,16 @@ const Multiplayer = (() => {
 
     function requestArmourUpgrade(unitId) {
         if (m.conn && m.conn.open) {
-            m.conn.send({ type: 'armour', unitId, gameId: m.gameId, round: gameState.round });
+            requestPurchase('armour', unitId);
         }
+    }
+
+    function requestPurchase(action, targetId = null) {
+        if (!m.conn || !m.conn.open) {
+            toast('Not connected to the room. Purchase was not sent.');
+            return;
+        }
+        m.conn.send({ type: 'purchase', action, targetId, gameId: m.gameId, round: gameState.round });
     }
 
     function requestCaptureDecision(captureId, unitId, fate) {
@@ -1212,7 +1310,8 @@ const Multiplayer = (() => {
                 .filter((player, i) => !gameState.eliminated[i] && !gameState.committed[i])
                 .map(player => player.name);
             const pending = getPendingAllianceRequests().length;
-            return `Plan locked. Waiting for: ${waiting.join(', ') || 'no more plans'}.${pending ? ` ${pending} alliance request(s) must be answered on the player cards before resolution.` : ''}${PlanningTimer.expired() ? '' : ' You can unlock to change it.'}`;
+            const trades = getPendingResourceTrades().length;
+            return `Plan locked. Waiting for: ${waiting.join(', ') || 'no more plans'}.${pending ? ` ${pending} alliance request(s) must be answered on the player cards before resolution.` : ''}${trades ? ` ${trades} exchange request(s) must be answered on the player cards before resolution.` : ''}${PlanningTimer.expired() ? '' : ' You can unlock to change it.'}`;
         }
         return 'Plan moves for your pieces, then Commit Plans.';
     }
@@ -1234,7 +1333,8 @@ const Multiplayer = (() => {
         activePlayerDescEl.innerText = describePhase();
         btnForceSkip.classList.toggle('hidden', !(isHost() && ['PLANNING', 'COMMITTED'].includes(gameState.phase) &&
             [0, 1, 2, 3].some(i => !gameState.eliminated[i] &&
-                (!gameState.committed[i] || getPendingAllianceRequests().some(pair => pair.players.includes(i))) &&
+                (!gameState.committed[i] || getPendingAllianceRequests().some(pair => pair.players.includes(i)) ||
+                    getPendingResourceTrades().some(trade => trade.from === i || trade.to === i)) &&
                 m.roster[i] && !m.roster[i].connected)));
     }
 
@@ -1323,8 +1423,10 @@ const Multiplayer = (() => {
         toggleCommit,
         expirePlanning,
         requestArmourUpgrade,
+        requestPurchase,
         requestCaptureDecision,
         requestDiplomacy,
+        requestResourceTrade,
         syncAlliedState: syncNow,
         requestAlliedSpoils: (id, action, target) => {
             if (!m.conn || !m.conn.open) {

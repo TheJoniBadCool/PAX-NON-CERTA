@@ -1,10 +1,11 @@
-// Run with: gjs -c "$(cat js/constants.js js/models.js js/game-state.js js/setup-utils.js js/board-utils.js js/movement-rules.js js/siege-rules.js js/planning-rules.js js/board-setup.js js/setup-actions.js js/board-renderer.js tests/tower-gates.js)"
+// Run with: gjs -c "$(cat js/constants.js js/models.js js/game-state.js js/setup-utils.js js/board-utils.js js/resource-purchases.js js/capital-rules.js js/movement-rules.js js/siege-rules.js js/planning-rules.js js/board-setup.js js/setup-actions.js js/board-renderer.js tests/tower-gates.js)"
 const gameState = new GameState();
 const logs = [];
 const customSetupStatusEl = { innerText: '' };
 function randomLevel() { return 0; }
 function logAction(message) { logs.push(message); }
 function renderCustomSetupBoard() {}
+function refreshCustomMapPreview() {}
 function assert(condition, message) {
     if (!condition) throw new Error(message);
 }
@@ -99,6 +100,8 @@ gameState.board[5][5] = makePiece(1, 'r', 'tower', [0, 1]);
 gameState.board[5][5].contents.push(createUnit(1, 'q', 'queen', 'queen'));
 gameState.turnIndex = 0;
 gameState.round = 1;
+gameState.resources[1].food = 2;
+gameState.resources[1].wood = 2;
 gameState.sieges = [];
 gameState.lockedPieceIds = new Set();
 gameState.plans = [[], [], [], []];
@@ -126,6 +129,11 @@ assert(badExit.invalid && badEntry.invalid && badAssault.invalid && !validExit.i
     'Resolution must reject all non-gate movements, including assaults');
 
 gameState.board[5][6] = makePiece(2, 'p', 'attacker');
+gameState.board[10][10] = makePiece(2, 'r', 'attacker-supplies');
+gameState.board[10][10].contents[0].resourceStockpile = {
+    horse: 0, food: 2, wood: 2, metal: 0, gold: 0, stone: 0
+};
+refreshResourceTotals();
 const siegeStart = {
     player: 2, pieceId: 'attacker', from: [5, 6], to: [5, 5],
     contents: getPieceContents(gameState.board[5][6])
@@ -134,6 +142,8 @@ rejectInvalidTowerAttacks([siegeStart]);
 registerSiegeStarts([siegeStart]);
 assert(siegeStart.siegeStart && gameState.sieges.length === 1,
     'An attack from the gate must start a siege');
+assert(gameState.resources[1].food === 0, 'Siege deployment spends the Food cost');
+assert(gameState.resources[1].wood === 0, 'Siege deployment spends the Wood cost');
 const besiegedExit = { player: 1, from: [5, 5], to: [5, 6], isUnmerge: true, contents: [] };
 rejectInvalidTowerAttacks([besiegedExit]);
 assert(besiegedExit.invalid, 'A siege must still prevent ordinary gate exits');

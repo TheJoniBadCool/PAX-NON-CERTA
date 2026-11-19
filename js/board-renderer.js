@@ -220,6 +220,15 @@ function renderBoard() {
                         square.appendChild(arrow);
                     }
                 }
+                if (isCapitalTower(piece)) {
+                    const capitalBadge = document.createElement('span');
+                    capitalBadge.className = 'capital-board-badge';
+                    capitalBadge.innerText = '★';
+                    capitalBadge.title = `${getPlayerInfo(piece.player).name}'s capital`;
+                    capitalBadge.setAttribute('role', 'img');
+                    capitalBadge.setAttribute('aria-label', capitalBadge.title);
+                    pieceContainer.appendChild(capitalBadge);
+                }
                 if (attackerSiege) {
                     const attacker = attackerSiege.attackers.find(entry => entry.pieceId === piece.id);
                     const attackerTimer = document.createElement('div');

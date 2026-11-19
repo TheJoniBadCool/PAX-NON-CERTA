@@ -25,7 +25,8 @@ const context = vm.createContext({
     getPendingHeldIndices: () => new Set(),
     renderPlanArrows() {}, renderRetreatTable() {}
 });
-['constants', 'models', 'game-state', 'setup-utils', 'board-utils', 'board-setup', 'board-renderer']
+['constants', 'models', 'game-state', 'setup-utils', 'board-utils', 'capital-rules',
+    'board-setup', 'board-renderer']
     .forEach(name => vm.runInContext(fs.readFileSync(`js/${name}.js`, 'utf8'), context));
 const api = vm.runInContext(`const gameState = new GameState();
     ({ state: gameState, getProvinceOwners, getProvinceIndex, createStartingBoard,
@@ -132,6 +133,13 @@ state.board[5][5] = {
     id: 'enemy-pawn', player: 2, type: 'p', contents: [api.createUnit(2, 'p', 'pawn')]
 };
 checkRendering(expected);
+state.board[4][4] = castle(1, 'capital');
+state.capitalTowerIds[0] = 'capital-tower';
+api.renderBoard();
+assert(boardEl.children[4 * state.boardSize + 4].children.some(child =>
+    child.className === 'capital-board-badge'), 'The current capital must be visibly marked');
+assert(!boardEl.children[5 * state.boardSize + 5].children.some(child =>
+    child.className === 'capital-board-badge'), 'Non-capital pieces must not receive the capital marker');
 state.board[4][4] = null;
 state.board[7][7] = null;
 expected[5] = null;

@@ -60,6 +60,19 @@ chess rules.
   and combat log.
 - Opening the page shows the player-selection modal.
 
+### Capitals and hordes
+
+- Each active player has one capital tower. Standard starts use the player's
+  starting castle; custom setups randomly choose from that player's towers when
+  the match starts. Active players with no towers are marked as hordes.
+- The capital tower has a star marker on the board. A player card displays a
+  camel icon and **Horde** while that player has no towers.
+- When a capital is captured, its former owner randomly selects another tower
+  they own. If they own none, they become a horde. A horde that later acquires
+  a tower automatically gets a new capital.
+- Capital selection is random each game start and is not reproduced by the map
+  seed. Horde status is currently informational and does not add other rules.
+
 ### Alliances and war
 
 - Every pair of selected players starts at war. Each player card publicly shows
@@ -112,7 +125,8 @@ chess rules.
 - Direct allies share province and troop sight, including Bishop and sight-size
   effects. Allied troops are visible in forests; enemy forest concealment stays
   unchanged. Vision is not transitive, and ends when war is declared or an ally
-  is eliminated. Private plans, objectives, and resources are not shared.
+  is eliminated. Private plans and objectives are not shared. Resource balance
+  visibility is a host-selected setting; hidden balances are not sent to guests.
 - Allies on one combat side combine strength against common enemies; each side
   must be mutually allied internally and hostile to every opposing member.
   An ally of both combatants stays out. Remaining hostile pairs fight afterward.
@@ -140,6 +154,33 @@ chess rules.
   multiplayer state. New games clear pending prisoner recipients and negotiations.
   Resources, objectives, and victory conditions remain per-player and unchanged.
 
+### Resource exchanges
+
+- During planning, **Exchange resources** sits beside **Declare War** and
+  **Request Allegiance** in the other player's diplomacy menu. Any active,
+  non-eliminated players may trade, including enemies.
+- Choose non-negative whole-number amounts of any resource on each side.
+  Gifts and requests for gifts are allowed: either side may be zero, but not both.
+  Both players must hold the full outgoing amounts at proposal and acceptance;
+  resources are not reserved. Incoming resources cannot finance the outgoing side.
+- Acceptance transfers both sides atomically, spending from existing unit stores.
+  Received resources go to the recipient's capital Castle, or their King then
+  Queen (including retreating royals). A recipient without an eligible holder
+  cannot receive resources. Failed acceptance changes no balances and leaves
+  the proposal available to decline or, after replenishment, accept.
+- Only the recipient may accept or decline; the sender may cancel while planning.
+  Online, committed recipients may reply, but senders must unlock to propose or
+  cancel. One proposal may be pending per pair in either direction; multiple deals
+  per round are allowed independently of the alliance/war round lock.
+- Requests use the alliance notification and private Hotseat review flow.
+  All outstanding alliance and exchange requests must be answered before
+  resolution. Online timer expiry declines unanswered exchanges; skipping
+  disconnected players declines exchanges involving them.
+- Reset Plans and unlocking do not undo exchanges or proposals. Reconnects retain
+  pending proposals and their identities; stale/repeated replies cannot transfer
+  twice. New games clear proposals. Online terms are visible only to participants
+  (and the authoritative host); other guests see only who has a pending request.
+
 ### Terrain
 
 - Each match generates multiple irregular terrain patches aiming for 10%
@@ -166,15 +207,20 @@ chess rules.
 
 ### Resources
 
+- Hotseat and Multiplayer settings include **Show resource balances to other
+  players**, checked by default. When enabled, all active players' stockpiles
+  are shown during planning and multiplayer snapshots share all balances; when
+  disabled, each player sees only their own and multiplayer snapshots omit
+  opponents' balances.
 - Hotseat and Multiplayer hosts choose **8 resources** (default),
   **12 resources**, or **16 resources** before previewing their map. Changing this choice invalidates
   the preview; the seed and mode reproduce the same resource assignments.
 - With 12 rebel provinces, the default mode covers eight randomly selected
-  provinces with 1 horse, 3 food, 2 wood, 1 metal, and 1 gold.
-- By default full mode covers all 12 rebel provinces with 2 horses, 4 food, 3 wood, 2 metal,
-  and 1 gold.
+  provinces with 1 horse, 2 food, 2 wood, 1 metal, 1 gold, and 1 stone.
+- By default full mode covers all 12 rebel provinces with 2 horses, 3 food,
+  3 wood, 2 metal, 1 gold, and 1 stone.
 - The 16-resource mode places one resource in every province, regardless of
-  ownership, with 3 horses, 5 food, 4 wood, 3 metal, and 1 gold.
+  ownership, with 3 horses, 4 food, 4 wood, 3 metal, 1 gold, and 1 stone.
 - Every board size has 16 provinces. If the rebel count differs, default mode
   places rebels minus four resources (minimum zero), full mode places the rebel count, and
   16-resource mode always covers all provinces. Resource counts use proportional
@@ -227,12 +273,35 @@ chess rules.
   are never stolen. Each custom site is checked separately: raiding one square
   takes every resource type there but not resources elsewhere in the province.
   Forest concealment does not prevent raiding, and stockpile results remain private.
-- Players start with zero resources; stockpiles have no cap and no spending
-  mechanic. Cards use icon-and-count rows visible only to their own player.
+- Players start with zero resources; stockpiles have no cap. Cards use
+  icon-and-count rows visible only to their own player.
   Hotseat handoff and resolution clear and hide all stockpile rows. Multiplayer
   snapshots/rejoins carry public assignments, chances, and the last production round but only the
   recipient's stockpile. The authoritative host retains all stockpiles.
 - New games reset assignments, stockpiles, and production history.
+- Resource purchases are available during planning on rounds 4, 8, 12, etc.;
+  multiple affordable purchases are allowed in one eligible round. The shopping-cart
+  dropdown in the current player's card heading lists purchase types, costs, and
+  eligible targets (including armour); unavailable options are disabled.
+  The round-clock hand advances a quarter-turn per completed round independently
+  of resource-production settings. Pawns cost
+  2 Food, 1 Wood, and 1 Gold; Horses cost 2 Horse, 1 Metal, and 1 Gold.
+  Both are recruited onto an owned Castle in an orthogonally adjacent province
+  to the current capital. Each province can be used once total for either
+  recruit type, and players may have at most six living Pawns and three living
+  Horses at once. Units on the board, retreating units, and prisoners count
+  toward those limits.
+- Armour can be purchased for a unit in a Castle/Tower stack for 1 Food,
+  2 Metal, 2 Wood, and 1 Gold. It is a one-time level 0-to-1 upgrade, available
+  only on purchase rounds; the previous free armour upgrade is removed.
+- Any owned Castle may be upgraded twice, each level costing 3 Stone, 1 Food,
+  2 Wood, and 1 Gold. Level 1 changes stationary Tower defence from ×3 to ×4,
+  siege assault readiness from 3 to 4 rounds, and the garrison timer from 6 to
+  8. Level 2 changes these to ×5, 6 rounds, and 12 rounds respectively.
+- Lucky Cards cost 1 each of Gold, Horse, Metal, Food, and Wood and currently
+  have no gameplay effect. Starting a new siege costs 2 Food and 2 Wood and is
+  allowed on any round, including rounds when Pawns are inactive. Additional
+  attacker stacks joining an existing Castle siege do not pay the cost again.
 
 ### Fog of war
 
@@ -333,7 +402,7 @@ chess rules.
   selection, alliance review, or resolution. Manual commitment stops that timer.
 - Online timers share a host-authoritative deadline. Timed guests send private
   validated drafts to the host; expiry commits the latest received drafts even
-  for disconnected players and declines unanswered alliance requests. Plans
+  for disconnected players and declines unanswered alliance and exchange requests. Plans
   cannot be edited or unlocked after expiry. Rejoining preserves the deadline
   and the last draft received by the host; each new round gets a fresh limit.
 - The objective checklist shows only the current player's
@@ -355,16 +424,17 @@ chess rules.
   promotion are not implemented.
 - Pawns may move on odd-numbered rounds only, beginning with round 1.
   On even-numbered rounds, a Pawn cannot move, merge, unmerge, transfer, or
-  initiate an attack, except that a ready siege attacker may launch its
-  previously deployed assault.
+  initiate an ordinary attack; it may start a siege if the player can pay its
+  Food and Wood cost, and a ready siege attacker may launch its assault.
 - A stack containing any Pawn may move as a whole only on odd-numbered rounds.
   On even-numbered rounds, its non-Pawn units may still be unmerged and moved
   individually, including by transfer or attack; its Pawn units cannot be
   moved separately. Such a stack may receive non-Pawn units and remains a
   valid target for enemy attacks. A whole stack may also Sally Out from a
   besieged Tower on an even-numbered round.
-- Starting a new siege is allowed only on odd-numbered rounds. This restriction
-  does not prevent launching a ready siege assault or performing a Sally Out.
+- A new siege may start on any round, including even rounds when Pawns are
+  otherwise inactive, but requires 2 Food and 2 Wood. The cost is paid once per
+  Castle siege; later attacker stacks joining it are free.
 - This rule applies to both hotseat and multiplayer games. Other non-Pawn
   pieces and stacks retain their normal movement on every round.
 - Every unit has a stable human-readable name based on its player and type:
@@ -386,18 +456,19 @@ chess rules.
   during the same planning turn.
 - A planned ordinary move from a piece can be replaced by selecting that piece
   and choosing another destination.
-- On even-numbered rounds, reject a whole-stack action if the source stack
-  contains a Pawn. Reject any unmerge or transfer of a Pawn unit, but allow a
-  non-Pawn unit inside a Pawn-containing stack to move independently.
+- On even-numbered rounds, reject ordinary whole-stack movement if the source
+  stack contains a Pawn. A Pawn-containing stack may still deploy a new siege
+  against an adjacent enemy Tower if the player can pay its siege cost. Reject
+  any unmerge or transfer of a Pawn unit, but allow a non-Pawn unit inside a
+  Pawn-containing stack to move independently.
 - On even-numbered rounds, a Pawn or Pawn-containing stack may still be a
   stationary friendly merge/transfer target or an enemy attack target.
 - On even-numbered rounds, allow an existing siege attacker to assault only
   when its timer is 0 and it targets the besieged Tower. Allow a valid Sally
   Out from a besieged Tower regardless of round parity.
-- Reject any new siege deployment on an even-numbered round.
 - The multiplayer host must reject plans that violate the even-round pawn
-  restrictions, while accepting only valid ready siege assaults and Sally Outs
-  as exceptions, even if a client submits them directly.
+  restrictions, while accepting only paid siege deployments, valid ready siege
+  assaults, and Sally Outs as exceptions, even if a client submits them directly.
 - Same-player pieces may pass through or otherwise plan around each other; paths
   are not blocked by friendly planned movement.
 - A move into an enemy piece is allowed and becomes a collision/capture decision
@@ -551,21 +622,45 @@ chess rules.
 
 ### Elimination and victory
 
-- Each player starts at 0 with random enemy targets for +4 defeat, +3 King death,
-  +2 specific Queen death, and +1 control of a specific starting castle.
-- Penalties are -4 for the player's King death and -3 per starting castle lost.
+- Each player starts at 0 with 6–10 independently random objectives, including
+  possible repetitions. Rewards are +2 to +6 and penalties -2 to -6.
+- The pool includes targeted enemy defeat, royal deaths, castle capture or loss,
+  sole leads in provinces, gold, army or castles, a resource monopoly, an
+  eight-full-round royal prisoner bounty, and a penalty for the elimination of
+  a randomly assigned protected player.
+- Lead objectives require a positive unique lead over non-eliminated players;
+  army counts include retreating units but exclude prisoners and Towers. A
+  monopoly requires ownership of all provinces with sites of the given resource,
+  with at least one site present. Both kinds are revoked when conditions change.
+- A bounty counts full rounds after capture of the same royal by the same
+  captor. Release, rescue or a different captor resets the count; completion
+  remains earned.
 - Castle identity survives capture. Castle reward and penalty checkmarks reflect
   current ownership, so loss and recapture reverse the associated points.
 - Kings and Queens in stacks, prisoner custody, or retreat queues count as alive.
-- Scores are recomputed after the entire round, including siege casualties and
-  retreat re-entry. All players at -10 or below are permanently eliminated
-  together, then enemy-defeat rewards are applied.
+- Scores are recomputed after the entire round, including siege casualties,
+  retreat re-entry, and resource production. All players at -20 or below are
+  permanently eliminated together; defeat rewards and Protector penalties may
+  cause further eliminations, which are resolved until stable.
 - King death alone does not eliminate a player.
+- Every active player receives three private missions at game start and every
+  16 completed rounds. Each batch expires after 16 rounds; successes give
+  permanent +1 or +2 points, and no successes incurs one permanent -2 penalty.
+  Expiration and scoring occur before victory and defeat checks.
+- Battle and siege events satisfy attack missions and fail corresponding
+  protection missions; unopposed prisoner captures do not count as battles.
+  Raids count on eligible production checks even when production fails.
+- Named garrisons and province holds need 4–8 consecutive completed rounds.
+  Fallback requires selected units or all owned mobile combat units in owned
+  provinces; retreating units prevent the all-unit fallback.
+- Mission magnifiers highlight targets without changing fog. Moving unit and
+  castle locations follow current board positions; player-only missions point
+  to the current capital. Highlights disappear on board redraw or handoff.
 - Eliminated players are skipped during future planning.
 - Remaining pieces owned by eliminated players are gray and stationary, but may
   still be attacked and included in collision battles.
-- The game enters `GAME_OVER` when a non-eliminated player reaches 10 or more
-  points. Simultaneous winners share victory; a lone survivor must still reach 10.
+- The game enters `GAME_OVER` when a non-eliminated player reaches 20 or more
+  points. Simultaneous winners share victory; a lone survivor must still reach 20.
 - If no active player remains, the UI shows a draw.
 - The game-over modal can start another game through player selection.
 
@@ -592,8 +687,8 @@ chess rules.
   stack does nothing else that round, and is applied during the movement phase.
   If the defender plans **Sally Out** the same round, the sally battle still
   happens against the cancelling catapult.
-- Armour upgrades are applied by the host (clients send a request) and are only
-  accepted during planning.
+- Resource purchases, including paid armour upgrades, are validated and
+  applied by the host; clients send purchase requests during eligible planning.
 - Eliminated players stay in the room as spectators and are not waited on.
 - A disconnected player keeps their colour and can rejoin with the same room
   code from the same browser tab session; the round waits for them. The creator
@@ -714,7 +809,7 @@ clarification rather than guessing.
 - A player must be eliminated only after the complete resolution phase.
 - Removing the last non-King unit from a stack must not eliminate its player.
 - Losing the King checks King-death objectives but must not eliminate the player
-  unless the end-of-round score reaches -10.
+  unless the end-of-round score reaches -20.
 - A stack with no contents must never remain on the board.
 - Eliminating a player must immediately gray all of that player's remaining
   pieces and prevent all movement, unmerge, and transfer interactions for them.

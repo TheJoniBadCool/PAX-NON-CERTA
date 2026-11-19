@@ -33,7 +33,7 @@ const context = vm.createContext({
             if (!elements.has(id)) elements.set(id, element());
             return elements.get(id);
         }
-    }, boardEl, customSetupBoardEl, customMapPreview: null,
+    }, boardEl, customSetupBoardEl, customMapPreview: null, logAction() {},
     placeCustomPiece() {}, randomLevel: () => 0,
     renderPlanArrows() {}, renderRetreatTable() {},
     activePlayerNameEl: element(), roundTagEl: element(),
@@ -43,16 +43,25 @@ const context = vm.createContext({
         refreshControls() {}, onBoardRendered() {}
     }
 });
-['constants', 'models', 'game-state', 'diplomacy-rules', 'setup-utils', 'board-utils', 'movement-rules', 'planning-rules',
-    'board-setup', 'board-renderer', 'setup-renderer', 'status-ui'].forEach(name =>
+['constants', 'models', 'game-state', 'diplomacy-rules', 'setup-utils', 'board-utils',
+'resource-purchases', 'capital-rules', 'movement-rules', 'planning-rules',
+    'board-setup', 'board-renderer', 'setup-renderer', 'status-ui', 'prisoner-rules'].forEach(name =>
     vm.runInContext(fs.readFileSync(`js/${name}.js`, 'utf8'), context));
 const api = vm.runInContext(`const gameState = new GameState();
     ({ state: gameState, createStartingBoard, initBoard, generateProvinceResources,
        createSeededRandom, resolveResourceProduction, getProvinceIndex, createUnit,
        renderBoard, renderMapPreview, renderCustomSetupBoard, updatePlayerCards,
-       isValidCustomMap, types: RESOURCE_TYPES, modes: RESOURCE_MODES })`, context);
+       isValidCustomMap, getUnitResourceStore, refreshResourceTotals,
+       transferStoredUnitResources, transferCapturedUnitResources,
+       cloneBoardWithoutResourceStores, beginCaptureChoices, decideCapture,
+       types: RESOURCE_TYPES, modes: RESOURCE_MODES })`, context);
 const { state } = api;
 const plain = value => JSON.parse(JSON.stringify(value));
+const legacyStockpile = { resourceStockpile: { gold: 3 } };
+assert.equal(api.getUnitResourceStore(legacyStockpile, true).stone, 0,
+    'Old resource stockpiles migrate the added Stone key');
+assert.equal(legacyStockpile.resourceStockpile.gold, 3,
+    'Migrating a stockpile preserves existing resource amounts');
 const counts = (resources, key, values) => values.map(value =>
     resources.filter(resource => resource?.[key] === value).length);
 const allPlayers = [true, true, true, true];
@@ -405,14 +414,15 @@ for (const chance of [5, 95]) {
 state.board = Array.from({ length: 16 }, () => Array(16).fill(null));
 state.biomes = Array.from({ length: 16 }, () => Array(16).fill('plains'));
 state.board[0][0] = castle(1, 'probability-test');
+const probabilityTower = state.board[0][0].contents[0];
 for (const chance of [5, 25, 50, 75, 95]) {
     state.provinceResources[0] = { type: 'food', productionChance: chance };
-    state.resources[0].food = 0;
+    probabilityTower.resourceStockpile = { horse: 0, food: 0, wood: 0, metal: 0, gold: 0 };
     for (let roll = 0; roll < 100; roll++) {
         state.lastResourceProductionRound = null;
         api.resolveResourceProduction(4, () => roll / 100);
     }
-    assert.equal(state.resources[0].food, chance,
+    assert.equal(probabilityTower.resourceStockpile.food, chance,
         'Production succeeds strictly below the assigned percentage, including 5% and 95%');
 }
 
@@ -425,12 +435,14 @@ assert.equal(state.resourceProductionInterval, 1, 'Every-turn production is the 
 for (const interval of [1, 2, 4]) {
     state.resourceProductionInterval = interval;
     state.lastResourceProductionRound = null;
-    state.resources[0].food = 0;
+    state.board[0][0].contents[0].resourceStockpile = {
+        horse: 0, food: 0, wood: 0, metal: 0, gold: 0
+    };
     for (let round = 1; round <= 8; round++) {
         assert.equal(api.resolveResourceProduction(round, () => 0), round % interval === 0,
             `Interval ${interval} checks only at its matching completed rounds`);
     }
-    assert.equal(state.resources[0].food, 8 / interval);
+    assert.equal(state.board[0][0].contents[0].resourceStockpile.food, 8 / interval);
 }
 
 state.reset();
@@ -445,6 +457,13 @@ state.board[0][12] = castle(1, 'red-contested');
 state.board[1][13] = castle(2, 'blue-contested');
 state.board[4][0] = castle(3, 'eliminated');
 state.eliminated[2] = true;
+state.capitalTowerIds = state.board.flatMap(row => row.filter(Boolean))
+    .map(piece => [piece.player, piece.contents[0]])
+    .filter(([player]) => player >= 1 && player <= 4)
+    .reduce((ids, [player, tower]) => {
+        if (!ids[player - 1]) ids[player - 1] = tower.id;
+        return ids;
+    }, [null, null, null, null]);
 for (let province = 0; province < 6; province++) {
     state.provinceResources[province] = { type: 'food', productionChance: 100 };
 }
@@ -452,22 +471,24 @@ state.provinceResources[1].type = 'gold';
 state.provinceResources[15] = { type: 'wood', productionChance: 100 };
 for (const round of [1, 2, 3]) assert.equal(api.resolveResourceProduction(round), false);
 assert.equal(api.resolveResourceProduction(4, () => 0.99), true);
-assert.equal(state.resources[0].food, 1);
+assert.equal(state.board[0][0].contents[0].resourceStockpile.food, 1);
 assert.equal(state.resources[1].gold, 1);
 assert.equal(state.resources[0].wood, 0);
 assert.equal(state.resources[2].food, 0, 'Eliminated owners do not receive production');
 assert.equal(api.resolveResourceProduction(4), false, 'Duplicate resolution must not pay twice');
 state.board[0][0].player = 2;
+state.board[0][0].contents.forEach(unit => { unit.player = 2; });
+api.refreshResourceTotals();
 assert.equal(api.resolveResourceProduction(8, () => 0.99), true);
-assert.equal(state.resources[0].food, 1);
-assert.equal(state.resources[1].food, 1, 'Captured provinces pay their current owner');
+assert.equal(state.resources[0].food, 0);
+assert.equal(state.resources[1].food, 2, 'Captured Tower stock and production follow the Tower');
 assert.equal(state.resources[1].gold, 2, 'Stockpiles accumulate without a cap');
 state.provinceResources[0].productionChance = 50;
 state.provinceResources[1].productionChance = 50;
 const rolls = [0.49, 0.50];
 assert.equal(api.resolveResourceProduction(12, () => rolls.shift()), true);
 assert.equal(rolls.length, 0, 'Each eligible province gets an independent roll');
-assert.equal(state.resources[1].food, 2, 'One resource can succeed');
+assert.equal(state.resources[1].food, 3, 'One resource can succeed');
 assert.equal(state.resources[1].gold, 2, 'Another resource with the same chance can fail');
 assert.equal(state.provinceResources[0].productionChance, 50, 'Production does not reroll assigned chances');
 assert.equal(api.resolveResourceProduction(8), false, 'Older rounds must not produce twice');
@@ -485,6 +506,17 @@ for (const multiplayer of [false, true]) {
                 assert.equal(row.classList.contains('hidden'), !visible);
                 assert.equal(row.html.includes('resource-stock'), visible);
                 if (!visible) assert.equal(row.html, '', 'Hidden stockpile values must be removed from the DOM');
+                const shop = elements.get(`resource-purchases-p${index + 1}`);
+                const options = elements.get(`resource-purchase-options-p${index + 1}`);
+                const shopVisible = visible && !state.eliminated[index] &&
+                    ['PLANNING', 'COMMITTED'].includes(phase);
+                assert.equal(shop.classList.contains('hidden'), !shopVisible,
+                    'Only the current player can open the shop during planning');
+                assert.equal(options.html.includes('data-purchase="lucky"'), shopVisible);
+                if (!shopVisible) {
+                    assert.equal(options.html, '', 'Hidden purchase targets are removed from the DOM');
+                    assert.equal(shop.open, false, 'The shop closes on a phase or player change');
+                }
             }
         }
     }
@@ -496,6 +528,10 @@ for (const size of [12, 16]) {
         state.board = Array.from({ length: size }, () => Array(size).fill(null));
         state.biomes = Array.from({ length: size }, () => Array(size).fill('plains'));
         state.board[1][1] = castle(1, 'resource-owner');
+        state.board[0][size / 4] = castle(2, 'raid-capital');
+        state.capitalTowerIds[1] = 'raid-capital-tower';
+        state.board[0][size / 2] = castle(3, 'third-capital');
+        state.capitalTowerIds[2] = 'third-capital-tower';
         state.provinceResources[0] = { type: 'food', productionChance: 100 };
     }
     function army(player, types) {
@@ -638,7 +674,7 @@ for (const size of [12, 16]) {
     assert.equal(state.resources[0].gold, 1, 'Other sites in the same province keep paying the owner');
     for (const chance of [0, 12.5, 50, 100]) {
         state.provinceResources[0] = [{ type: 'food', productionChance: chance, row: 0, column: 1 }];
-        state.resources[1].food = 0;
+        api.getUnitResourceStore(state.board[0][size / 4].contents[0], true).food = 0;
         for (let roll = 0; roll < 200; roll++) produce(() => roll / 200);
         assert.equal(state.resources[1].food, chance * 2, 'Raiding preserves exact production probabilities');
     }
@@ -650,6 +686,178 @@ for (const size of [12, 16]) {
     api.resolveResourceProduction(4, () => 0);
     assert.equal(state.resources[1].food, 1);
 }
+
+state.reset();
+state.boardSize = 16;
+state.board = Array.from({ length: 16 }, () => Array(16).fill(null));
+state.biomes = Array.from({ length: 16 }, () => Array(16).fill('plains'));
+state.board[0][0] = castle(1, 'capital-but-not-nearest');
+state.board[1][0] = castle(1, 'nearest-first');
+state.board[1][2] = castle(1, 'nearest-second');
+state.capitalTowerIds[0] = 'capital-but-not-nearest-tower';
+state.provinceResources[0] = { type: 'wood', productionChance: 100, row: 1, column: 1 };
+api.resolveResourceProduction(1, () => 0);
+assert.equal(state.board[0][0].contents[0].resourceStockpile?.wood || 0, 0,
+    'Ordinary production does not default to the capital');
+assert.equal(state.board[1][0].contents[0].resourceStockpile.wood, 1,
+    'Equidistant nearest Towers break ties by first game order');
+assert.equal(state.board[1][2].contents[0].resourceStockpile?.wood || 0, 0);
+assert.equal(state.resources[0].wood, 1, 'Displayed player total sums Tower stores');
+state.board[1][0].player = 2;
+state.board[1][0].contents.forEach(unit => { unit.player = 2; });
+api.refreshResourceTotals();
+assert.equal(state.resources[0].wood, 0);
+assert.equal(state.resources[1].wood, 1, 'Resources stored on a Tower follow it when captured');
+
+state.reset();
+state.boardSize = 16;
+state.board = Array.from({ length: 16 }, () => Array(16).fill(null));
+state.biomes = Array.from({ length: 16 }, () => Array(16).fill('plains'));
+state.board[0][0] = castle(1, 'resource-owner');
+state.board[0][4] = castle(2, 'raider-capital');
+state.capitalTowerIds[1] = 'raider-capital-tower';
+state.board[0][1] = {
+    id: 'raiding-army', player: 2, type: 'p',
+    contents: [api.createUnit(2, 'p', 'raiding-pawn')]
+};
+state.provinceResources[0] = { type: 'gold', productionChance: 100, row: 0, column: 1 };
+api.resolveResourceProduction(1, () => 0);
+assert.equal(state.board[0][4].contents[0].resourceStockpile.gold, 1,
+    'Raid gains go to the raider’s capital Tower');
+assert.equal(state.resources[1].gold, 1);
+
+state.reset();
+state.boardSize = 16;
+state.board = Array.from({ length: 16 }, () => Array(16).fill(null));
+state.biomes = Array.from({ length: 16 }, () => Array(16).fill('plains'));
+state.board[0][0] = castle(1, 'resource-owner');
+state.board[0][4] = {
+    id: 'first-king', player: 2, type: 'k',
+    contents: [api.createUnit(2, 'k', 'first-king-unit')]
+};
+state.board[1][4] = {
+    id: 'second-king', player: 2, type: 'k',
+    contents: [api.createUnit(2, 'k', 'second-king-unit')]
+};
+state.board[0][1] = {
+    id: 'raiding-army', player: 2, type: 'p',
+    contents: [api.createUnit(2, 'p', 'raiding-pawn')]
+};
+state.provinceResources[0] = { type: 'metal', productionChance: 100, row: 0, column: 1 };
+api.resolveResourceProduction(1, () => 0);
+assert.equal(state.board[0][4].contents[0].resourceStockpile.metal, 1,
+    'A horde’s raid goes to its first King in game order');
+assert.equal(state.board[1][4].contents[0].resourceStockpile?.metal || 0, 0);
+
+state.reset();
+state.boardSize = 16;
+state.board = Array.from({ length: 16 }, () => Array(16).fill(null));
+state.biomes = Array.from({ length: 16 }, () => Array(16).fill('plains'));
+state.board[0][0] = castle(1, 'resource-owner');
+state.board[0][4] = {
+    id: 'queen-holder', player: 2, type: 'q',
+    contents: [api.createUnit(2, 'q', 'queen-holder-unit')]
+};
+state.board[0][1] = {
+    id: 'raiding-army', player: 2, type: 'p',
+    contents: [api.createUnit(2, 'p', 'raiding-pawn')]
+};
+state.provinceResources[0] = { type: 'horse', productionChance: 100, row: 0, column: 1 };
+api.resolveResourceProduction(1, () => 0);
+assert.equal(state.board[0][4].contents[0].resourceStockpile.horse, 1,
+    'A horde without a King stores its raids on its first Queen');
+
+state.reset();
+state.boardSize = 16;
+state.board = Array.from({ length: 16 }, () => Array(16).fill(null));
+state.biomes = Array.from({ length: 16 }, () => Array(16).fill('plains'));
+state.board[0][0] = castle(1, 'resource-owner');
+state.board[0][1] = {
+    id: 'raiding-army', player: 2, type: 'p',
+    contents: [api.createUnit(2, 'p', 'raiding-pawn')]
+};
+state.provinceResources[0] = { type: 'food', productionChance: 100, row: 0, column: 1 };
+assert.throws(() => api.resolveResourceProduction(1, () => 0),
+    /no capital Tower, King, or Queen to receive raid resources/,
+    'Raid production without an eligible holder is an invalid game state');
+
+state.reset();
+state.boardSize = 16;
+state.board = Array.from({ length: 16 }, () => Array(16).fill(null));
+state.board[0][4] = castle(2, 'captor-capital');
+state.capitalTowerIds[1] = 'captor-capital-tower';
+const capturedKing = api.createUnit(1, 'k', 'captured-king');
+capturedKing.resourceStockpile = { horse: 0, food: 0, wood: 0, metal: 0, gold: 3 };
+state.phase = 'RESOLVING';
+api.beginCaptureChoices(2, [capturedKing], [5, 5]);
+assert.equal(capturedKing.resourceStockpile.gold, 0);
+assert.equal(state.board[0][4].contents[0].resourceStockpile.gold, 3,
+    'Captured King resources transfer to the capturer’s capital before fate selection');
+assert.equal(state.resources[0].gold, 0);
+assert.equal(state.resources[1].gold, 3);
+const captureId = state.pendingCapture.id;
+assert(api.decideCapture(2, captureId, capturedKing.id, 'keep'));
+assert.equal(state.resources[1].gold, 3, 'Keeping a prisoner does not duplicate transferred resources');
+
+state.reset();
+state.boardSize = 16;
+state.board = Array.from({ length: 16 }, () => Array(16).fill(null));
+state.board[0][4] = {
+    id: 'captor-king-piece', player: 2, type: 'k',
+    contents: [api.createUnit(2, 'k', 'captor-king')]
+};
+state.board[1][4] = {
+    id: 'captor-queen-piece', player: 2, type: 'q',
+    contents: [api.createUnit(2, 'q', 'captor-queen')]
+};
+const capturedQueen = api.createUnit(1, 'q', 'captured-queen');
+capturedQueen.resourceStockpile = { horse: 0, food: 0, wood: 2, metal: 0, gold: 0 };
+state.phase = 'RESOLVING';
+api.beginCaptureChoices(2, [capturedQueen], [5, 5]);
+assert.equal(state.board[0][4].contents[0].resourceStockpile.wood, 2,
+    'Without a capital Tower, captured resources go to the capturer’s first King');
+assert.equal(state.board[1][4].contents[0].resourceStockpile?.wood || 0, 0,
+    'Queen is fallback only when capturer has no King');
+
+state.reset();
+state.boardSize = 16;
+state.board = Array.from({ length: 16 }, () => Array(16).fill(null));
+state.board[0][4] = castle(2, 'split-capital-two');
+state.board[0][8] = castle(3, 'split-capital-three');
+state.capitalTowerIds[1] = 'split-capital-two-tower';
+state.capitalTowerIds[2] = 'split-capital-three-tower';
+const splitStock = api.createUnit(1, 'k', 'split-stock');
+splitStock.resourceStockpile = { horse: 0, food: 0, wood: 0, metal: 0, gold: 5 };
+const winningArmy = player => ({
+    unit: api.createUnit(player, 'p', `winner-${player}`),
+    piece: { player }, row: 5, column: player
+});
+api.transferStoredUnitResources([3, 2], splitStock, [
+    winningArmy(2), winningArmy(3), winningArmy(3), winningArmy(3)
+]);
+assert.equal(state.board[0][4].contents[0].resourceStockpile.gold, 2,
+    'The larger winning army receives the odd split remainder');
+assert.equal(state.board[0][8].contents[0].resourceStockpile.gold, 3);
+assert.equal(state.resources[1].gold, 2);
+assert.equal(state.resources[2].gold, 3);
+
+state.board[0][4].contents[0].resourceStockpile.gold = 0;
+state.board[0][8].contents[0].resourceStockpile.gold = 0;
+const tiedSplitStock = api.createUnit(1, 'q', 'tied-split-stock');
+tiedSplitStock.resourceStockpile = { horse: 0, food: 0, wood: 0, metal: 0, gold: 1 };
+api.transferStoredUnitResources([3, 2], tiedSplitStock, [winningArmy(3), winningArmy(2)]);
+assert.equal(state.board[0][4].contents[0].resourceStockpile.gold, 1,
+    'Equal-size winning armies award a split remainder to the first player in game order');
+assert.equal(state.board[0][8].contents[0].resourceStockpile.gold, 0);
+
+const privateBoard = api.cloneBoardWithoutResourceStores();
+assert(privateBoard.every(row => row.every(square => {
+    const pieces = Array.isArray(square) ? square : square ? [square] : [];
+    return pieces.every(piece => piece.contents.every(unit => !('resourceStockpile' in unit)));
+})), 'Multiplayer board snapshots must not expose per-unit resource stores');
+assert(state.board[0][4].contents[0].resourceStockpile,
+    'Snapshot sanitization does not mutate authoritative stores');
+
 state.reset();
 assert(state.resources.every(stock => Object.values(stock).every(count => count === 0)));
 assert.equal(state.lastResourceProductionRound, null);

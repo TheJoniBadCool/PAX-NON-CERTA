@@ -48,8 +48,10 @@ const context = vm.createContext({
     }
 });
 ['constants', 'models', 'game-state', 'planning-timer', 'setup-utils', 'diplomacy-rules', 'board-utils',
+'capital-rules',
     'movement-rules', 'planning-rules', 'battle-rules', 'siege-rules', 'retreat-rules', 'prisoner-rules',
-    'objective-rules', 'board-renderer', 'status-ui', 'battle-ui', 'allied-resolution', 'game']
+    'objective-rules', 'board-renderer', 'resource-purchases', 'status-ui', 'battle-ui',
+    'allied-resolution', 'game']
     .forEach(name => vm.runInContext(fs.readFileSync(`js/${name}.js`, 'utf8'), context));
 context.captureLog = text => logs.push(text);
 vm.runInContext(`

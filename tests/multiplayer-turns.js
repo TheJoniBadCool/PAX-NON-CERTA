@@ -83,6 +83,9 @@ const state = {
     scores: [0, 0, 0, 0]
 };
 state.resourceMode = '8';
+state.capitalTowerIds = [null, null, null, null];
+state.horde = [false, false, false, false];
+state.deadPieces = [[], [], [], []];
 state.resourceBalance = 'off';
 state.resourceProductionInterval = 1;
 state.provinceResources = [{ type: 'gold', productionChance: 75 }];
@@ -100,7 +103,7 @@ const ctx = {
     Date: { now: () => now },
     BOARD_SIZES: [12, 16],
     REBEL_PLAYER_ID: 5,
-    RESOURCE_TYPES: ['horse', 'food', 'wood', 'metal', 'gold'].map(key => ({ key })),
+    RESOURCE_TYPES: ['horse', 'food', 'wood', 'metal', 'gold', 'stone'].map(key => ({ key })),
     crypto: { getRandomValues: bytes => bytes.fill(1) },
     window: { addEventListener() {} },
     MutationObserver: class { observe() {} },
@@ -134,6 +137,8 @@ const ctx = {
         state.startingProvinces = [null, null, null, null];
         state.startingConfirmed = [false, false, false, false];
         state.diplomacy = ctx.createDiplomacyState();
+        state.resourceTrades = [];
+        state.nextResourceTradeId = 1;
     },
     updatePlayerCards() {}, renderBoard() {}, logAction() {}, showPlayerSelection() {},
     showCustomSetup(players, board, map) {
@@ -144,6 +149,7 @@ const ctx = {
         ctx.customSetupModal.classList.remove('hidden');
     },
     isTowerGateMove: () => true, canMoveWholePiece: () => true, getSiegeAtSquare: () => null,
+    isPawnRestTurn: () => state.round % 2 === 0, hasPlayerResources: () => true,
     isEliminatedPiece: piece => Boolean(state.eliminated[piece.player - 1]),
     createRandomMapSeed: () => 'test-seed',
     createStartingBoard: () => ({ board: [], biomes: [] }),
@@ -184,7 +190,8 @@ Object.assign(ctx, new Function('ctx', `with (ctx) {
 Object.assign(ctx, new Function('ctx', `with (ctx) {
     ${readSource('js/game-state.js')}
     ${readSource('js/diplomacy-rules.js')}
-    return { createDiplomacyState, getDiplomacyPair, getPendingAllianceRequests, applyDiplomacyAction };
+    return { createDiplomacyState, getDiplomacyPair, getPendingAllianceRequests, applyDiplomacyAction,
+        getPendingResourceTrades, hasPendingPlayerRequests, applyResourceTradeAction };
 }`)(ctx));
 state.diplomacy = ctx.createDiplomacyState();
 Object.assign(ctx, new Function('ctx', `with (ctx) {
@@ -197,8 +204,10 @@ Object.assign(ctx, new Function('ctx', `with (ctx) {
 }`)(ctx));
 Object.assign(ctx, new Function('ctx', `with (ctx) {
     ${readSource('js/board-utils.js')}
-    return { towersAreSpaced, getProvinceResources, getProvinceIndex, isTowerPiece };
+    return { towersAreSpaced, getProvinceResources, getProvinceIndex, isTowerPiece,
+        cloneBoardWithoutResourceStores, stripResourceStore, stripResourceStoresFromPlan };
 }`)({
+    gameState: state,
     REBEL_PLAYER_ID: 5,
     getPieceContents: piece => piece.contents,
     getUnitType: unit => unit.type
@@ -211,6 +220,13 @@ Object.assign(ctx, new Function('ctx', `with (ctx) {
         getMergedPieceType, getSquarePieces, getPieceAt, getPieceByIdAt, getPiecesAt, arePlayersAllied,
         arePlayersFriendly, putPieceAt, removePieceAt, canUnitsEnterSquare,
         releaseAlliancePrisoners, cancelReleasedPrisonerPlans };
+}`)(ctx));
+Object.assign(ctx, new Function('ctx', `with (ctx) {
+    ${readSource('js/constants.js')}
+    ${readSource('js/board-utils.js')}
+    ${readSource('js/resource-purchases.js')}
+    function getUnitType(unit) { return unit.type; }
+    return { getResourceSpending, getResourceHolderForPlayer, getUnitResourceStore, refreshResourceTotals };
 }`)(ctx));
 
 async function run() {
@@ -323,6 +339,7 @@ async function run() {
     document.getElementById('mp-resource-mode').value = '12';
     document.getElementById('mp-resource-mode').handlers.change();
     assert(!capitalOption.disabled, 'Other modes allow changing capital eligibility');
+    document.getElementById('mp-show-resources-to-others').checked = true;
     document.getElementById('btn-mp-generate-map').handlers.click();
     guest.close();
     document.getElementById('btn-mp-start').handlers.click();
@@ -347,13 +364,21 @@ async function run() {
         plan: [{ from: [0, 0], to: [0, 1], pieceId: 'guest-piece' }] });
     assert(!state.committed[1], 'The host must reject plans that enter mountains');
     state.biomes[0][1] = 'plains';
+    state.horde[1] = true;
+    state.missionBatches = [{ missions: [{ secret: 'Host mission' }] },
+        { missions: [{ secret: 'Guest mission' }] }, null, null];
+    state.missionPoints = [7, 2, 0, 0];
     guest.emit('data', { type: 'join', name: 'Guest' });
     const sync = guest.sent.filter(message => message.type === 'sync' && message.game).pop();
+    sync.game.capitalTowerIds = [...sync.game.capitalTowerIds];
+    sync.game.horde = [...sync.game.horde];
     assert(sync.game.board[0][0].id === 'guest-piece' &&
         sync.game.board[4][1].contents.length === 2,
         'Guests must receive the authoritative custom starting board and stacks');
     assert(sync.game.biomes === state.biomes && sync.game.hillHeld === state.hillHeld,
         'Guest snapshots must include the authoritative terrain and hill history');
+    assert(sync.game.capitalTowerIds[0] === null && sync.game.horde[1],
+        'Guest snapshots must synchronize capital and horde status');
     assert(state.resourceMode === '12' && sync.game.resourceMode === '12',
         'The host-selected resource mode must be used and synchronized');
     assert(state.resourceBalance === 'require-all' && sync.game.resourceBalance === 'require-all',
@@ -362,6 +387,9 @@ async function run() {
         'Capital eligibility must be used and synchronized');
     assert(state.resourceProductionInterval === 2 && sync.game.resourceProductionInterval === 2,
         'The host-selected production interval must be used and synchronized');
+    assert(state.showResourcesToOthers && sync.game.showResourcesToOthers &&
+        sync.game.resources[0].gold === 99 && sync.game.resources[1].gold === 3,
+        'The default visible setting shares all resource balances with multiplayer guests');
     assert(state.fogSight === 'large' && sync.game.fogSight === 'large',
         'The host-selected fog sight must be used and synchronized to guests');
     assert(sync.game.provinceResources === state.provinceResources &&
@@ -371,12 +399,23 @@ async function run() {
         sync.game.provinceResources[0][0].row === 1 &&
         sync.game.provinceResources[0][0].column === 1,
         'Rejoining guests must receive resource locations, chances and the last production round');
-    assert(sync.game.resources[1].gold === 3 && sync.game.resources[0] === null &&
-        sync.game.resources[2] === null && sync.game.resources[3] === null,
-        'Snapshots must contain only the receiving player resource stockpile');
+    document.getElementById('mp-show-resources-to-others').checked = false;
+    state.showResourcesToOthers = false;
+    multiplayer.syncAlliedState();
+    const privateResourcesSync = guest.sent.filter(message => message.type === 'sync' && message.game).pop();
+    assert(!privateResourcesSync.game.showResourcesToOthers &&
+        privateResourcesSync.game.resources[1].gold === 3 &&
+        privateResourcesSync.game.resources[0] === null &&
+        privateResourcesSync.game.resources[2] === null &&
+        privateResourcesSync.game.resources[3] === null,
+        'The hidden setting keeps opponents’ resource balances out of multiplayer snapshots');
     assert(sync.game.objectives[1][0].label === 'Guest secret', 'Guest must receive its objectives');
     assert(sync.game.objectives[0].length === 0 &&
         !JSON.stringify(sync).includes('Host secret'), 'Snapshots must not leak another player objective');
+    assert(sync.game.missionBatches[0] === null &&
+        sync.game.missionBatches[1].missions[0].secret === 'Guest mission' &&
+        sync.game.missionPoints[0] === null && sync.game.missionPoints[1] === 2 &&
+        !JSON.stringify(sync).includes('Host mission'), 'Snapshots must keep missions and their permanent points private');
     multiplayer.renameMyPlayer('Host Captain');
     assert(ctx.PLAYERS[0].name === 'Host Captain' &&
         guest.sent.filter(message => message.type === 'sync').pop().roster[0].name === 'Host Captain',
@@ -480,6 +519,33 @@ async function run() {
     guestPiece.contents.pop();
     guestPiece.contents[0].type = 'p';
     state.round = 1;
+    state.board[1][1] = { id: 'host-king', player: 1, type: 'k', contents: [{
+        id: 'host-king-unit', player: 1, type: 'k', resourceStockpile: { gold: 99 }
+    }] };
+    state.board[1][2] = { id: 'guest-king', player: 2, type: 'k', contents: [{
+        id: 'guest-king-unit', player: 2, type: 'k', resourceStockpile: { gold: 3 }
+    }] };
+    ctx.refreshResourceTotals();
+    const tradeMessage = { type: 'resource-trade', gameId: 1, round: 1, target: 0,
+        action: 'propose', actor: 0, terms: { give: { gold: 1 }, receive: { gold: 2 } } };
+    guest.emit('data', { ...tradeMessage, gameId: 99 });
+    guest.emit('data', { ...tradeMessage, round: 99 });
+    assert(ctx.getPendingResourceTrades().length === 0, 'Stale match and round exchanges must be ignored');
+    guest.emit('data', tradeMessage);
+    const tradeId = state.resourceTrades[0].id;
+    assert(state.resourceTrades[0].from === 1 && state.resourceTrades[0].to === 0,
+        'Exchange senders must come from the authenticated slot, not payload actor');
+    guest.emit('data', { ...tradeMessage, action: 'accept', id: tradeId });
+    assert(state.resources[0].gold === 99 && state.resourceTrades.length === 1,
+        'A guest cannot accept its own proposal');
+    state.resourceTrades.push({ id: 500, from: 0, to: 2, give: { gold: 77 }, receive: { wood: 44 } });
+    multiplayer.syncAlliedState();
+    const tradeSync = JSON.parse(JSON.stringify(guest.sent.filter(message => message.type === 'sync').pop()));
+    assert(tradeSync.game.resourceTrades[0].give.gold === 1 &&
+        tradeSync.game.resourceTrades[0].receive.gold === 2, 'Participants receive complete exchange terms');
+    assert(tradeSync.game.resourceTrades[1].give === undefined &&
+        tradeSync.game.resourceTrades[1].receive === undefined, 'Other players never receive private exchange terms');
+    state.resourceTrades.pop();
     guest.emit('data', { type: 'diplomacy', gameId: 99, round: 1, target: 0, action: 'request' });
     guest.emit('data', { type: 'diplomacy', gameId: 1, round: 99, target: 0, action: 'request' });
     assert(ctx.getPendingAllianceRequests().length === 0, 'Stale match and round diplomacy must be ignored');
@@ -502,7 +568,14 @@ async function run() {
     assert(diplomacySync.game.diplomacy[0].requestedBy === 1 &&
         diplomacySync.game.diplomacy[0].changedRound === 1, 'Snapshots preserve requests and round locks');
     await multiplayer.requestDiplomacy(1, 'accept');
+    assert(resolutions === 0, 'Answering an alliance still waits for the pending exchange');
+    assert(await multiplayer.requestResourceTrade(1, 'accept', null, tradeId),
+        'A committed host can accept an exchange');
     assert(resolutions === 1 && state.phase === 'RESOLVING', 'Both commitments must resolve once');
+    assert(state.resources[0].gold === 98 && state.resources[1].gold === 4,
+        'Accepted exchanges transfer both full amounts through host-owned unit storage');
+    guest.emit('data', { ...tradeMessage, action: 'accept', id: tradeId });
+    assert(state.resources[0].gold === 98, 'Replayed responses cannot transfer resources twice');
     assert(state.plans[1][0].contents[0].id === 'unit', 'Host must rebuild submitted unit contents');
     guest.emit('data', { type: 'commit', gameId: 1, round: 1, plan: guestPlan });
     assert(resolutions === 1, 'Repeated commitments must not restart resolution');
@@ -515,12 +588,17 @@ async function run() {
     state.round = 3;
     multiplayer.beginNextRound();
     await multiplayer.requestDiplomacy(1, 'request');
+    assert(await multiplayer.requestResourceTrade(1, 'propose', { give: { gold: 1 }, receive: {} }),
+        'Alliance requests and exchanges can be pending together');
     guest.emit('data', { type: 'commit', gameId: 1, round: 3, plan: [] });
     const secondCommit = multiplayer.toggleCommit();
     finishSave();
     await secondCommit;
     assert(resolutions === 1, 'Host requests also block resolution');
     guest.emit('data', { type: 'diplomacy', gameId: 1, round: 3, target: 0, action: 'accept' });
+    assert(resolutions === 1, 'A remaining exchange also blocks guest-triggered resolution');
+    guest.emit('data', { type: 'resource-trade', gameId: 1, round: 3, target: 0,
+        action: 'accept', id: state.resourceTrades[0].id });
     assert(resolutions === 2 && ctx.getDiplomacyPair(0, 1).status === 'allied',
         'A committed guest can accept and start resolution');
     state.round = 4;
@@ -529,6 +607,7 @@ async function run() {
     state.round = 5;
     multiplayer.beginNextRound();
     await multiplayer.requestDiplomacy(1, 'request');
+    await multiplayer.requestResourceTrade(1, 'propose', { give: { gold: 1 }, receive: {} });
     guest.emit('data', { type: 'commit', gameId: 1, round: 5, plan: [] });
     const thirdCommit = multiplayer.toggleCommit();
     finishSave();
@@ -539,7 +618,7 @@ async function run() {
         'Skipping must remain available for a committed disconnected player with pending requests');
     document.getElementById('btn-force-skip').handlers.click();
     assert(resolutions === 3 && ctx.getPendingAllianceRequests().length === 0 &&
-        ctx.getDiplomacyPair(0, 1).status === 'war',
+        ctx.getDiplomacyPair(0, 1).status === 'war' && state.resourceTrades.length === 0,
         'Skipping disconnected players declines their requests and unblocks resolution');
     guest.open = true;
     relay.handlers.connection(guest);
@@ -626,14 +705,15 @@ async function run() {
     multiplayer.onBoardRendered();
     guest.close();
     ctx.getDiplomacyPair(0, 1).requestedBy = 1;
+    state.resourceTrades = [{ id: 777, from: 0, to: 1, give: { gold: 1 }, receive: {} }];
     now = deadline;
     const previousResolutions = resolutions;
     ctx.PlanningTimer.refresh();
     assert(state.committed[0] && state.committed[1] && resolutions === previousResolutions + 1,
         'The host auto-commits all active players at the exact deadline, including disconnected players');
     assert(state.plans[1][0].pieceId === 'timed-guest', 'Expiration commits the last received draft, not an empty plan');
-    assert(ctx.getPendingAllianceRequests().length === 0,
-        'Expiration declines unanswered requests and allows resolution');
+    assert(ctx.getPendingAllianceRequests().length === 0 && state.resourceTrades.length === 0,
+        'Expiration declines unanswered alliance and exchange requests and allows resolution');
     ctx.PlanningTimer.refresh();
     assert(resolutions === previousResolutions + 1, 'Timer expiration resolves only once');
     state.round++;
@@ -652,8 +732,10 @@ async function run() {
     document.getElementById('btn-mp-join').handlers.click();
     await Promise.resolve();
     state.fogSight = 'small';
+    state.horde[1] = false;
     relay.connection.emit('data', sync);
     assert(state.fogSight === 'large', 'A guest must restore the host-selected fog sight from a snapshot');
+    assert(state.horde[1], 'Guests must restore horde status from a snapshot');
     relay.connection.emit('data', sharedSync);
     assert(ctx.getPiecesAt(0, 0).length === 2 && state.pendingSpoils.id === 'shared-spoils' &&
         state.pendingSpoils.choices[1] === 2, 'Rejoining guests recover shared cells and in-progress votes');
@@ -669,6 +751,16 @@ async function run() {
     assert(diplomacyRequest.type === 'diplomacy' && diplomacyRequest.target === 0 &&
         diplomacyRequest.action === 'decline' && diplomacyRequest.gameId === 1 && diplomacyRequest.round === 1,
         'Guest diplomacy messages carry their target and current match/round identity');
+    relay.connection.emit('data', tradeSync);
+    assert(state.resourceTrades[0].id === tradeId && state.resourceTrades[0].receive.gold === 2,
+        'Reconnect snapshots restore pending exchanges with their original identity and amounts');
+    await multiplayer.requestResourceTrade(0, 'cancel', null, tradeId);
+    const tradeRequest = relay.connection.sent.at(-1);
+    assert(tradeRequest.type === 'resource-trade' && tradeRequest.target === 0 &&
+        tradeRequest.action === 'cancel' && tradeRequest.id === tradeId &&
+        tradeRequest.gameId === 1 && tradeRequest.round === 1,
+        'Guest exchange messages carry proposal, match, and round identities');
+    relay.connection.emit('data', diplomacySync);
     const releaseSync = JSON.parse(JSON.stringify(diplomacySync));
     releaseSync.game.phase = 'PLANNING';
     releaseSync.committed[releaseSync.you] = false;

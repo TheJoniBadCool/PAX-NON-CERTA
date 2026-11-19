@@ -46,6 +46,7 @@ function applyStartingProvinces() {
         }));
     });
     gameState.phase = 'PLANNING';
+    initializeCapitals();
 }
 
 let startingPositionPlayer = 0;
@@ -129,6 +130,7 @@ function renderStartingPositionSelection() {
 function finishStartingPositionSelection() {
     applyStartingProvinces();
     initializeObjectives();
+    if (typeof initializeMissions === 'function') initializeMissions();
     PlanningTimer.start();
     renderStartingPositionSelection();
     updatePlayerCards();

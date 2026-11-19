@@ -46,7 +46,9 @@ function getBattleCandidateData(group) {
             }, 0);
         const towerDefenderBonus = entry.candidate.isStationary &&
             entry.contents.some(unit => getUnitType(unit) === 'r') &&
-            contents.some(unit => getUnitType(unit) !== 'r') ? 3 : 1;
+            contents.some(unit => getUnitType(unit) !== 'r')
+            ? 3 + getCastleUpgradeLevel({ contents: entry.contents })
+            : 1;
         const experienceBonus = contents.reduce((bonus, unit) =>
             bonus + (0.05 * getUnitLevel(unit, 'experience')), 0);
         const armourBonus = contents.reduce((bonus, unit) =>

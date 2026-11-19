@@ -70,6 +70,7 @@ function makeAlliedBattleCandidate(members) {
 }
 
 function fightAlliedSides(sides, square) {
+    if (typeof recordMissionBattle === 'function') recordMissionBattle(sides.flat());
     const group = {
         type: 'TARGET', targetSquare: square, squareNotations: [coordsToNotation(...square)],
         candidates: sides.map(makeAlliedBattleCandidate)
@@ -102,6 +103,15 @@ function fightAlliedSides(sides, square) {
             renderBattleRolls(rolls);
             clashResult.innerText = `${sides[winner].map(army => getPlayerInfo(army.player).name).join(' & ')} win`;
             clashResult.style.color = getPlayerInfo(group.candidates[winner].player).color;
+            const winningPlayers = sides[winner].map(army => army.player);
+            const winningUnits = sides[winner].flatMap(army =>
+                getPieceContents(army).map(unit => ({
+                    unit, piece: { player: army.player },
+                    row: army.from?.[0] ?? square[0],
+                    column: army.from?.[1] ?? square[1]
+                })));
+            results.forEach(result => result.casualties.forEach(unit =>
+                transferStoredUnitResources(winningPlayers, unit, winningUnits)));
             recordDeadPieces(gameState, [...results.values()].flatMap(result => result.casualties));
             logAction(`Allied battle: ${sides[winner].map(army => `P${army.player}`).join(' & ')} won.`);
             btnProceedBattle.classList.remove('hidden');

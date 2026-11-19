@@ -260,17 +260,22 @@ function generateProvinceResources(board, mode, random, balance = 'off', resourc
         shuffle(selected);
     }
     // Largest remainders preserve proportions; shuffled ties avoid favoring a type.
-    const scale = weights => {
+    const scale = (weights, targetCount) => {
         const total = weights.reduce((sum, weight) => sum + weight, 0);
         const shares = shuffle(weights.map((weight, index) => {
-            const exact = weight * count / total;
+            const exact = weight * targetCount / total;
             return { index, count: Math.floor(exact), fraction: exact % 1 };
         })).sort((a, b) => b.fraction - a.fraction);
-        const remaining = count - shares.reduce((sum, share) => sum + share.count, 0);
+        const remaining = targetCount - shares.reduce((sum, share) => sum + share.count, 0);
         shares.forEach((share, index) => { if (index < remaining) share.count++; });
         return shuffle(shares.flatMap(share => Array(share.count).fill(share.index)));
     };
-    const types = scale(config.counts);
+    const stoneIndex = RESOURCE_TYPES.findIndex(resource => resource.key === 'stone');
+    const nonStoneCounts = config.counts.filter((_, index) => index !== stoneIndex);
+    const types = count > 0
+        ? [...scale(nonStoneCounts, count - 1), ...Array(1).fill(stoneIndex)]
+        : [];
+    shuffle(types);
     const tieredChances = balance === 'tiered'
         ? shuffle(selected.map((_, index) => index < 3 ? 100 : index < 7 ? 50 : 20))
         : null;
@@ -357,6 +362,7 @@ function initBoard(customBoard = null, boardSize = gameState.boardSize, seed = n
     gameState.provinceResources = starting.provinceResources;
     gameState.resourceCapitals = starting.resourceCapitals;
     gameState.resources = createResourceStockpiles();
+    gameState.provinceRecruitmentUsed = Array(16).fill(false);
     gameState.lastResourceProductionRound = null;
     gameState.eliminated = gameState.activePlayers.map(isSelected => !isSelected);
     gameState.hillHeld = [];

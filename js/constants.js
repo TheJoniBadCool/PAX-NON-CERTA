@@ -28,12 +28,13 @@ const RESOURCE_TYPES = [
     { key: 'food', label: 'Food', icon: '🌾' },
     { key: 'wood', label: 'Wood', icon: '🪵' },
     { key: 'metal', label: 'Metal', icon: '⚙️' },
-    { key: 'gold', label: 'Gold', icon: '🪙' }
+    { key: 'gold', label: 'Gold', icon: '🪙' },
+    { key: 'stone', label: 'Stone', icon: '🪨' }
 ];
 const RESOURCE_MODES = {
-    '8': { counts: [1, 3, 2, 1, 1] },
-    '12': { counts: [2, 4, 3, 2, 1] },
-    '16': { counts: [3, 5, 4, 3, 1] }
+    '8': { counts: [1, 2, 2, 1, 1, 1] },
+    '12': { counts: [2, 3, 3, 2, 1, 1] },
+    '16': { counts: [3, 4, 4, 3, 1, 1] }
 };
 const RESOURCE_PRODUCTION_INTERVALS = [1, 2, 4];
 

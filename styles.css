@@ -217,6 +217,7 @@
 
         /* Players list */
         .player-card {
+            position: relative;
             display: flex;
             flex-direction: column;
             align-items: flex-start;
@@ -344,6 +345,11 @@
         .diplomacy-pending { border-bottom: 1px dashed currentColor; }
         .alliance-review-requests { display: flex; flex-direction: column; gap: 0.75rem; }
         .alliance-review-row { gap: 0.75rem; }
+        .resource-trade-request { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; font-size: 0.8rem; }
+        .resource-trade-table { width: 100%; margin-top: 1rem; text-align: left; }
+        .resource-trade-table th, .resource-trade-table td { padding: 0.3rem; }
+        .resource-trade-table input { width: 100%; min-width: 0; box-sizing: border-box; }
+        #resource-trade-error, #alliance-review-error { color: #fbbf24; }
 
         .status-badge {
             min-height: 1.15rem;
@@ -353,6 +359,20 @@
             border-radius: 12px;
             font-weight: 700;
             overflow-wrap: anywhere;
+        }
+
+        .horde-badge {
+            display: inline-flex;
+            align-items: center;
+            width: fit-content;
+            margin-top: 0.25rem;
+            padding: 0.1rem 0.35rem;
+            border: 1px solid rgba(245, 158, 11, 0.45);
+            border-radius: 12px;
+            background: rgba(120, 74, 15, 0.25);
+            color: #fbbf24;
+            font-size: 0.65rem;
+            font-weight: 700;
         }
 
         /* Board layout */
@@ -525,6 +545,15 @@
 
         .square.sq-fog::before { opacity: .12; }
 
+        .square.sq-mission-target {
+            outline: 3px solid #facc15;
+            outline-offset: -3px;
+        }
+
+        .mission-heading { grid-column: 1 / -1; font-weight: 700; }
+        .objective-item.mission-item { grid-template-columns: auto minmax(0, 1fr) auto; }
+        .mission-locate { cursor: pointer; }
+
         .province-resource {
             position: absolute;
             bottom: 1px;
@@ -555,6 +584,47 @@
             align-items: center;
             gap: 3px;
             font-size: .85rem;
+        }
+
+        .resource-purchases {
+            position: static;
+            margin-left: auto;
+            flex-shrink: 0;
+        }
+
+        .diplomacy-actions:not(:empty) + .resource-purchases { margin-left: 0; }
+
+        .resource-purchase-options {
+            width: 20rem;
+            max-height: min(24rem, 60vh);
+            overflow-y: auto;
+        }
+
+        #card-p1 .resource-purchase-options,
+        #card-p4 .resource-purchase-options {
+            left: 0;
+            right: auto;
+        }
+
+        .resource-purchase-notice {
+            color: var(--text-muted);
+            font-size: .75rem;
+        }
+
+        .resource-purchase-button {
+            border: 1px solid rgba(148, 163, 184, .35);
+            border-radius: 5px;
+            padding: 3px 6px;
+            background: rgba(15, 23, 42, .65);
+            color: var(--text-main);
+            cursor: pointer;
+            font-size: .65rem;
+            text-align: left;
+        }
+
+        .resource-purchase-button:disabled {
+            opacity: .45;
+            cursor: not-allowed;
         }
 
         .biome-plains::before, .biome-forest::before, .biome-hill::before, .biome-mountain::before {
@@ -1922,6 +1992,19 @@
     z-index: 7;
     display: flex;
     align-items: center;
+}
+.capital-board-badge {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    z-index: 7;
+    padding: 1px 3px;
+    border-radius: 3px;
+    background: rgba(15, 23, 42, .9);
+    color: #facc15;
+    font-size: min(36cqw, 18px);
+    line-height: 1;
+    pointer-events: none;
 }
 .prisoner-action-button {
     display: inline-flex;

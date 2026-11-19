@@ -101,6 +101,13 @@ function getPieceContents(piece) {
         : unit);
 }
 
+function getCastleUpgradeLevel(piece) {
+    const levels = getPieceContents(piece)
+        .filter(unit => getUnitType(unit) === 'r')
+        .map(unit => Math.floor(Number(unit.castleUpgradeLevel) || 0));
+    return levels.length ? Math.max(0, Math.min(2, ...levels)) : 0;
+}
+
 function getPlannedPieceContents(piece, plans = gameState.plans[piece.player - 1] || []) {
     const removedIds = new Set(plans.filter(plan => plan.prisonerAction && plan.pieceId === piece.id)
         .map(plan => plan.unitId));
@@ -114,7 +121,9 @@ function getUnitLevel(unit, attribute) {
 function getUnitStats(unit) {
     if (isPrisoner(unit)) return `Prisoner of P${unit.prisonerOf} · originally P${unit.originalPlayer} · cannot fight`;
     const routed = getRoutedStats(unit);
-    return `XP ${getUnitLevel(unit, 'experience')} · 🛡️ ${getUnitLevel(unit, 'armour')}${routed ? ` · ${routed}` : ''}`;
+    const castle = getUnitType(unit) === 'r' && unit.castleUpgradeLevel
+        ? ` · Castle level ${getCastleUpgradeLevel({ contents: [unit] })}` : '';
+    return `XP ${getUnitLevel(unit, 'experience')} · 🛡️ ${getUnitLevel(unit, 'armour')}${castle}${routed ? ` · ${routed}` : ''}`;
 }
 
 function getRoutedStacks(unit, round = gameState.round) {

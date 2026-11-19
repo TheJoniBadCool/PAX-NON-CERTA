@@ -15,18 +15,20 @@
                     basic: [
                         'Choose 2–4 players. Each player commands a color. Corner Position is the default; Random assigns distinct provinces anywhere, and Gentleman\'s Agreement lets players choose before play.',
                         'Plan in secret. When everyone is ready, all moves resolve together.',
-                        'Complete objectives to score. Reach 10 points to win; a score of −10 eliminates you.'
+                        'Your starting castle is your capital. If it is captured, you get another random tower you own; with no towers, you are marked as a Horde.',
+                        'Complete objectives to score. Reach 20 points to win; a score of −20 eliminates you.'
                     ],
                     detailed: [
                         'Choose 2–4 players and a 12×12 or 16×16 board. Red starts top-left, Blue top-right, Green bottom-right, and Yellow bottom-left.',
                         'Choose the default starting army (a King, Queen, Tower, Bishop, Horse, and two Pawns) or the full current army (a King, Queen, Tower, two Bishops, two Horses, and four Pawns). Each selected player starts with one Tower castle holding that roster. Every other province has a stationary rebel Tower with a Pawn inside and one rebel Pawn outside; rebels do not take turns.',
                         'The board is divided into 16 provinces. A province belongs to a player when all Towers in it belong to that player; its tint changes with castle ownership. Empty, rebel, or contested provinces are neutral. Defeating rebels can recruit their non-Tower survivors.',
-                        'Choose 8 resources (default: rebel provinces minus four), 12 resources (all rebel provinces), or 16 resources (one in every province). With 12 rebel provinces, the 8- and 12-resource lists are 1 horse, 3 food, 2 wood, 1 metal, 1 gold, or 2 horses, 4 food, 3 wood, 2 metal, 1 gold. The 16-resource list is 3 horses, 5 food, 4 wood, 3 metal, and 1 gold. Other rebel counts scale the proportions for the 8- and 12-resource modes; custom maps use their existing rebel provinces in those modes.',
-                        'By default each province resource gets a fixed random production chance from 5% through 95%, shown in its tooltip. Optional resource balance makes the chances in each populated 2×2 corner quadrant total 25%, with a minimum of 5% each. You can allow empty quadrants or require at least one resource in each; the latter needs enough eligible provinces. There are no production numbers. Choose resource production every turn (default), every 2 turns on even-numbered turns, or every 4 turns. At each selected interval, each eligible resource site rolls independently to give its current owner one resource unless raided; every resource can succeed or fail. Without raiders, rebel, empty, contested, inactive, and eliminated provinces produce nothing. Resource icons avoid mountains and remain visible through fog. Chances persist through conquest. Stockpiles start at zero, accumulate without a cap, and are shown privately as icons and counts on your player card.',
-                        'Raid by occupying a resource square with a stack containing a non-prisoner Pawn or Horse. At production time, an active, non-eliminated raider receives the resource instead of the province owner; mixed stacks qualify, but prisoners alone do not. Allies of the owner never raid or block production. Raiders can also collect from rebel, empty, contested, inactive, or eliminated-player provinces, but rebels cannot raid. If several eligible raiding players share a site, each successful check gives one resource to a randomly chosen raider. Each custom site is checked separately. Raiding changes neither ownership nor production chances, stops when no eligible raider remains, and never steals existing stockpiles. Combat resolves before production, and fog or forest concealment does not prevent raiding.',
+                        'Your starting castle is your capital; custom setups randomly choose a starting capital from your Towers. A captured capital is replaced by a random Tower you still own. If you have no Towers, your card shows 🐪 Horde; gaining a Tower later gives you a new capital. A star marks the capital on the board. Horde status is informational for now, and capital choices are random each game rather than determined by the map seed.',
+                        'Choose 8 resources (default: rebel provinces minus four), 12 resources (all rebel provinces), or 16 resources (one in every province). With 12 rebel provinces, the 8-resource list is 1 Horse, 2 Food, 2 Wood, 1 Metal, 1 Gold, and 1 Stone; the 12-resource list is 2 Horse, 3 Food, 3 Wood, 2 Metal, 1 Gold, and 1 Stone. The 16-resource list is 3 Horse, 4 Food, 4 Wood, 3 Metal, 1 Gold, and 1 Stone. Stone replaces one Food site. Other rebel counts scale the proportions for the 8- and 12-resource modes; custom maps use their existing rebel provinces in those modes.',
+                        'By default each province resource gets a fixed random production chance from 5% through 95%, shown in its tooltip. Optional resource balance makes the chances in each populated 2×2 corner quadrant total 25%, with a minimum of 5% each. You can allow empty quadrants or require at least one resource in each; the latter needs enough eligible provinces. There are no production numbers. Choose resource production every turn (default), every 2 turns on even-numbered turns, or every 4 turns. At each selected interval, each eligible resource site rolls independently to give its current owner one resource unless raided; every resource can succeed or fail. Without raiders, rebel, empty, contested, inactive, and eliminated provinces produce nothing. Ordinary production is stored on the nearest Tower in that province by straight-line distance; ties go to the first Tower in game order. Resource icons avoid mountains and remain visible through fog. Chances persist through conquest. Resources stay with their Tower when it is captured; player totals combine resources on owned Towers and on the King or Queen holding raid spoils. Stockpiles start at zero, accumulate without a cap, and are shown privately as icons and counts on your player card. Each 8/12/16-resource map includes one Stone site, replacing one Food site.',
+                        'Raid by occupying a resource square with a stack containing a non-prisoner Pawn or Horse. At production time, an active, non-eliminated raider receives the resource instead of the province owner; mixed stacks qualify, but prisoners alone do not. Raids go to the raider’s capital Tower; a player with no Tower stores raids on the first King in game order, or the first Queen if no King exists. Allies of the owner never raid or block production. Raiders can also collect from rebel, empty, contested, inactive, or eliminated-player provinces, but rebels cannot raid. If several eligible raiding players share a site, each successful check gives one resource to a randomly chosen raider. Each custom site is checked separately. Raiding changes neither ownership nor production chances, stops when no eligible raider remains, and never steals existing stockpiles. Resources on a captured King or Queen go to the capturer’s capital Tower, or their King then Queen if they have no Tower; resources held by a King or Queen killed in battle go to the winning player or players. Shared spoils are split evenly, with leftover resources awarded by larger winning army first and then player order. Combat resolves before production, and fog or forest concealment does not prevent raiding.',
                         'Allow resources in player capitals optionally adds player-owned provinces to the random placement pool without increasing the resource count or guaranteeing capitals a resource. It is always enabled for 16 resources and works with quadrant balancing. In custom maps, empty and contested provinces remain ineligible for 8/12 resources, and the resource count still uses exclusively rebel-owned provinces.',
                         'Each player has a private checklist of randomly chosen objectives. For standard generated setups, a seed recreates starting positions, Tower gates, initial levels, and terrain. Sandbox saves also preserve manually edited terrain, resources, and unit placement. A seed alone cannot recreate manual edits. Objectives and combat rolls remain random.',
-                        'Scores are checked after the whole round, including siege casualties and retreat re-entry. Players at −10 or below are eliminated together; then enemy-defeat rewards are applied. Reach 10 or more to win. Ties share victory; if everyone is eliminated, the game is a draw.',
+                        'Scores are checked after the whole round, including siege casualties and retreat re-entry. Players at −20 or below are eliminated together; then enemy-defeat rewards are applied. Reach 20 or more to win. Ties share victory; if everyone is eliminated, the game is a draw.',
                         'A dead King does not by itself eliminate a player, and being the last player alive is not an automatic win.'
                     ]
                 },
@@ -41,10 +43,11 @@
                     ],
                     detailed: [
                         'You may move zero, one, or multiple surviving pieces in a round. In Hotseat, pass the device between players; in Multiplayer, each player plans on their own device.',
-                        'Plans are hidden from other players. In Multiplayer, the host can inspect submitted plans; guests see only their own. A player can unlock a committed plan until resolution begins. The host resolves the round once everyone commits and all alliance requests are answered.',
-                        'Optionally enable a planning timer before the game and enter seconds or minutes. Every player gets the same limit each round. At zero, queued plans commit automatically, even if empty. Hotseat timers begin when planning starts, not during privacy handoffs or province selection. Online, the host sets one shared deadline and receives private drafts; expiry commits the latest received drafts, including disconnected players, and declines unanswered alliance requests. Unlocking is allowed only before expiry. Rejoining does not reset the timer. Battles and Hotseat alliance reviews are untimed.',
+                        'Plans are hidden from other players. In Multiplayer, the host can inspect submitted plans; guests see only their own. A player can unlock a committed plan until resolution begins. The host resolves the round once everyone commits and all alliance and exchange requests are answered.',
+                        'Optionally enable a planning timer before the game and enter seconds or minutes. Every player gets the same limit each round. At zero, queued plans commit automatically, even if empty. Hotseat timers begin when planning starts, not during privacy handoffs or province selection. Online, the host sets one shared deadline and receives private drafts; expiry commits the latest received drafts, including disconnected players, and declines unanswered alliance and exchange requests. Unlocking is allowed only before expiry. Rejoining does not reset the timer. Battles and Hotseat request reviews are untimed.',
                         'Everyone starts at war. Player cards show public alliances (gray handshake) and wars (crossed swords) using colored player balls, separated by |. The button next to another player’s name opens Declare War and Request Allegiance; the current relationship is grayed out and unselectable. Each pair can take only one diplomacy action per round, even if a request is declined. Reset Plans and unlocking do not undo diplomacy. Online, incoming requests highlight and gently pulse the sender’s card (static with reduced motion); accept or decline there even while committed. Unanswered requests block resolution. Skipping a disconnected player declines requests involving them. In Hotseat, requests are answered privately after everyone plans and before moves resolve.',
                         'Accepting an alliance immediately releases both players’ prisoners belonging to the other, including captives in retreating armies. They return through the usual released-prisoner retreat after three rounds, without routed penalties. Queued actions involving released prisoners are cancelled, even if committed; other prisoners stay held.',
+                        'Exchange resources sits beside Declare War and Request Allegiance in another player’s diplomacy menu. Trade any combination of resources with any active player, including enemies. Enter whole-number amounts to give and request; either side may be zero, but not both. Both players must hold the full outgoing amounts when proposed and accepted; resources are not reserved, and incoming resources cannot finance outgoing amounts. Acceptance transfers both sides immediately or nothing, with receipts stored on the capital Castle or King then Queen. Recipients accept or decline like alliance requests, including while committed online or during private Hotseat review. Senders must unlock to propose or cancel. One exchange may be pending per pair; multiple deals per round are allowed independently of alliance locks. Pending requests block resolution, survive reconnects, and are declined on online timer expiry or when skipping disconnected participants. Reset Plans never undoes exchanges; new games clear proposals. Terms are private to participants and the host.',
                         'Allies share ordinary squares peacefully as separate, smaller overlapping armies. Select the square to control only your own stack. Only same-owner units merge or transfer; allied Tower squares cannot be entered. Direct allies share vision and see allied forest troops, but enemies in forests remain concealed. Sight does not chain through an ally of an ally. Resources, objectives, and victory remain individual.',
                         'Allies combine against common enemies while keeping their own survivors and experience. A player allied with both sides stays neutral; remaining hostile pairs fight afterward. Former allies still sharing a square fight during resolution unless they move apart. Prisoner-only stacks do not fight each other.',
                         'After a joint victory, allies unanimously choose who gets a captured castle and separately who handles prisoners. Online each player votes; Hotseat hands the device to each ally. If votes disagree, re-decide or Declare War: this overrides the round lock and immediately resumes fighting for the spoils. The agreed custodian uses normal prisoner controls. Non-owners of the castle remain on their original siege squares and fight immediately if an enemy has taken that square. Resolution waits for the decisions, including reconnects.',
@@ -64,8 +67,8 @@
                     ],
                     detailed: [
                         'Pawn, Horse (Knight), Bishop, Queen, and King pieces move exactly one adjacent square in any of the eight directions. Mountains cannot be entered.',
-                        'Pawns cannot initiate movement, attacks, merging, unmerging, or transfers on even rounds. A stack containing a Pawn cannot move as a whole on even rounds, but its non-Pawn units may be separated, moved, or transferred. Non-Pawns may join the stack.',
-                        'A ready siege assault and Sally Out can happen on even rounds. A new siege can begin only on an odd round.',
+                        'Pawns cannot initiate ordinary movement, attacks, merging, unmerging, or transfers on even rounds. A stack containing a Pawn cannot move as a whole on even rounds, but its non-Pawn units may be separated, moved, or transferred. Non-Pawns may join the stack.',
+                        'A paid siege deployment, ready siege assault, and Sally Out can happen on even rounds. Starting a new siege costs 2 Food + 2 Wood.',
                         'Towers (Rooks) and stacks led by a Tower are stationary. Each Tower has one randomly chosen gate marked by an arrow. Merges, transfers, splitting units out, and sieges must use the adjacent gate square. Generated Towers start at least two squares apart, including diagonally; sandbox placement has no spacing restriction.'
                     ]
                 },
@@ -96,7 +99,7 @@
                         'Battles can start when enemies target the same square, cross paths, or one moves onto a stationary enemy. Friendly arrivals combine before opponents fight.',
                         'Counted units provide strength. Having more counted units than the strongest opposing stack adds 20% per extra unit. King, Queen/Bishop morale, experience, armour, terrain, and stationary Tower defence can also change the odds. A nonlinear odds curve makes larger forces more influential without removing randomness.',
                         'If any fighting candidate has a Pawn, Tower, or Horse, only those types count toward standard-league stack size. Each counted unit above the strongest opponent adds 20%; each King adds 10% morale and each Queen or Bishop adds 5%. If every candidate contains only Kings, Queens, and Bishops, all units count toward stack size and those morale bonuses do not apply. Strength is raised to the 1.35 power before the weighted roll.',
-                        'Experience and armour each add 5% strength and reduce that unit’s casualty risk by 5% per level (maximum level 3). A stationary defending stack with a Tower and other combat units multiplies its battle weight by 3. A lone losing Queen or King has a 60% or 75% base casualty risk before modifiers; winners get 50% casualty protection.',
+                        'Experience and armour each add 5% strength and reduce that unit’s casualty risk by 5% per level (maximum level 3). A stationary defending stack with a Tower and other combat units multiplies its battle weight by 3, or 4/5 for an upgraded Castle. A lone losing Queen or King has a 60% or 75% base casualty risk before modifiers; winners get 50% casualty protection.',
                         'Surviving combat units gain one experience level after each battle, up to level 3. Defeated casualties are captured. The winner chooses Prisoner or Execute for captured player units; non-Tower rebel survivors are recruited automatically. Winner casualties die. Other defeated survivors retreat for three rounds. Each retreat adds Routed (up to three): −20% strength and +25 percentage points casualty risk per stack. Routed lasts through the re-entry round and the next five rounds. Merging or splitting does not clear it.'
                     ]
                 },
@@ -140,8 +143,8 @@
                         'If the Tower timer runs out, its garrison is lost piece by piece.'
                     ],
                     detailed: [
-                        'Attacking a Tower with at least one non-prisoner Pawn starts a siege instead of a normal battle. New sieges start only on odd rounds. The Pawn stays at its starting square as a catapult.',
-                        'The catapult has a three-round assault timer. When ready, it can attack the adjacent Tower even on an even round. The besieged Tower has a six-round timer; after it reaches zero, one random non-prisoner, non-Tower unit is lost each round.',
+                        'Attacking a Tower with at least one non-prisoner Pawn starts a siege instead of a normal battle and costs 2 Food + 2 Wood. It may start on any round, even when Pawns are inactive. Additional attacker stacks joining the same siege do not pay again. The Pawn stays at its starting square as a catapult.',
+                        'An ordinary Castle has a three-round assault timer and a six-round garrison timer; after the latter reaches zero, one random non-prisoner, non-Tower unit is lost each round. Castle upgrades change assault/garrison timers to 4/8 at level 1 and 6/12 at level 2, and raise stationary Tower defence from ×3 to ×4 or ×5.',
                         'A besieged Tower cannot move, merge, transfer, or split units out. Non-Tower defenders may Sally Out if at least one can fight, even on an even round. Survivors return inside if the catapult survives; defeated casualties are captured.',
                         'A successful siege automatically conquers the Tower. Counterattacks exclude the Tower itself.',
                         'Use Cancel Siege on your catapult to withdraw it. In Hotseat this cancels immediately; in Multiplayer it is a planned action that uses up that catapult’s action for the round. If the defender also queues Sally Out, they still fight the cancelling catapult.'
@@ -152,14 +155,17 @@
                     art: 'score',
                     basic: [
                         'Check your private objective list to see how to gain or lose points.',
-                        'Reach 10 points to win. Reach −10 points to be eliminated.',
-                        'Your King’s death hurts your score, but does not automatically end your game.'
+                        'Reach 20 points to win. Reach −20 points to be eliminated.',
+                        'Objectives and their point values vary by player. Your King’s death does not automatically end your game.'
                     ],
                     detailed: [
-                        'At match start, objectives are randomly targeted: +4 for a target enemy’s defeat, +3 for a target enemy King’s death, +2 for a specific enemy Queen’s death, and +1 for controlling a specific enemy Tower/castle.',
-                        'Penalties are −4 if your King dies and −3 for each starting castle lost. Castle objectives reverse if ownership changes back. Retreating units still count as alive; prisoners count as alive until executed.',
-                        'Scores update after the whole round, including siege losses and returning units. Players at −10 or below are permanently eliminated together. Then enemy-defeat rewards are applied.',
-                        'The first player to reach 10 or more wins; simultaneous winners share victory. The last player standing must still reach 10. If all active players are eliminated, the game is a draw.'
+                        'Each player receives 6–10 random objectives, potentially repeated, worth +2 to +6 points for rewards or −2 to −6 for penalties. These include targeted defeats, royal deaths and castle control or loss.',
+                        'Expansionist, Richest king, Largest Army and Castle Lord require a positive, untied lead over active opponents; ties revoke them. Army counts non-prisoner units except Towers, including retreating units. Monopolist requires ownership of every province containing the specified resource, with at least one site.',
+                        'King/Queen’s Bounty requires the same other player’s royal prisoner for eight full consecutive rounds after capture; the reward remains after completion. Protector penalizes you if the randomly assigned player is eliminated.',
+                        'Three private missions appear at game start and every 16 rounds, lasting 16 rounds. Each success gives +1 or +2 permanent points; if none succeed, the batch expires with a permanent −2 penalty. Missions can repeat or become impossible.',
+                        'Missions include attacks, castle capture, raids, fallback, 4–8-round unit holds, and avoiding attacks or raids for the whole batch. A raid counts at a production check even when its roll fails. Resource gifts are not available. Use a mission’s magnifying glass to highlight its targets without changing fog; a player target points to their current capital.',
+                        'Scores update after the whole round, including siege losses, returning units and resource production. Players at −20 or below are permanently eliminated together; defeat rewards and Protector penalties can cause further eliminations. Castle and lead objectives reverse when their conditions change. Prisoners and retreating units remain alive for death objectives.',
+                        'The first player to reach 20 or more wins; simultaneous winners share victory. The last player standing must still reach 20. If all active players are eliminated, the game is a draw.'
                     ]
                 },
                 {
@@ -184,14 +190,14 @@
                     title: '11. Progression & controls',
                     art: 'battle',
                     basic: [
-                        'Units gain experience by surviving battles. Armour can be upgraded from a Tower stack.',
+                        'Units gain experience by surviving battles. Buy level 1 armour for an unarmoured unit in a Tower stack.',
                         'Use a piece’s unit list to manage individual units, prisoner actions, siege actions, and upgrades.',
                         'Check the player cards, private objectives, map seed, and combat log for match status.'
                     ],
                     detailed: [
                         'Experience increases by one level for each non-prisoner survivor after a battle, up to level 3. Each experience level adds 5% strength and reduces that unit’s casualty risk by 5%. The setup option can instead start units at random experience and armour levels 1–3.',
-                        'During planning, open a friendly piece’s unit list with right-click or a 500 ms long-press. A unit in a stack containing a Tower can be upgraded with the shield button, up to armour level 3; each level adds 5% strength and reduces casualty risk by 5%. Multiplayer upgrades are applied by the host.',
-                        'Click or tap a friendly piece and then an adjacent square to act. In the unit list, toggle units and press Choose destination to move or transfer the selected group. Prisoner-containing pieces expose Execute and Release; catapults and besieged Towers expose siege actions. Reset Plans cancels queued moves, siege actions, and prisoner decisions, but does not undo armour upgrades already applied.',
+                        'During planning on rounds 4, 8, 12, etc., buy level 1 armour for an unarmoured unit in a Tower stack for 1 Food, 2 Metal, 2 Wood, and 1 Gold. This replaces the previous free armour upgrade. A unit can only receive this paid upgrade once.',
+                        'Buy Pawns or Horses on rounds 4, 8, 12, etc. in an owned Castle in an orthogonally adjacent province to your capital; each province may recruit once total, with living limits of six Pawns and three Horses. Each Castle may be upgraded twice for 3 Stone, 1 Food, 2 Wood, and 1 Gold per level. Lucky Cards cost one each of Gold, Horse, Metal, Food, and Wood and currently do nothing. The 8/12/16-resource maps include one Stone site, replacing one Food site. Click or tap a friendly piece and then an adjacent square to act. In the unit list, toggle units and press Choose destination to move or transfer the selected group. Prisoner-containing pieces expose Execute and Release; catapults and besieged Towers expose siege actions. Reset Plans cancels queued moves, siege actions, and prisoner decisions, but does not undo purchases already applied.',
                         'The objective checklist is private and is cleared during Hotseat handoffs and resolution. Edit names with Names above the board. The combat log can be collapsed; its entries remain available when reopened. Battle cards show odds, bonus sources, casualties, capture choices, and rolls.'
                     ]
                 }
@@ -212,17 +218,19 @@
                     basic: [
                         'Joguem 2 a 4 pessoas. Cada jogador comanda uma cor e começa num canto.',
                         'Planeie em segredo. Quando todos confirmarem os planos, as jogadas são resolvidas em simultâneo.',
-                        'Cumpra objetivos para ganhar pontos. Chegue aos 10 pontos para vencer; com −10 pontos, é eliminado.'
+                        'O castelo inicial é a sua capital. Se for conquistado, recebe outra Torre aleatória; sem Torres, fica marcado como Horda.',
+                        'Cumpra objetivos para ganhar pontos. Chegue aos 20 pontos para vencer; com −20 pontos, é eliminado.'
                     ],
                     detailed: [
                         'Joguem 2 a 4 pessoas num tabuleiro de 12×12 ou 16×16. O Vermelho começa no canto superior esquerdo, o Azul no superior direito, o Verde no inferior direito e o Amarelo no inferior esquerdo.',
                         'Na configuração normal, cada jogador selecionado começa com um castelo-Torre que contém 12 unidades: um Rei, uma Dama, duas Torres, dois Bispos, dois Cavalos e quatro Peões. Cada outra província tem uma Torre rebelde imóvel com um Peão na guarnição e outro Peão rebelde no exterior. Os rebeldes não jogam turnos.',
                         'O tabuleiro está dividido em 16 províncias. Uma província pertence a um jogador quando todas as Torres nela pertencem a esse jogador; a cor muda com a posse dos castelos. Províncias vazias, rebeldes ou disputadas são neutras. Derrotar rebeldes pode recrutar os seus sobreviventes que não sejam Torres.',
-                        'Escolha 8 recursos (padrão: províncias rebeldes menos quatro, no mínimo zero) ou 12 recursos (todas as províncias rebeldes). Com 12 províncias rebeldes, as listas são 1 cavalo, 3 alimentos, 2 madeiras, 1 metal e 1 ouro, ou 2 cavalos, 4 alimentos, 3 madeiras, 2 metais e 1 ouro. Com outro número de províncias, as proporções são ajustadas. Os mapas personalizados usam as suas províncias rebeldes existentes.',
+                        'O castelo inicial é a sua capital; nas configurações personalizadas, a capital inicial é escolhida aleatoriamente entre as suas Torres. Quando a capital é conquistada, escolhe-se outra Torre aleatória ainda controlada pelo antigo proprietário. Sem Torres, o cartão mostra 🐪 Horda; ao conquistar uma Torre depois, recebe uma nova capital. Uma estrela assinala a capital no tabuleiro. O estado de Horda é apenas informativo e a capital é escolhida aleatoriamente em cada partida, sem depender da semente do mapa.',
+                        'Escolha 8 recursos (padrão: províncias rebeldes menos quatro, no mínimo zero), 12 recursos (todas as províncias rebeldes) ou 16 recursos (um em cada província). Com 12 províncias rebeldes, as listas são 1 cavalo, 2 alimentos, 2 madeiras, 1 metal, 1 ouro e 1 pedra; 2 cavalos, 3 alimentos, 3 madeiras, 2 metais, 1 ouro e 1 pedra; ou 3 cavalos, 4 alimentos, 4 madeiras, 3 metais, 1 ouro e 1 pedra. A pedra substitui um recurso de alimentos. Com outro número de províncias, as proporções são ajustadas. Os mapas personalizados usam as suas províncias rebeldes existentes.',
                         'A opção de permitir recursos nas capitais inclui províncias dos jogadores no sorteio, sem aumentar o total nem garantir recursos nas capitais. Está sempre ativa com 16 recursos e funciona com o equilíbrio por quadrante. Em mapas personalizados, as províncias vazias ou disputadas continuam excluídas nos modos 8/12; o total continua a depender das províncias exclusivamente rebeldes.',
-                        'Por padrão, cada recurso provincial recebe uma probabilidade aleatória fixa de produção entre 5% e 95%, indicada na descrição ao passar o cursor. O equilíbrio opcional faz com que as probabilidades em cada quadrante de canto ocupado (2×2 províncias) somem 25%, com um mínimo de 5% por recurso. Pode permitir quadrantes vazios ou exigir pelo menos um recurso em cada quadrante; esta última opção requer províncias elegíveis suficientes. Não há números de produção. Após as rondas 4, 8, 12, etc., cada província elegível faz um sorteio independente para dar um recurso ao proprietário atual; todos os recursos podem produzir ou falhar. Províncias rebeldes, vazias, disputadas ou de jogadores inativos ou eliminados não produzem. Os ícones evitam montanhas e continuam visíveis sob a neblina. As probabilidades mantêm-se após conquistas. As reservas começam a zero, acumulam sem limite e aparecem em privado como ícones e quantidades no cartão do jogador.',
+                        'Por padrão, cada recurso provincial recebe uma probabilidade aleatória fixa de produção entre 5% e 95%, indicada na descrição ao passar o cursor. O equilíbrio opcional faz com que as probabilidades em cada quadrante de canto ocupado (2×2 províncias) somem 25%, com um mínimo de 5% por recurso. Pode permitir quadrantes vazios ou exigir pelo menos um recurso em cada quadrante; esta última opção requer províncias elegíveis suficientes. Não há números de produção. A produção pode ocorrer em cada ronda, a cada 2 ou a cada 4 rondas. Cada província elegível faz um sorteio independente para dar um recurso ao proprietário atual; todos os recursos podem produzir ou falhar. Províncias rebeldes, vazias, disputadas ou de jogadores inativos ou eliminados não produzem. Os ícones evitam montanhas e continuam visíveis sob a neblina. As probabilidades mantêm-se após conquistas. As reservas começam a zero, acumulam sem limite e aparecem em privado como ícones e quantidades no cartão do jogador. Cada mapa com 8/12/16 recursos inclui uma Pedra, substituindo um recurso de Alimentos.',
                         'Cada jogador tem uma lista privada de objetivos escolhidos aleatoriamente. Nas configurações normais geradas, a semente recria as posições iniciais, os portões das Torres, os níveis iniciais e o terreno. Nas configurações personalizadas, o posicionamento e os níveis escolhidos mantêm-se; a semente gera o terreno e os portões. Os objetivos e os resultados dos combates continuam aleatórios.',
-                        'A pontuação é verificada no fim de cada ronda, incluindo as baixas dos cercos e o regresso das unidades. Os jogadores com −10 pontos ou menos são eliminados em simultâneo; só depois são atribuídos os pontos por derrotar inimigos. Chegue aos 10 pontos para vencer. Se houver vários vencedores na mesma ronda, partilham a vitória. Se todos forem eliminados, há empate.',
+                        'A pontuação é verificada no fim de cada ronda, incluindo as baixas dos cercos e o regresso das unidades. Os jogadores com −20 pontos ou menos são eliminados em simultâneo; só depois são atribuídos os pontos por derrotar inimigos. Chegue aos 20 pontos para vencer. Se houver vários vencedores na mesma ronda, partilham a vitória. Se todos forem eliminados, há empate.',
                         'A morte do Rei não elimina automaticamente o jogador. Ser o último sobrevivente também não garante a vitória.'
                     ]
                 },
@@ -255,8 +263,8 @@
                     ],
                     detailed: [
                         'Peões, Cavalos, Bispos, Damas e Reis avançam exatamente uma casa em qualquer uma das oito direções. Não é possível entrar em casas de montanha.',
-                        'Nas rondas pares, os Peões não podem iniciar movimentos, ataques, junções, separações ou transferências. Um grupo com um Peão não pode mover-se em conjunto numa ronda par, mas as unidades que não são Peões podem separar-se, mover-se ou ser transferidas. Também podem juntar-se ao grupo.',
-                        'Um assalto de cerco já preparado e uma saída da Torre para combater podem ocorrer numa ronda par. Um cerco novo só pode começar numa ronda ímpar.',
+                        'Nas rondas pares, os Peões não podem iniciar movimentos, ataques normais, junções, separações ou transferências. Um grupo com um Peão não pode mover-se em conjunto numa ronda par, mas as unidades que não são Peões podem separar-se, mover-se ou ser transferidas. Também podem juntar-se ao grupo.',
+                        'Um novo cerco pago, um assalto de cerco já preparado e uma saída da Torre para combater podem ocorrer numa ronda par. Iniciar um cerco custa 2 Alimentos e 2 Madeiras.',
                         'As Torres e os grupos liderados por uma Torre não se movem. Cada Torre tem uma única entrada, escolhida aleatoriamente e assinalada por uma seta. As junções, transferências, separações e os cercos têm de usar a casa junto dessa entrada. As Torres começam afastadas pelo menos duas casas umas das outras, também na diagonal.'
                     ]
                 },
@@ -286,7 +294,7 @@
                     detailed: [
                         'O combate pode começar quando inimigos avançam para a mesma casa, cruzam caminhos ou atacam um inimigo que ficou parado. As peças aliadas que chegam juntas formam um grupo antes da luta.',
                         'Se algum grupo combatente tiver Peões, Torres ou Cavalos, apenas essas peças contam para o tamanho do grupo no escalão normal. Cada unidade contabilizada acima do maior grupo adversário acrescenta 20%; cada Rei dá +10% de moral e cada Dama ou Bispo +5%. Se todos os grupos tiverem apenas Reis, Damas e Bispos, todas as unidades contam para o tamanho e não se aplicam esses bónus de moral. A força é elevada à potência 1,35 antes da seleção ponderada.',
-                        'A experiência e a armadura acrescentam cada uma 5% de força e reduzem em 5% por nível o risco de baixa da unidade (máximo de nível 3). Um grupo defensor imóvel com uma Torre e outras unidades combatentes multiplica por 3 o seu peso de combate. Uma Dama ou um Rei isolado que perca tem um risco base de baixa de 60% ou 75%, respetivamente, antes dos modificadores; o vencedor tem 50% de proteção contra baixas.',
+                        'A experiência e a armadura acrescentam cada uma 5% de força e reduzem em 5% por nível o risco de baixa da unidade (máximo de nível 3). Um grupo defensor imóvel com uma Torre e outras unidades combatentes multiplica por 3 o seu peso de combate, ou por 4/5 com um castelo melhorado. Uma Dama ou um Rei isolado que perca tem um risco base de baixa de 60% ou 75%, respetivamente, antes dos modificadores; o vencedor tem 50% de proteção contra baixas.',
                         'As unidades combatentes sobreviventes ganham um nível de experiência após cada combate, até ao nível 3. As unidades derrotadas são capturadas. Para as unidades de jogadores, o vencedor escolhe «Prisioneiro» ou «Executar»; os sobreviventes rebeldes que não sejam Torres são recrutados automaticamente. As baixas do vencedor morrem. Os outros sobreviventes derrotados retiram-se durante três rondas. Cada retirada acrescenta um nível de Desorganização (até três): −20% de força e +25 pontos percentuais de risco de baixa por nível. O efeito dura até ao fim da ronda de regresso e das cinco rondas seguintes. Juntar ou separar unidades não o remove.'
                     ]
                 },
@@ -330,8 +338,8 @@
                         'Quando o contador da Torre chega a zero, a guarnição perde unidades uma a uma.'
                     ],
                     detailed: [
-                        'Atacar uma Torre com pelo menos um Peão que não seja prisioneiro inicia um cerco em vez de um combate normal. Só é possível iniciar cercos em rondas ímpares. O Peão permanece na casa de origem como catapulta.',
-                        'A catapulta tem um contador de assalto de três rondas. Quando está pronta, pode atacar a Torre adjacente, mesmo numa ronda par. A Torre cercada tem um contador de seis rondas. Quando chega a zero, perde uma unidade aleatória por ronda, exceto prisioneiros e Torres.',
+                        'Atacar uma Torre com pelo menos um Peão que não seja prisioneiro inicia um cerco em vez de um combate normal e custa 2 Alimentos + 2 Madeiras. Pode começar em qualquer ronda, mesmo quando os Peões estão inativos. Os atacantes adicionais que se juntem ao mesmo cerco não voltam a pagar. O Peão permanece na casa de origem como catapulta.',
+                        'Um castelo normal tem um contador de assalto de três rondas e um contador de guarnição de seis rondas. Quando o segundo chega a zero, perde uma unidade aleatória por ronda, exceto prisioneiros e Torres. As melhorias de castelo alteram os contadores de assalto/guarnição para 4/8 no nível 1 e 6/12 no nível 2, e aumentam a defesa imóvel de ×3 para ×4 ou ×5.',
                         'Uma Torre cercada não pode mover-se, juntar-se a outras peças, transferir unidades nem separar unidades para o exterior. Os defensores que não são Torres podem sair para combater se pelo menos um deles puder lutar, mesmo numa ronda par. Se a catapulta sobreviver, os defensores sobreviventes regressam à Torre; os derrotados são capturados.',
                         'Um cerco bem-sucedido conquista automaticamente a Torre. A própria Torre não participa nos contra-ataques.',
                         'Use «Cancelar cerco» na catapulta para a retirar. No modo Hotseat, o cancelamento é imediato; no Multijogador, é uma ação planeada que ocupa a catapulta nessa ronda. Se os defensores também planearem «Sair para combater», lutam na mesma contra a catapulta que está a cancelar o cerco.'
@@ -342,14 +350,14 @@
                     art: 'score',
                     basic: [
                         'Consulte a sua lista privada de objetivos para saber como ganhar ou perder pontos.',
-                        'Chegue aos 10 pontos para vencer. Com −10 pontos, é eliminado.',
+                        'Chegue aos 20 pontos para vencer. Com −20 pontos, é eliminado.',
                         'A morte do seu Rei afeta a pontuação, mas não termina automaticamente a partida.'
                     ],
                     detailed: [
                         'No início, são atribuídos objetivos aleatórios: +4 pela eliminação de um inimigo-alvo, +3 pela morte do Rei de um inimigo-alvo, +2 pela morte de uma Dama inimiga específica e +1 por controlar uma Torre ou castelo inimigo específico.',
                         'Penalizações: −4 se o seu Rei morrer e −3 por cada castelo inicial perdido. Os pontos do castelo são recuperados se voltar a controlá-lo. As unidades em retirada continuam vivas; os prisioneiros contam como vivos até serem executados.',
-                        'A pontuação é atualizada no fim da ronda, incluindo as baixas dos cercos e as unidades que regressam. Os jogadores com −10 pontos ou menos são eliminados permanentemente em simultâneo. Depois, são atribuídos os pontos por derrotar inimigos.',
-                        'Vence o primeiro jogador a chegar aos 10 pontos. Se houver vários vencedores na mesma ronda, partilham a vitória. Mesmo o último jogador tem de alcançar os 10 pontos. Se todos os jogadores ativos forem eliminados, há empate.'
+                        'A pontuação é atualizada no fim da ronda, incluindo as baixas dos cercos e as unidades que regressam. Os jogadores com −20 pontos ou menos são eliminados permanentemente em simultâneo. Depois, são atribuídos os pontos por derrotar inimigos.',
+                        'Vence o primeiro jogador a chegar aos 20 pontos. Se houver vários vencedores na mesma ronda, partilham a vitória. Mesmo o último jogador tem de alcançar os 20 pontos. Se todos os jogadores ativos forem eliminados, há empate.'
                     ]
                 },
                 {
@@ -373,14 +381,14 @@
                     title: '11. Progressão e controlos',
                     art: 'battle',
                     basic: [
-                        'As unidades ganham experiência ao sobreviverem a combates. Pode melhorar a armadura a partir de um grupo com Torre.',
+                        'As unidades ganham experiência ao sobreviverem a combates. Compre armadura de nível 1 para uma unidade sem armadura num grupo com Torre.',
                         'Use a lista de unidades para gerir unidades individuais, prisioneiros, cercos e melhorias.',
                         'Consulte os cartões dos jogadores, os objetivos privados, a semente do mapa e o registo de combate.'
                     ],
                     detailed: [
                         'Cada unidade não prisioneira que sobreviva a um combate ganha um nível de experiência, até ao nível 3. Cada nível acrescenta 5% de força e reduz em 5% o risco de baixa da unidade. Nas opções de preparação, também pode escolher níveis iniciais aleatórios de experiência e armadura entre 1 e 3.',
-                        'Durante o planeamento, clique com o botão direito do rato numa peça aliada ou mantenha-a premida durante 500 ms para abrir a lista de unidades. Uma unidade num grupo que contenha uma Torre pode receber uma melhoria de armadura através do botão de escudo, até ao nível 3; cada nível acrescenta 5% de força e reduz em 5% o risco de baixa. No Multijogador, as melhorias são aplicadas pelo anfitrião.',
-                        'Clique ou toque numa peça aliada e depois numa casa adjacente para agir. Selecione uma unidade da lista para a mover separadamente ou transferi-la. As peças com prisioneiros mostram as ações «Executar» e «Libertar»; catapultas e Torres cercadas mostram as ações de cerco. «Reiniciar planos» anula movimentos, ações de cerco e decisões sobre prisioneiros, mas não anula melhorias de armadura já aplicadas.',
+                        'Durante o planeamento nas rondas 4, 8, 12, etc., compre armadura de nível 1 para uma unidade sem armadura num grupo com Torre por 1 Alimento, 2 Metais, 2 Madeiras e 1 Ouro. Cada unidade só pode receber esta melhoria uma vez.',
+                        'Compre Peões ou Cavalos nas rondas 4, 8, 12, etc., num castelo seu numa província ortogonalmente adjacente à capital; cada província só permite uma compra total, com limites de seis Peões e três Cavalos vivos. Cada castelo pode ser melhorado duas vezes por 3 Pedras, 1 Alimento, 2 Madeiras e 1 Ouro por nível. Cartas da Sorte custam 1 Ouro, 1 Cavalo, 1 Metal, 1 Alimento e 1 Madeira, mas ainda não têm efeito. Clique ou toque numa peça aliada e depois numa casa adjacente para agir. Selecione uma unidade da lista para a mover separadamente ou transferi-la. As peças com prisioneiros mostram as ações «Executar» e «Libertar»; catapultas e Torres cercadas mostram as ações de cerco. «Reiniciar planos» anula movimentos, ações de cerco e decisões sobre prisioneiros, mas não anula compras já aplicadas.',
                         'A lista de objetivos é privada e fica oculta durante a passagem do dispositivo no modo Hotseat e durante a resolução. Altere os nomes em «Nomes», acima do tabuleiro. O registo de combate pode ser recolhido sem perder entradas. Os cartões de combate mostram probabilidades, origem dos bónus, baixas, escolhas sobre capturas e lançamentos.'
                     ]
                 }
@@ -397,7 +405,7 @@
     function illustration(art, lang) {
         const pt = lang === 'pt';
         const labels = pt ? {
-            board: ['Quatro cantos de início', 'Objetivo: 10 pontos'],
+            board: ['Quatro cantos de início', 'Objetivo: 20 pontos'],
             plans: ['Cada jogador planeia', 'Planos secretos', 'Todos confirmam', 'Resolução simultânea'],
             movement: ['1 casa por jogada', 'Oito direções', 'Peões: rondas ímpares', 'Torre: imóvel'],
             merge: ['Peça aliada', 'Movimento planeado', 'Um grupo', 'Juntam-se antes do combate'],
@@ -405,10 +413,10 @@
             prisoners: ['Capturado', 'Sob custódia', 'Libertar', 'Executar'],
             terrain: ['Planície: sem bónus', 'Floresta: defesa +25%', 'Colina: defesa +25% se já ocupada', 'Montanha: intransponível'],
             siege: ['Peão inicia o cerco', 'Assalto pronto em 3 rondas', 'Torre: contador 6', 'Sem guarnição: conquista'],
-            score: ['−10: eliminado', 'Objetivos alteram a pontuação', '+10: vitória'],
+            score: ['−20: eliminado', 'Objetivos alteram a pontuação', '+20: vitória'],
             modes: ['Hotseat: um dispositivo', 'Multijogador: um dispositivo por jogador', 'Configuração: posicione as peças']
         } : {
-            board: ['Choose starting provinces', 'Goal: 10 points'],
+            board: ['Choose starting provinces', 'Goal: 20 points'],
             plans: ['Each player plans', 'Plans stay secret', 'Everyone commits', 'Resolve simultaneously'],
             movement: ['1 square per move', 'Eight directions', 'Pawns: odd rounds', 'Tower: stationary'],
             merge: ['Friendly piece', 'Planned move', 'One stack', 'Join before combat'],
@@ -416,7 +424,7 @@
             prisoners: ['Captured', 'Held by captor', 'Release', 'Execute'],
             terrain: ['Plains: no bonus', 'Forest: +25% defence', 'Hill: +25% if held last round', 'Mountain: impassable'],
             siege: ['Pawn starts siege', 'Assault ready in 3 rounds', 'Tower: 6-count timer', 'No garrison: conquered'],
-            score: ['−10: eliminated', 'Objectives change score', '+10: victory'],
+            score: ['−20: eliminated', 'Objectives change score', '+20: victory'],
             modes: ['Hotseat: one device', 'Multiplayer: one device each', 'Setup: place your pieces']
         };
         const colors = { red: '#ef4444', blue: '#3b82f6', green: '#10b981', yellow: '#facc15' };
@@ -442,7 +450,7 @@
                     <circle cx="29" cy="127" r="7" fill="${colors.yellow}"/><circle cx="131" cy="127" r="7" fill="${colors.green}"/>
                     ${note(pt ? 'Vermelho' : 'Red', 175, 39, 'start')}${note(pt ? 'Azul' : 'Blue', 175, 62, 'start')}
                     ${note(pt ? 'Amarelo' : 'Yellow', 175, 85, 'start')}${note(pt ? 'Verde' : 'Green', 175, 108, 'start')}
-                    ${title(pt ? 'Objetivo de pontuação' : 'Score objective', 345, 45)}<text x="345" y="94" text-anchor="middle" fill="#34d399" font-size="42" font-weight="800">10</text>
+                    ${title(pt ? 'Objetivo de pontuação' : 'Score objective', 345, 45)}<text x="345" y="94" text-anchor="middle" fill="#34d399" font-size="42" font-weight="800">20</text>
                     ${note(pt ? 'pontos para vencer' : 'points to win', 345, 117)}`;
                 break;
             }
@@ -540,13 +548,13 @@
             case 'score':
                 label = labels.score.join('. ');
                 drawing = `<rect x="28" y="41" width="110" height="54" rx="8" fill="#7f1d1d"/>
-                    <text x="83" y="76" text-anchor="middle" fill="white" font-size="22" font-weight="700">−10</text>
+                    <text x="83" y="76" text-anchor="middle" fill="white" font-size="22" font-weight="700">−20</text>
                     ${note(labels.score[0], 83, 119)}${arrow(145, 68, 194, 68, '#cbd5e1')}
                     <rect x="201" y="41" width="110" height="54" rx="8" fill="#334155"/>
                     <text x="256" y="76" text-anchor="middle" fill="white" font-size="22">+ / −</text>
                     ${note(labels.score[1], 256, 119)}${arrow(318, 68, 366, 68, '#34d399')}
                     <rect x="373" y="41" width="78" height="54" rx="8" fill="#065f46"/>
-                    <text x="412" y="76" text-anchor="middle" fill="white" font-size="22" font-weight="700">+10</text>
+                    <text x="412" y="76" text-anchor="middle" fill="white" font-size="22" font-weight="700">+20</text>
                     ${note(labels.score[2], 412, 119)}`;
                 break;
             case 'modes':

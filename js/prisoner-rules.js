@@ -1,6 +1,7 @@
 function restorePrisoner(unit) {
     const restored = { ...unit, player: unit.originalPlayer || unit.player };
     delete restored.prisonerOf;
+    delete restored.prisonerSinceRound;
     delete restored.originalPlayer;
     delete restored.routedStacks;
     delete restored.routedUntilRound;
@@ -84,6 +85,7 @@ function beginCaptureChoices(player, contents, destination, recipient = null) {
             addCapturedUnit(player, restorePrisoner(unit), destination);
             logAction(`${getUnitName(unit)} was rescued by P${player} and can fight again.`);
         } else {
+            transferCapturedUnitResources(player, unit);
             pending.push(unit);
         }
     });
@@ -108,7 +110,8 @@ function decideCapture(player, captureId, unitId, fate) {
             ...restorePrisoner(unit),
             originalPlayer: unit.originalPlayer || unit.player,
             player,
-            prisonerOf: player
+            prisonerOf: player,
+            prisonerSinceRound: gameState.round
         };
         addCapturedUnit(player, captive, pending.destination);
         logAction(`P${player} kept ${getUnitName(unit)} as a prisoner.`);

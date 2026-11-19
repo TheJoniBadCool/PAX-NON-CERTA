@@ -33,7 +33,8 @@ const context = vm.createContext({
     updatePlayerCards() {}, renderBoard() {},
     renderProvinceResource() {}
 });
-['constants', 'models', 'game-state', 'planning-timer', 'setup-utils', 'board-utils', 'board-setup', 'starting-position']
+['constants', 'models', 'game-state', 'planning-timer', 'setup-utils', 'board-utils',
+    'capital-rules', 'board-setup', 'starting-position']
     .forEach(name => vm.runInContext(fs.readFileSync(`js/${name}.js`, 'utf8'), context));
 context.gameState = vm.runInContext('new GameState()', context);
 const api = vm.runInContext(`({

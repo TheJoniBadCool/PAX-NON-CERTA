@@ -24,7 +24,7 @@ const context = vm.createContext({
     getPendingHeldIndices: () => new Set(),
     renderPlanArrows() {}, renderRetreatTable() {}
 });
-['constants', 'models', 'game-state', 'board-utils', 'board-renderer'].forEach(name =>
+['constants', 'models', 'game-state', 'board-utils', 'capital-rules', 'board-renderer'].forEach(name =>
     vm.runInContext(fs.readFileSync(`js/${name}.js`, 'utf8'), context));
 const api = vm.runInContext(`const gameState = new GameState();
     ({ state: gameState, renderBoard, createUnit })`, context);

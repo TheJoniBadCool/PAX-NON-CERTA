@@ -11,6 +11,8 @@ class GameState {
         this.boardSize = 16;
         this.fogSight = 'medium';
         this.eliminated = [false, false, false, false];
+        this.capitalTowerIds = [null, null, null, null];
+        this.horde = [false, false, false, false];
         this.turnIndex = 0;
         this.round = 1;
         this.phase = 'PLANNING';
@@ -40,16 +42,22 @@ class GameState {
         this.planningDeadline = null;
         this.diplomacy = createDiplomacyState();
         this.diplomacyReviewer = null;
+        this.resourceTrades = [];
+        this.nextResourceTradeId = 1;
         this.objectives = [[], [], [], []];
         this.scores = [0, 0, 0, 0];
+        this.missionBatches = [null, null, null, null];
+        this.missionPoints = [0, 0, 0, 0];
         this.pendingCapture = null;
         this.captureRecipient = null;
         this.pendingSpoils = null;
         this.resourceMode = '8';
         this.resourceBalance = 'off';
         this.resourceCapitals = false;
+        this.showResourcesToOthers = true;
         this.resourceProductionInterval = 1;
         this.provinceResources = Array(16).fill(null);
+        this.provinceRecruitmentUsed = Array(16).fill(false);
         this.resources = createResourceStockpiles();
         this.lastResourceProductionRound = null;
     }

@@ -36,21 +36,22 @@ const context = vm.createContext({
     initializeObjectives() {}, renderCaptureChoices() {}, renderStartingPositionSelection() {},
     initBoard() {}, Multiplayer: { isPendingCommit: () => false, refreshControls() {}, getBadge: () => ({}) }
 });
-['constants', 'models', 'game-state', 'planning-timer', 'diplomacy-rules', 'retreat-rules', 'prisoner-rules',
-    'setup-utils', 'status-ui', 'game'].forEach(name =>
+['constants', 'models', 'game-state', 'capital-rules', 'planning-timer', 'diplomacy-rules', 'retreat-rules', 'prisoner-rules',
+    'setup-utils', 'board-utils', 'resource-purchases', 'status-ui', 'game'].forEach(name =>
     vm.runInContext(fs.readFileSync(`js/${name}.js`, 'utf8'), context));
 context.finishResolution = () => { resolutions++; };
 vm.runInContext("resolveAllMoves = () => { gameState.phase = 'RESOLVING'; finishResolution(); }; logAction = () => {};", context);
 const api = vm.runInContext(`({
     state: gameState, getDiplomacyPair, getPendingAllianceRequests, applyDiplomacyAction,
-    renderPlayerDiplomacy, beginAllianceReview, startNewGame
+    renderPlayerDiplomacy, beginAllianceReview, startNewGame, applyResourceTradeAction, refreshResourceTotals
 })`, context);
 const state = api.state;
 const pair = () => api.getDiplomacyPair(0, 1);
 const act = (actor, target, action) => api.applyDiplomacyAction(actor, target, action);
 const reset = () => state.reset();
 const click = (panel, target, action) => element(panel).handlers.click({
-    target: { closest: () => ({ dataset: { target: String(target), diplomacyAction: action } }) }
+    target: { closest: selector => selector === 'button[data-diplomacy-action]'
+        ? { dataset: { target: String(target), diplomacyAction: action } } : null }
 });
 
 assert.equal(state.diplomacy.length, 6);
@@ -242,7 +243,7 @@ element('btn-finish-plan').handlers.click();
 assert.equal(state.phase, 'TRANSITION', 'The last planner hands off for approval, not resolution');
 assert.equal(state.turnIndex, 1);
 assert.equal(resolutions, 0);
-assert(element('privacy-desc').innerText.includes('review your alliance requests'));
+assert(element('privacy-desc').innerText.includes('review your alliance and exchange requests'));
 element('btn-privacy-ready').handlers.click();
 assert.equal(state.phase, 'ALLIANCE_REVIEW');
 assert(!element('alliance-review-modal').classList.contains('hidden'));
@@ -272,4 +273,78 @@ for (const id of [1, 2, 3, 4]) {
     assert.match(html, new RegExp(`class="player-card-heading"><span class="player-name">[^<]*</span><span id="diplomacy-actions-p${id}"`),
         'Each diplomacy action sits beside the player name');
 }
+const tradeClick = (panel, target, action, id = state.resourceTrades[0]?.id) =>
+    element(panel).handlers.click({
+        target: { closest: selector => selector === 'button[data-trade-action]'
+            ? { dataset: { target: String(target), tradeAction: action, tradeId: String(id) } } : null }
+    });
+reset();
+state.board = Array.from({ length: 16 }, () => Array(16).fill(null));
+[1, 2, 3, 4].forEach(player => { state.board[0][player - 1] = {
+    id: `army-${player}`, player, type: 'r', contents: [{
+        id: `castle-${player}`, player, type: 'r',
+        resourceStockpile: { gold: 10, wood: 10, food: 10, metal: 10, stone: 10, horse: 10 }
+    }]
+}; });
+state.capitalTowerIds = [1, 2, 3, 4].map(player => `castle-${player}`);
+api.refreshResourceTotals();
+api.renderPlayerDiplomacy(1);
+assert.match(element('diplomacy-actions-p2').innerHTML, /data-trade-action="propose"/);
+tradeClick('diplomacy-actions-p2', 1, 'propose');
+assert(!element('resource-trade-modal').classList.contains('hidden'));
+assert.match(element('resource-trade-amounts').innerHTML, /name="give-stone"/);
+assert.match(element('resource-trade-amounts').innerHTML, /name="receive-gold"/);
+const form = element('resource-trade-form');
+form.elements = { namedItem: name => ({ valueAsNumber: name === 'give-gold' ? 4 : name === 'receive-wood' ? 3 : 0 }) };
+form.handlers.submit({ preventDefault() {}, currentTarget: form });
+assert.equal(state.resourceTrades.length, 1, 'The form sends the selected amounts');
+assert.equal(state.resourceTrades[0].give.gold, 4);
+assert.equal(state.resourceTrades[0].receive.wood, 3);
+assert(element('resource-trade-modal').classList.contains('hidden'));
+api.renderPlayerDiplomacy(1);
+assert.match(element('diplomacy-actions-p2').innerHTML, /Cancel exchange/);
+assert.doesNotMatch(element('diplomacy-actions-p2').innerHTML, /Accept exchange/);
+state.multiplayer = true;
+state.turnIndex = 1;
+state.phase = 'COMMITTED';
+state.committed[1] = true;
+api.renderPlayerDiplomacy(0);
+assert.match(element('diplomacy-actions-p1').innerHTML, /Accept exchange/);
+assert.match(element('diplomacy-actions-p1').innerHTML, /Decline exchange/);
+assert(element('card-p1').classList.contains('diplomacy-incoming'));
+state.multiplayer = false;
+state.phase = 'PLANNING';
+state.turnIndex = 3;
+api.beginAllianceReview();
+assert.equal(state.turnIndex, 1, 'Resource-only requests trigger the private review handoff');
+element('btn-privacy-ready').handlers.click();
+assert.match(element('alliance-review-requests').innerHTML, /Accept exchange/);
+state.board[0][0].contents[0].resourceStockpile.gold = 0;
+api.refreshResourceTotals();
+tradeClick('alliance-review-requests', 0, 'accept');
+assert.equal(resolutions, 2, 'An unaffordable exchange cannot start resolution');
+assert.match(element('alliance-review-error').innerText, /both players/);
+assert.equal(state.resources[1].wood, 10, 'An unaffordable exchange never partly charges the recipient');
+tradeClick('alliance-review-requests', 0, 'decline');
+assert.equal(resolutions, 3);
+assert(element('alliance-review-modal').classList.contains('hidden'));
+
+state.phase = 'PLANNING';
+state.turnIndex = 0;
+assert.equal(api.applyResourceTradeAction(0, 1, 'propose', { give: {}, receive: { wood: 1 } }), null);
+assert.equal(act(0, 1, 'request'), null);
+state.turnIndex = 3;
+api.beginAllianceReview();
+element('btn-privacy-ready').handlers.click();
+click('alliance-review-requests', 0, 'decline');
+assert.equal(state.phase, 'ALLIANCE_REVIEW', 'Answering an alliance must still wait for the exchange');
+assert.equal(resolutions, 3);
+tradeClick('alliance-review-requests', 0, 'accept');
+assert.equal(resolutions, 4);
+assert.equal(state.resources[0].wood, 11);
+assert.equal(state.resources[1].wood, 9);
+state.resourceTrades = [{ id: 99, from: 0, to: 1 }];
+api.startNewGame([true, true, true, true]);
+assert.equal(state.resourceTrades.length, 0, 'A new game clears exchange proposals');
+assert.equal(state.nextResourceTradeId, 1);
 console.log('Diplomacy state, UI, and Hotseat lifecycle checks passed.');

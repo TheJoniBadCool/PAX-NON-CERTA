@@ -35,18 +35,26 @@ function registerSiegeStarts(allIntendedMoves) {
             move.invalid = true;
             return;
         }
-        if (isPawnRestTurn()) {
+        let siege = getSiegeAtSquare(move.to);
+        const startsSiege = !siege;
+        if (startsSiege && !hasPlayerResources(move.player, { food: 2, wood: 2 })) {
             move.invalid = true;
-            logAction(`🚫 Player ${move.player}'s siege deployment was rejected: new sieges may only be started on odd-numbered rounds.`);
+            logAction(`🚫 Player ${move.player}'s siege deployment was rejected: starting a siege costs 2 Food and 2 Wood.`);
             return;
         }
 
-        let siege = getSiegeAtSquare(move.to);
         if (!siege) {
+            if (!spendPlayerResources(move.player, { food: 2, wood: 2 })) {
+                move.invalid = true;
+                logAction(`🚫 Player ${move.player}'s siege deployment was rejected: 2 Food and 2 Wood are required.`);
+                return;
+            }
+            const castleLevel = getCastleUpgradeLevel(target);
+            const timers = CASTLE_SIEGE_TIMERS[castleLevel];
             siege = {
                 id: `siege_${Date.now()}_${Math.random()}`,
                 towerSquare: [...move.to],
-                towerTimer: 6,
+                towerTimer: timers.tower,
                 startedRound: gameState.round,
                 attackers: []
             };
@@ -60,13 +68,14 @@ function registerSiegeStarts(allIntendedMoves) {
             pieceId: move.pieceId,
             player: move.player,
             sourceSquare: [...move.from],
-            timer: 3
+            timer: CASTLE_SIEGE_TIMERS[getCastleUpgradeLevel(target)].attacker
         });
         move.siegeStart = true;
         move.siegeId = siege.id;
+        if (typeof recordMissionAttack === 'function') recordMissionAttack(source, target);
         const location = isPubliclyVisiblePiece(source, [move.from])
             ? `at ${coordsToNotation(...move.to)}` : 'out of sight';
-        logAction(`🏹 <b>SIEGE</b>: Player ${move.player} began besieging the Tower ${location}. Assault ready in 3 rounds.`);
+        logAction(`🏹 <b>SIEGE</b>: Player ${move.player} began besieging the Tower ${location}. Assault ready in ${CASTLE_SIEGE_TIMERS[getCastleUpgradeLevel(target)].attacker} rounds${startsSiege ? ' (2 Food + 2 Wood spent)' : ''}.`);
     });
 }
 
@@ -103,6 +112,14 @@ function applySiegeRoundProgress() {
                 const casualty = nonTowerUnits[Math.floor(Math.random() * nonTowerUnits.length)];
                 tower.contents = getPieceContents(tower).filter(unit => unit.id !== casualty.id);
                 tower.type = getMergedPieceType(tower.contents);
+                const winningUnits = siege.attackers.flatMap(attacker => {
+                    const piece = getPieceByIdAt(...attacker.sourceSquare, attacker.pieceId);
+                    return piece ? getPieceContents(piece).map(unit => ({
+                        unit, piece, row: attacker.sourceSquare[0], column: attacker.sourceSquare[1]
+                    })) : [];
+                });
+                transferStoredUnitResources(
+                    [...new Set(siege.attackers.map(attacker => attacker.player))], casualty, winningUnits);
                 recordDeadPieces(gameState, [casualty]);
                 logAction(isPubliclyVisiblePiece(tower, [siege.towerSquare])
                     ? `🏰 <b>SIEGE</b> at ${coordsToNotation(...siege.towerSquare)}: ${getUnitName(casualty)} was lost to the siege.`

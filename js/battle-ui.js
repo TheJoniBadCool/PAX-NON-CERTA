@@ -58,7 +58,9 @@ function renderBattleCandidates(group, candidateResults = null, retreatedUnitIds
             entry.routedPenalty ? battleStat('⚑', `-${Math.round(entry.routedPenalty * 100)}%`, `Routed strength -${Math.round(entry.routedPenalty * 100)}% · average of per-unit penalties, applied before the odds curve`) : '',
             entry.terrainBonus ? battleStat('⛰', `+${Math.round(entry.terrainBonus * 100)}%`, `Terrain defence: +${Math.round(entry.terrainBonus * 100)}% strength before the odds curve`) : '',
             entry.moraleBonus ? battleStat('♛', `+${Math.round(entry.moraleBonus * 100)}%`, `Morale: +${Math.round(entry.moraleBonus * 100)}% · King +10%, Queen/Bishop +5%`) : '',
-            entry.towerDefenderBonus > 1 ? battleStat('♜', '×3', 'Stationary Tower defence ×3') : ''
+            entry.towerDefenderBonus > 1
+                ? battleStat('♜', `×${entry.towerDefenderBonus}`,
+                    `Stationary Tower defence ×${entry.towerDefenderBonus}`) : ''
         ].join('');
         return `
             <div class="battle-candidate">

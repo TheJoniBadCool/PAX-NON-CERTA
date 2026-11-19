@@ -24,13 +24,15 @@ const context = vm.createContext({
     renderPlanArrows() {}, renderRetreatTable() {}
 });
 ['constants', 'models', 'game-state', 'setup-utils', 'board-utils', 'movement-rules',
-    'planning-rules', 'siege-rules', 'retreat-rules', 'prisoner-rules', 'board-renderer']
+    'planning-rules', 'resource-purchases', 'siege-rules', 'retreat-rules', 'prisoner-rules',
+    'capital-rules', 'board-renderer']
     .forEach(name => vm.runInContext(fs.readFileSync(`js/${name}.js`, 'utf8'), context));
 const api = vm.runInContext(`const gameState = new GameState();
     ({ state: gameState, getFogVisibility, getVisiblePiece, getVisibleMovements,
        isPubliclyVisiblePiece, getPlanArrowKind, getValidMovesForPiece,
        renderBoard, createUnit, resolvePrisonerPlans, processRetreatsAtRoundStart,
-       registerSiegeStarts, applySiegeRoundProgress, coordsToNotation, rebelId: REBEL_PLAYER_ID })`, context);
+       registerSiegeStarts, applySiegeRoundProgress, getUnitResourceStore,
+       refreshResourceTotals, coordsToNotation, rebelId: REBEL_PLAYER_ID })`, context);
 const { state } = api;
 const piece = (player, ...types) => ({
     id: `${player}-${types.join('')}`, player, type: types.includes('r') ? 'r' : types[0],
@@ -293,8 +295,11 @@ assert(logs.at(-1).includes('in fog of war'), 'Hidden re-entry coordinates stay 
 
 reset();
 state.board[0][0] = piece(1, 'n');
+state.board[0][1] = piece(2, 'r');
 state.board[12][12] = piece(api.rebelId, 'r', 'p');
 state.board[12][11] = piece(2, 'p');
+Object.assign(api.getUnitResourceStore(state.board[0][1].contents[0], true), { food: 2, wood: 2 });
+api.refreshResourceTotals();
 api.registerSiegeStarts([{
     player: 2, pieceId: state.board[12][11].id, from: [12, 11], to: [12, 12]
 }]);

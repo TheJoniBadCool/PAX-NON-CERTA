@@ -217,6 +217,156 @@ function renderProvinceResource(square, r, c, resources, size, biomes = gameStat
     }
 }
 
+function getResourceBearingUnits(player = null) {
+    const units = [];
+    gameState.board.forEach((row, r) => row.forEach((square, c) => {
+        getSquarePieces(square).forEach(piece => {
+            if (player !== null && piece.player !== player) return;
+            getPieceContents(piece).forEach(unit => {
+                if (!isPrisoner(unit) && unit.player === piece.player &&
+                    ['r', 'k', 'q'].includes(getUnitType(unit))) {
+                    units.push({ unit, piece, row: r, column: c });
+                }
+            });
+        });
+    }));
+    gameState.retreating?.forEach((entries, index) => entries.forEach(entry => {
+        const owner = entry.player || index + 1;
+        if (player !== null && owner !== player) return;
+        (entry.contents || []).forEach(unit => {
+            if (!isPrisoner(unit) && unit.player === owner &&
+                ['r', 'k', 'q'].includes(getUnitType(unit))) {
+                units.push({ unit, piece: { player: owner }, row: Infinity, column: Infinity });
+            }
+        });
+    }));
+    return units;
+}
+
+function getUnitResourceStore(unit, create = false) {
+    if (create) {
+        if (!unit.resourceStockpile || typeof unit.resourceStockpile !== 'object') {
+            unit.resourceStockpile = {};
+        }
+        RESOURCE_TYPES.forEach(resource => {
+            if (!Number.isFinite(Number(unit.resourceStockpile[resource.key]))) {
+                unit.resourceStockpile[resource.key] = 0;
+            }
+        });
+    }
+    return unit.resourceStockpile || null;
+}
+
+function refreshResourceTotals() {
+    const totals = createResourceStockpiles();
+    getResourceBearingUnits().forEach(({ unit, piece }) => {
+        if (piece.player < 1 || piece.player > 4) return;
+        const stockpile = getUnitResourceStore(unit);
+        if (!stockpile) return;
+        RESOURCE_TYPES.forEach(resource => {
+            totals[piece.player - 1][resource.key] += Number(stockpile[resource.key]) || 0;
+        });
+    });
+    gameState.resources = totals;
+    return totals;
+}
+
+function getResourceHolderForPlayer(player, additionalUnits = []) {
+    if (player < 1 || player > 4) return null;
+    const units = [...getResourceBearingUnits(player), ...additionalUnits.filter(entry =>
+        entry.piece?.player === player && !isPrisoner(entry.unit) &&
+        ['r', 'k', 'q'].includes(getUnitType(entry.unit)))];
+    units.sort((a, b) => a.row - b.row || a.column - b.column);
+    const capitalId = gameState.capitalTowerIds?.[player - 1];
+    if (capitalId) {
+        const capital = units.find(entry =>
+            entry.unit.id === capitalId && getUnitType(entry.unit) === 'r');
+        if (capital) return capital.unit;
+    }
+    return units.find(entry => getUnitType(entry.unit) === 'k')?.unit ||
+        units.find(entry => getUnitType(entry.unit) === 'q')?.unit || null;
+}
+
+function transferStoredUnitResources(recipientPlayers, unit, additionalUnits = []) {
+    const source = getUnitResourceStore(unit);
+    if (!source || !RESOURCE_TYPES.some(resource => (Number(source[resource.key]) || 0) > 0)) return false;
+    const players = [...new Set(recipientPlayers)]
+        .filter(player => player >= 1 && player <= 4)
+        .sort((a, b) => a - b);
+    if (!players.length) return false;
+    const holders = players.map(player => {
+        const holder = getResourceHolderForPlayer(player, additionalUnits);
+        if (!holder) {
+            throw new Error(`P${player} has no capital Tower, King, or Queen to receive captured resources.`);
+        }
+        return { player, unit: holder };
+    });
+    const armySizes = new Map(players.map(player => [player,
+        additionalUnits.filter(entry => entry.piece?.player === player &&
+            !isPrisoner(entry.unit)).length]));
+    const remainderOrder = [...holders].sort((a, b) =>
+        armySizes.get(b.player) - armySizes.get(a.player) || a.player - b.player);
+    RESOURCE_TYPES.forEach(resource => {
+        const amount = Math.max(0, Math.floor(Number(source[resource.key]) || 0));
+        if (!amount) return;
+        const share = Math.floor(amount / holders.length);
+        const remainder = amount % holders.length;
+        holders.forEach((holder, index) => {
+            const store = getUnitResourceStore(holder.unit, true);
+            const remainderIndex = remainderOrder.findIndex(entry => entry.player === holder.player);
+            store[resource.key] = (Number(store[resource.key]) || 0) + share +
+                (remainderIndex < remainder ? 1 : 0);
+        });
+        source[resource.key] = 0;
+    });
+    refreshResourceTotals();
+    return true;
+}
+
+function transferCapturedUnitResources(capturer, unit) {
+    return ['k', 'q'].includes(getUnitType(unit)) &&
+        transferStoredUnitResources([capturer], unit);
+}
+
+function stripResourceStore(unit) {
+    const copy = { ...unit };
+    delete copy.resourceStockpile;
+    return copy;
+}
+
+function stripResourceStoresFromPlan(plan) {
+    return {
+        ...plan,
+        ...(Array.isArray(plan.contents) ? { contents: plan.contents.map(stripResourceStore) } : {})
+    };
+}
+
+function cloneBoardWithoutResourceStores(board = gameState.board) {
+    return board.map(row => row.map(square => {
+        const clonePiece = piece => piece ? ({
+            ...piece,
+            contents: (getPieceContents(piece) || []).map(stripResourceStore)
+        }) : piece;
+        return Array.isArray(square) ? square.map(clonePiece) : square ? clonePiece(square) : null;
+    }));
+}
+
+function getProvinceTowers(board, province, owner) {
+    const towers = [];
+    board.forEach((row, r) => row.forEach((square, c) => {
+        if (getProvinceIndex(r, c, board.length) !== province) return;
+        getSquarePieces(square).forEach(piece => {
+            if (piece.player !== owner) return;
+            getPieceContents(piece).forEach(unit => {
+                if (getUnitType(unit) === 'r' && !isPrisoner(unit)) {
+                    towers.push({ unit, row: r, column: c });
+                }
+            });
+        });
+    }));
+    return towers;
+}
+
 function resolveResourceProduction(completedRound, random = Math.random) {
     const interval = getResourceProductionInterval();
     if (completedRound < 1 || completedRound % interval !== 0 ||
@@ -231,16 +381,40 @@ function resolveResourceProduction(completedRound, random = Math.random) {
                 !arePlayersFriendly(piece.player, owner) &&
                 getCombatContents(piece).some(unit => ['p', 'n'].includes(getUnitType(unit))))
                 .map(piece => piece.player);
+            if (typeof recordMissionRaid === 'function') {
+                recordMissionRaid(province, resource, position, owner, raiders, completedRound);
+            }
             const recipients = raiders.length ? raiders :
                 owner && gameState.activePlayers[owner - 1] && !gameState.eliminated[owner - 1] ? [owner] : [];
             if (recipients.length && random() * 100 < resource.productionChance) {
-                const recipient = recipients.length === 1 ? recipients[0] :
-                    recipients[Math.floor(random() * recipients.length)];
-                gameState.resources[recipient - 1][resource.type]++;
+                if (raiders.length) {
+                    const recipient = recipients.length === 1 ? recipients[0] :
+                        recipients[Math.floor(random() * recipients.length)];
+                    const holder = getResourceHolderForPlayer(recipient);
+                    if (!holder) {
+                        throw new Error(`P${recipient} has no capital Tower, King, or Queen to receive raid resources.`);
+                    }
+                    getUnitResourceStore(holder, true)[resource.type]++;
+                } else {
+                    const towers = getProvinceTowers(gameState.board, province, owner);
+                    let nearest = null;
+                    let nearestDistance = Infinity;
+                    towers.forEach(tower => {
+                        const rowDistance = tower.row - position[0];
+                        const columnDistance = tower.column - position[1];
+                        const distance = rowDistance * rowDistance + columnDistance * columnDistance;
+                        if (distance < nearestDistance) {
+                            nearest = tower;
+                            nearestDistance = distance;
+                        }
+                    });
+                    if (nearest) getUnitResourceStore(nearest.unit, true)[resource.type]++;
+                }
             }
         }
     });
     gameState.lastResourceProductionRound = completedRound;
+    refreshResourceTotals();
     return true;
 }
 

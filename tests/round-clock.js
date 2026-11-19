@@ -9,6 +9,7 @@ function element(id) {
         elements.set(id, {
             style: {},
             classList: { toggle() {} },
+            addEventListener() {},
             setAttribute(name, value) { this[name] = value; }
         });
     }
@@ -25,6 +26,7 @@ const context = vm.createContext({
     roundTagEl: element('round-tag'),
     PLAYERS: [{ name: 'Red' }]
 });
+vm.runInContext(fs.readFileSync('js/resource-purchases.js', 'utf8'), context);
 vm.runInContext(fs.readFileSync('js/status-ui.js', 'utf8'), context);
 function render() {
     vm.runInContext('updateRoundDisplay()', context);
@@ -60,10 +62,13 @@ for (const interval of [1, 2, 4]) {
     for (let round = 1; round <= 8; round++) {
         state.round = round;
         render();
-        const progress = (round - 1) % interval;
-        assert.equal(element('round-clock-status').innerText, `${progress} / ${interval}`);
+        const progress = (round - 1) % 4;
+        assert.equal(element('round-clock-status').innerText, `${progress} / 4`);
+        assert.equal(element('round-clock-hand').style.transform, `rotate(${(round - 1) * 90}deg)`,
+            'The hand advances a quarter-turn even when resources are produced every round');
         assert.match(element('round-clock')['aria-label'],
-            new RegExp(`production in ${interval - progress} rounds?`));
+            new RegExp(`production in ${interval - (round - 1) % interval} rounds?`));
+        assert.match(element('round-clock')['aria-label'], /purchases on rounds 4, 8, 12/);
     }
 }
 

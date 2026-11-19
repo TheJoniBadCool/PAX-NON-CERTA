@@ -56,8 +56,8 @@ gameplay rules. If a case is not defined, stop and ask for clarification.
   remain unchanged.
 - Retreated stacks belonging to eliminated players re-enter gray and
   stationary. The UI shows a compact retreat table for every player.
-- A selected held unit can receive a free armour upgrade when its stack
-  contains a Tower.
+- A selected held unit with armour level 0 can buy a one-time level 1 armour
+  upgrade when its stack contains a Tower, during rounds 4, 8, 12, etc.
 - Battle cards show per-unit battle/casualty modifiers before the roll, then
   mark living units normally, casualties with `X`, and retreating units with
   a white flag.
@@ -135,7 +135,7 @@ Validation scenarios:
 
 **Status:** Complete.
 
-When a player reaches -10 objective points after complete round resolution:
+When a player reaches -20 objective points after complete round resolution:
 
 - Mark the player eliminated.
 - Render every remaining stack owned by that player as gray while preserving its
@@ -163,9 +163,9 @@ Recommended representation:
 
 Validation scenarios:
 
-- Player reaches -10 but has multiple separate stacks.
+- Player reaches -20 but has multiple separate stacks.
 - King is lost inside a merged stack while non-King units remain; elimination
-  occurs only if the player's score reaches -10.
+  occurs only if the player's score reaches -20.
 - Gray stack is attacked and loses.
 - Gray stack is attacked and wins.
 - Gray stack is targeted by multiple players.

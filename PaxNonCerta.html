@@ -32,9 +32,10 @@
             <div class="board-dashboard">
                 <div class="board-edge">
                     <div id="card-p1" class="player-card player-p1 active-turn">
-                        <div class="player-card-heading"><span class="player-name">🔴 Player 1 (Red)</span><span id="diplomacy-actions-p1" class="diplomacy-actions"></span></div>
+                        <div class="player-card-heading"><span class="player-name">🔴 Player 1 (Red)</span><span id="diplomacy-actions-p1" class="diplomacy-actions"></span><details id="resource-purchases-p1" class="resource-purchases diplomacy-menu hidden"><summary class="diplomacy-button" title="Resource shop" aria-label="Resource shop"><span aria-hidden="true">🛒</span></summary><div id="resource-purchase-options-p1" class="diplomacy-popup resource-purchase-options" aria-label="Available purchases"></div></details></div>
                         <div id="diplomacy-p1" class="diplomacy-panel"></div>
                         <span id="badge-p1" class="status-badge">Planning</span>
+                        <span id="horde-p1" class="horde-badge hidden" role="status">🐪 Horde</span>
                         <div id="retreat-p1" class="retreat-row" aria-label="Red retreating units"></div>
                         <div id="dead-p1" class="dead-row" aria-label="Red dead pieces"></div>
                         <div id="resources-p1" class="resources-row hidden" aria-label="Red resources"></div>
@@ -52,9 +53,10 @@
                         </div>
                     </div>
                     <div id="card-p2" class="player-card player-p2">
-                        <div class="player-card-heading"><span class="player-name">🔵 Player 2 (Blue)</span><span id="diplomacy-actions-p2" class="diplomacy-actions"></span></div>
+                        <div class="player-card-heading"><span class="player-name">🔵 Player 2 (Blue)</span><span id="diplomacy-actions-p2" class="diplomacy-actions"></span><details id="resource-purchases-p2" class="resource-purchases diplomacy-menu hidden"><summary class="diplomacy-button" title="Resource shop" aria-label="Resource shop"><span aria-hidden="true">🛒</span></summary><div id="resource-purchase-options-p2" class="diplomacy-popup resource-purchase-options" aria-label="Available purchases"></div></details></div>
                         <div id="diplomacy-p2" class="diplomacy-panel"></div>
                         <span id="badge-p2" class="status-badge">Waiting</span>
+                        <span id="horde-p2" class="horde-badge hidden" role="status">🐪 Horde</span>
                         <div id="retreat-p2" class="retreat-row" aria-label="Blue retreating units"></div>
                         <div id="dead-p2" class="dead-row" aria-label="Blue dead pieces"></div>
                         <div id="resources-p2" class="resources-row hidden" aria-label="Blue resources"></div>
@@ -93,10 +95,10 @@
                         </div>
                         <div id="battle-candidates" class="battle-candidates"></div>
                         <details class="battle-explanation">
-                            <summary title="Odds use raw strength raised to 1.35: counted stack units, +20% per unit above the strongest opponent, King +10%, Queen/Bishop +5%, XP/armour +5% per level, then stationary Tower defence ×3. XP/armour also reduce casualties by 5% per level; winners receive 50% casualty protection." aria-label="Battle rules">ⓘ</summary>
+                            <summary title="Odds use raw strength raised to 1.35: counted stack units, +20% per unit above the strongest opponent, King +10%, Queen/Bishop +5%, XP/armour +5% per level, then stationary Tower defence ×3 (or ×4/×5 for upgraded Castles). XP/armour also reduce casualties by 5% per level; winners receive 50% casualty protection." aria-label="Battle rules">ⓘ</summary>
                             <div>
                                 Odds use raw strength raised to 1.35: counted stack units, +20% per unit above the strongest opponent,
-                                King +10%, Queen/Bishop +5%, XP/armour +5% per level, then stationary Tower defence ×3.
+                                King +10%, Queen/Bishop +5%, XP/armour +5% per level, then stationary Tower defence ×3 (upgraded Castles ×4 or ×5).
                                 XP/armour also reduce casualties by 5% per level; winners receive 50% casualty protection.
                                 Defeated lone Queens/Kings use 60%/75% base casualty risk before battle modifiers.
                                 Defeated casualties are captured: the winner chooses Prisoner or Execute. Prisoners never fight or route.
@@ -137,9 +139,10 @@
             </div>
                 <div class="board-edge">
                     <div id="card-p4" class="player-card player-p4">
-                        <div class="player-card-heading"><span class="player-name">🟡 Player 4 (Yellow)</span><span id="diplomacy-actions-p4" class="diplomacy-actions"></span></div>
+                        <div class="player-card-heading"><span class="player-name">🟡 Player 4 (Yellow)</span><span id="diplomacy-actions-p4" class="diplomacy-actions"></span><details id="resource-purchases-p4" class="resource-purchases diplomacy-menu hidden"><summary class="diplomacy-button" title="Resource shop" aria-label="Resource shop"><span aria-hidden="true">🛒</span></summary><div id="resource-purchase-options-p4" class="diplomacy-popup resource-purchase-options" aria-label="Available purchases"></div></details></div>
                         <div id="diplomacy-p4" class="diplomacy-panel"></div>
                         <span id="badge-p4" class="status-badge">Waiting</span>
+                        <span id="horde-p4" class="horde-badge hidden" role="status">🐪 Horde</span>
                         <div id="retreat-p4" class="retreat-row" aria-label="Yellow retreating units"></div>
                         <div id="dead-p4" class="dead-row" aria-label="Yellow dead pieces"></div>
                         <div id="resources-p4" class="resources-row hidden" aria-label="Yellow resources"></div>
@@ -167,9 +170,10 @@
                         </button>
                     </div>
                     <div id="card-p3" class="player-card player-p3">
-                        <div class="player-card-heading"><span class="player-name">🟢 Player 3 (Green)</span><span id="diplomacy-actions-p3" class="diplomacy-actions"></span></div>
+                        <div class="player-card-heading"><span class="player-name">🟢 Player 3 (Green)</span><span id="diplomacy-actions-p3" class="diplomacy-actions"></span><details id="resource-purchases-p3" class="resource-purchases diplomacy-menu hidden"><summary class="diplomacy-button" title="Resource shop" aria-label="Resource shop"><span aria-hidden="true">🛒</span></summary><div id="resource-purchase-options-p3" class="diplomacy-popup resource-purchase-options" aria-label="Available purchases"></div></details></div>
                         <div id="diplomacy-p3" class="diplomacy-panel"></div>
                         <span id="badge-p3" class="status-badge">Waiting</span>
+                        <span id="horde-p3" class="horde-badge hidden" role="status">🐪 Horde</span>
                         <div id="retreat-p3" class="retreat-row" aria-label="Green retreating units"></div>
                         <div id="dead-p3" class="dead-row" aria-label="Green dead pieces"></div>
                         <div id="resources-p3" class="resources-row hidden" aria-label="Green resources"></div>
@@ -228,10 +232,28 @@
 
     <div id="alliance-review-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="alliance-review-title">
         <div class="modal-card">
-            <h2 id="alliance-review-title">Alliance requests</h2>
+            <h2 id="alliance-review-title">Alliance and exchange requests</h2>
             <p>Accept or decline each request before moves resolve.</p>
+            <p id="alliance-review-error" role="alert"></p>
             <div id="alliance-review-requests" class="alliance-review-requests"></div>
         </div>
+    </div>
+
+    <div id="resource-trade-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="resource-trade-title">
+        <form id="resource-trade-form" class="modal-card">
+            <h2 id="resource-trade-title">Resource exchange</h2>
+            <p>Choose what you give and request. Either side may be zero. Both players must hold the full amounts when proposed and accepted; resources are not reserved.</p>
+            <input id="resource-trade-target" type="hidden">
+            <table class="resource-trade-table">
+                <thead><tr><th scope="col">Resource</th><th scope="col">You give</th><th scope="col">You request</th></tr></thead>
+                <tbody id="resource-trade-amounts"></tbody>
+            </table>
+            <p id="resource-trade-error" role="alert"></p>
+            <div class="name-editor-actions">
+                <button id="btn-cancel-resource-trade" class="btn btn-secondary" type="button">Cancel</button>
+                <button class="btn btn-primary" type="submit">Send proposal</button>
+            </div>
+        </form>
     </div>
 
     <div id="player-names-modal" class="modal-overlay hidden">
@@ -293,6 +315,7 @@
                         </select>
                     </label>
                     <label><input id="mp-resource-capitals" type="checkbox"> Allow resources in player capitals (always on with 16 resources)</label>
+                    <label><input id="mp-show-resources-to-others" type="checkbox" checked> Show resource balances to other players</label>
                     <label class="mp-field" for="mp-resource-balance">Resource balance
                         <select id="mp-resource-balance">
                             <option value="off">Unbalanced (default)</option>
@@ -409,6 +432,7 @@
                     </select>
                 </label>
                 <label><input id="resource-capitals" type="checkbox"> Allow resources in player capitals (always on with 16 resources)</label>
+                <label><input id="show-resources-to-others" type="checkbox" checked> Show resource balances to other players</label>
                 <label class="mp-field" for="resource-balance">Resource balance
                     <select id="resource-balance">
                         <option value="off">Unbalanced (default)</option>
@@ -551,6 +575,7 @@
                             <option value="wood">Wood</option>
                             <option value="metal">Metal</option>
                             <option value="gold">Gold</option>
+                            <option value="stone">Stone</option>
                         </select>
                     </label>
                     <label class="mp-field" for="custom-resource-chance">Production chance (% / 4 rounds)
@@ -633,8 +658,11 @@
     <script src="js/planning-timer.js"></script>
     <script src="js/diplomacy-rules.js"></script>
     <script src="js/objective-rules.js"></script>
+    <script src="js/mission-rules.js"></script>
     <script src="js/setup-utils.js"></script>
     <script src="js/board-utils.js"></script>
+    <script src="js/resource-purchases.js"></script>
+    <script src="js/capital-rules.js"></script>
     <script src="js/battle-rules.js"></script>
     <script src="js/combat-log.js"></script>
     <script src="js/board-renderer.js"></script>
