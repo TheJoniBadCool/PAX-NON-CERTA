@@ -69,16 +69,16 @@ function getPlanArrowKind(move, allMoves) {
     const destinationMoves = allMoves.filter(other =>
         other.to[0] === move.to[0] && other.to[1] === move.to[1]
     );
-    const enemyDestinationMove = destinationMoves.some(other => other.player !== move.player);
+    const enemyDestinationMove = destinationMoves.some(other => !arePlayersFriendly(other.player, move.player));
     const destinationPiece = getVisiblePiece(move.to[0], move.to[1], move.player);
     const destinationPieceMovesAway = allMoves.some(other =>
         other.from[0] === move.to[0] && other.from[1] === move.to[1]
     );
     const enemyStationaryTarget = destinationPiece &&
-        destinationPiece.player !== move.player &&
+        !arePlayersFriendly(destinationPiece.player, move.player) &&
         !destinationPieceMovesAway;
     const enemySwap = allMoves.some(other =>
-        other.player !== move.player &&
+        !arePlayersFriendly(other.player, move.player) &&
         other.from[0] === move.to[0] && other.from[1] === move.to[1] &&
         other.to[0] === move.from[0] && other.to[1] === move.from[1]
     );

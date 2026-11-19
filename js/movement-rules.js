@@ -31,12 +31,18 @@ function canMoveHeldUnit(unit, plans = gameState.plans.flat()) {
 }
 
 function canUnitsTarget(contents, target, player) {
-    return !target || target.player === player || contents.some(unit => !isPrisoner(unit));
+    return !target || (arePlayersFriendly(target.player, player) &&
+        (target.player === player || !isTowerPiece(target))) ||
+        (!arePlayersAllied(target.player, player) && contents.some(unit => !isPrisoner(unit)));
+}
+
+function canUnitsEnterSquare(contents, square, player) {
+    return getVisiblePieces(...square, player).every(target => canUnitsTarget(contents, target, player));
 }
 
 // Universal 1-Square Movement Rule in all 8 directions
 function getValidMovesForPiece(r, c) {
-    const piece = gameState.board[r][c];
+    const piece = getPieceAt(r, c, gameState.turnIndex + 1);
     if (!piece || isEliminatedPiece(piece) || gameState.lockedPieceIds.has(piece.id)) return [];
     if (getSiegeAtSquare([r, c])) return [];
 
@@ -66,7 +72,7 @@ function getValidMovesForPiece(r, c) {
             if (!isPassableSquare(tr, tc)) continue;
             if (!isTowerGateMove([r, c], [tr, tc])) continue;
             const targetPiece = getVisiblePiece(tr, tc, activePlayerId);
-            if (!canUnitsTarget(getPieceContents(piece), targetPiece, activePlayerId)) continue;
+            if (!canUnitsEnterSquare(getPieceContents(piece), [tr, tc], activePlayerId)) continue;
             if (targetPiece && targetPiece.player !== activePlayerId &&
                 isTowerPiece(targetPiece) &&
                 !getCombatContents(piece).some(unit => getUnitType(unit) === 'p')) {
@@ -94,13 +100,13 @@ function rejectPrisonerMoveConflicts(moves) {
         const prisoners = active.filter(move => move.contents.every(isPrisoner));
         const reject = new Set();
         prisoners.forEach(move => {
-            const target = gameState.board[move.to[0]][move.to[1]];
+            const target = getPiecesAt(...move.to).find(piece => !arePlayersFriendly(piece.player, move.player));
             const movingTarget = target && active.some(other => !other.isUnmerge && other.pieceId === target.id);
-            const swaps = prisoners.filter(other => other !== move && other.player !== move.player &&
+            const swaps = prisoners.filter(other => other !== move && !arePlayersFriendly(other.player, move.player) &&
                 other.to[0] === move.from[0] && other.to[1] === move.from[1] &&
                 move.to[0] === other.from[0] && move.to[1] === other.from[1]);
             swaps.forEach(other => { reject.add(move); reject.add(other); });
-            const opponents = prisoners.filter(other => other !== move && other.player !== move.player &&
+            const opponents = prisoners.filter(other => other !== move && !arePlayersFriendly(other.player, move.player) &&
                 other.to[0] === move.to[0] && other.to[1] === move.to[1]);
             const combatArrival = active.some(other => other.to[0] === move.to[0] &&
                 other.to[1] === move.to[1] && other.contents.some(unit => !isPrisoner(unit)));

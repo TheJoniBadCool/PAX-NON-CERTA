@@ -1,11 +1,11 @@
 function getReadySiegeAssault(piece, from, to) {
     const siege = getSiegeForAttacker(piece.id);
     const attacker = getSiegeAttacker(piece.id);
-    const tower = gameState.board[to[0]][to[1]];
+    const tower = getPieceAt(...to);
     return siege && attacker && attacker.timer === 0 &&
         attacker.sourceSquare[0] === from[0] && attacker.sourceSquare[1] === from[1] &&
         siege.towerSquare[0] === to[0] && siege.towerSquare[1] === to[1] &&
-        tower && isTowerPiece(tower) &&
+        tower && !arePlayersFriendly(tower.player, piece.player) && isTowerPiece(tower) &&
         getCombatContents(piece).some(unit => getUnitType(unit) === 'p') &&
         isAdjacentSquare(from, to) && isTowerGateMove(from, to)
         ? siege
@@ -14,7 +14,7 @@ function getReadySiegeAssault(piece, from, to) {
 
 function isValidSallyOutPlan(piece, from, to, player, siegeId) {
     const siege = gameState.sieges.find(entry => entry.id === siegeId);
-    const tower = siege && gameState.board[siege.towerSquare[0]][siege.towerSquare[1]];
+    const tower = siege && getPieceAt(...siege.towerSquare);
     return Boolean(siege && tower && tower.id === piece.id &&
         piece.player === player &&
         from[0] === siege.towerSquare[0] && from[1] === siege.towerSquare[1] &&
@@ -25,10 +25,10 @@ function isValidSallyOutPlan(piece, from, to, player, siegeId) {
 function registerSiegeStarts(allIntendedMoves) {
     allIntendedMoves.forEach(move => {
         if (move.invalid || move.isUnmerge || move.siegeAssault) return;
-        const source = gameState.board[move.from[0]][move.from[1]];
-        const target = gameState.board[move.to[0]][move.to[1]];
+        const source = getPieceByIdAt(...move.from, move.pieceId);
+        const target = getPieceAt(...move.to);
         if (!source || source.id !== move.pieceId || !target ||
-            target.player === move.player || !isTowerPiece(target)) {
+            arePlayersFriendly(target.player, move.player) || !isTowerPiece(target)) {
             return;
         }
         if (!getCombatContents(source).some(unit => getUnitType(unit) === 'p')) {
@@ -72,12 +72,13 @@ function registerSiegeStarts(allIntendedMoves) {
 
 function syncSieges() {
     gameState.sieges = gameState.sieges.filter(siege => {
-        const tower = gameState.board[siege.towerSquare[0]][siege.towerSquare[1]];
+        const tower = getPieceAt(...siege.towerSquare);
         if (!tower || !isTowerPiece(tower)) return false;
         siege.attackers = siege.attackers.filter(attacker => {
-            const piece = gameState.board[attacker.sourceSquare[0]][attacker.sourceSquare[1]];
+            const piece = getPieceByIdAt(...attacker.sourceSquare, attacker.pieceId);
             return piece && piece.id === attacker.pieceId &&
                 piece.player === attacker.player &&
+                !arePlayersFriendly(piece.player, tower.player) &&
                 getPieceContents(piece).length > 0;
         });
         return siege.attackers.length > 0;
@@ -94,7 +95,7 @@ function applySiegeRoundProgress() {
         const previousTowerTimer = siege.towerTimer;
         siege.towerTimer -= 1;
         if (previousTowerTimer <= 0) {
-            const tower = gameState.board[siege.towerSquare[0]][siege.towerSquare[1]];
+            const tower = getPieceAt(...siege.towerSquare);
             const nonTowerUnits = tower
                 ? getCombatContents(tower).filter(unit => getUnitType(unit) !== 'r')
                 : [];
@@ -128,8 +129,8 @@ function rejectInvalidTowerAttacks(allIntendedMoves) {
             logAction(`🚫 Player ${move.player}'s defending Tower is under siege; ordinary extraction is not allowed.`);
             return;
         }
-        const target = gameState.board[move.to[0]][move.to[1]];
-        if (!canUnitsTarget(move.contents, target, move.player)) {
+        const target = getPieceAt(...move.to);
+        if (!getPiecesAt(...move.to).every(piece => canUnitsTarget(move.contents, piece, move.player))) {
             move.invalid = true;
             logAction(`Prisoner attack by P${move.player} rejected: prisoners may only move or merge.`);
             return;

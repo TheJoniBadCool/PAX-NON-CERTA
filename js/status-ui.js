@@ -118,6 +118,7 @@ function updatePlayerCards() {
         resources.innerHTML = visible ? RESOURCE_TYPES.map(resource =>
             `<span class="resource-stock" title="${resource.label}" aria-label="${resource.label}: ${gameState.resources[i][resource.key]}"><span aria-hidden="true">${resource.icon}</span><span>${gameState.resources[i][resource.key]}</span></span>`
         ).join('') : '';
+        renderPlayerDiplomacy(i);
     }
 
     const p = PLAYERS[gameState.turnIndex];
@@ -127,4 +128,90 @@ function updatePlayerCards() {
     activePlayerNameEl.style.color = p.color;
     if (gameState.multiplayer) Multiplayer.refreshControls();
     updateRoundDisplay();
+}
+
+function diplomacyBall(index) {
+    return `<span class="diplomacy-ball" style="background:${PLAYERS[index].color}" title="${escapeHtml(PLAYERS[index].name)}" role="img" aria-label="${escapeHtml(PLAYERS[index].name)}"></span>`;
+}
+
+function diplomacyIcon(status) {
+    return `<span class="diplomacy-icon${status === 'allied' ? ' diplomacy-handshake' : ''}" aria-hidden="true">${status === 'allied' ? '🤝' : '⚔️'}</span>`;
+}
+
+function diplomacyButton(target, action, icon, label, disabled = false) {
+    return `<button type="button" class="diplomacy-button" data-target="${target}" data-diplomacy-action="${action}" title="${escapeHtml(label)}" aria-label="${escapeHtml(label)}"${disabled ? ' disabled' : ''}>${icon}</button>`;
+}
+
+function allianceReplyButtons(sender) {
+    return diplomacyButton(sender, 'accept', '✓', `Accept alliance with ${PLAYERS[sender].name}`) +
+        diplomacyButton(sender, 'decline', '✕', `Decline alliance with ${PLAYERS[sender].name}`);
+}
+
+function renderPlayerDiplomacy(index) {
+    const panel = document.getElementById(`diplomacy-p${index + 1}`);
+    const actions = document.getElementById(`diplomacy-actions-p${index + 1}`);
+    const card = document.getElementById(`card-p${index + 1}`);
+    card.classList.remove('diplomacy-incoming');
+    panel.innerHTML = '';
+    actions.innerHTML = '';
+    if (!gameState.activePlayers[index] || gameState.eliminated[index]) return;
+    const opponents = [0, 1, 2, 3].filter(other => other !== index &&
+        gameState.activePlayers[other] && !gameState.eliminated[other]);
+    panel.innerHTML = ['allied', 'war'].map(status => {
+        const others = opponents.filter(other => getDiplomacyPair(index, other).status === status);
+        if (!others.length) return '';
+        const label = status === 'allied' ? 'Allied with' : 'At war with';
+        return `<span class="diplomacy-group" role="group" aria-label="${label}">${diplomacyIcon(status)}${others.map(diplomacyBall).join('')}</span>`;
+    }).filter(Boolean).join('<span class="diplomacy-separator" aria-hidden="true">|</span>');
+    const me = gameState.turnIndex;
+    const planning = gameState.multiplayer ? ['PLANNING', 'COMMITTED'].includes(gameState.phase) :
+        gameState.phase === 'PLANNING';
+    if (!planning || !opponents.includes(me)) return;
+    const pair = getDiplomacyPair(me, index);
+    if (pair.requestedBy !== null) {
+        actions.innerHTML = `<span class="diplomacy-pending" title="Alliance request pending" aria-label="Alliance request pending">${diplomacyIcon('allied')}…</span>`;
+        if (gameState.multiplayer && pair.requestedBy === index) {
+            card.classList.add('diplomacy-incoming');
+            actions.innerHTML = `<span class="diplomacy-request-alert" role="status">Alliance request!</span>` +
+                actions.innerHTML + allianceReplyButtons(index);
+        }
+    } else {
+        const allied = pair.status === 'allied';
+        const roundLocked = pair.changedRound === gameState.round;
+        const locked = roundLocked ||
+            (gameState.multiplayer && (gameState.committed[me] || Multiplayer.isPendingCommit()));
+        const reason = roundLocked ? 'Relationship locked until next round' :
+            locked ? 'Unlock your plan before initiating diplomacy' :
+                '';
+        const war = diplomacyButton(index, 'war', `${diplomacyIcon('war')} Declare War`,
+            reason || (allied ? `Declare war on ${PLAYERS[index].name}` : 'Already at war'), locked || !allied);
+        const request = diplomacyButton(index, 'request', `${diplomacyIcon('allied')} Request Allegiance`,
+            reason || (allied ? 'Already allied' : `Request alliance with ${PLAYERS[index].name}`), locked || allied);
+        actions.innerHTML = `<details class="diplomacy-menu"><summary class="diplomacy-button" title="Diplomacy with ${escapeHtml(PLAYERS[index].name)}" aria-label="Diplomacy with ${escapeHtml(PLAYERS[index].name)}">${diplomacyIcon(pair.status)}</summary><div class="diplomacy-popup">${war}${request}${reason ? `<span class="diplomacy-lock-reason">${reason}</span>` : ''}</div></details>`;
+    }
+}
+
+function beginAllianceReview() {
+    document.getElementById('alliance-review-modal').classList.add('hidden');
+    const pending = getPendingAllianceRequests();
+    if (!pending.length) {
+        gameState.diplomacyReviewer = null;
+        resolveAllMoves();
+        return;
+    }
+    const pair = pending[0];
+    const recipient = pair.players.find(index => index !== pair.requestedBy);
+    gameState.diplomacyReviewer = recipient;
+    gameState.turnIndex = recipient;
+    showPrivacyOverlay();
+    privacyDesc.innerText = 'Planning is complete. Privately review your alliance requests before moves resolve.';
+}
+
+function renderAllianceReview() {
+    document.getElementById('alliance-review-title').innerText = `${PLAYERS[gameState.turnIndex].name}: alliance requests`;
+    document.getElementById('alliance-review-requests').innerHTML =
+        getPendingAllianceRequests(gameState.turnIndex).map(pair =>
+            `<div class="alliance-review-row">${diplomacyIcon('allied')}${diplomacyBall(pair.requestedBy)}${allianceReplyButtons(pair.requestedBy)}</div>`
+        ).join('');
+    document.getElementById('alliance-review-modal').classList.remove('hidden');
 }

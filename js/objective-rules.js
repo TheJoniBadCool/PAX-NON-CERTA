@@ -66,7 +66,7 @@ function getObjectiveLabel(objective) {
 function updateObjectiveScores() {
     const livingUnitIds = new Set();
     const castleOwners = new Map();
-    gameState.board.flat().filter(Boolean).forEach(piece => {
+    gameState.board.flat().flatMap(getSquarePieces).forEach(piece => {
         getPieceContents(piece).forEach(unit => {
             livingUnitIds.add(unit.id);
             if (unit.castleId) castleOwners.set(unit.castleId, piece.player);

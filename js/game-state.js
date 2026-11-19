@@ -35,9 +35,13 @@ class GameState {
         this.customSetupType = 'p';
         this.multiplayer = false;
         this.committed = [false, false, false, false];
+        this.diplomacy = createDiplomacyState();
+        this.diplomacyReviewer = null;
         this.objectives = [[], [], [], []];
         this.scores = [0, 0, 0, 0];
         this.pendingCapture = null;
+        this.captureRecipient = null;
+        this.pendingSpoils = null;
         this.resourceMode = '8';
         this.resourceBalance = 'off';
         this.resourceCapitals = false;
@@ -45,6 +49,12 @@ class GameState {
         this.resources = createResourceStockpiles();
         this.lastResourceProductionRound = null;
     }
+}
+
+function createDiplomacyState() {
+    return [0, 1, 2, 3].flatMap(a => [0, 1, 2, 3].filter(b => b > a).map(b => ({
+        players: [a, b], status: 'war', requestedBy: null, changedRound: 0
+    })));
 }
 
 function recordDeadPieces(gameState, units) {

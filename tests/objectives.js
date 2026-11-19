@@ -40,6 +40,7 @@ const context = vm.createContext({
     renderAllSavedSetups() {}, renderSavedSetups() {}, logAction() {}, logRoundHeader() {},
     Multiplayer: {
         isEditingSetup() { return false; },
+        isPendingCommit: () => false,
         getBadge() { return { text: 'Planning', ready: false }; },
         refreshControls() {}, broadcastResolutionStart() {},
         beginNextRound() { context.nextRound = true; },
@@ -47,9 +48,9 @@ const context = vm.createContext({
     }
 });
 [
-    'constants', 'models', 'game-state', 'setup-utils', 'board-utils', 'battle-rules',
+    'constants', 'models', 'game-state', 'diplomacy-rules', 'setup-utils', 'board-utils', 'battle-rules',
     'siege-rules', 'movement-rules', 'planning-rules', 'retreat-rules', 'prisoner-rules', 'objective-rules',
-    'board-setup', 'starting-position', 'setup-actions', 'status-ui', 'game'
+    'board-setup', 'starting-position', 'setup-actions', 'status-ui', 'allied-resolution', 'game'
 ].forEach(name => vm.runInContext(fs.readFileSync(`js/${name}.js`, 'utf8'), context));
 context.animatePlannedMovements = async () => {};
 context.renderMapPreview = () => {};

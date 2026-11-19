@@ -17,8 +17,7 @@ function queueRetreat(player, contents, battleSquare, released = false) {
 
 function hasEnemyAdjacent(row, col, player) {
     return getAdjacentMoves(row, col).some(([r, c]) => {
-        const piece = gameState.board[r][c];
-        return piece && piece.player !== player;
+        return getPiecesAt(r, c).some(piece => !arePlayersFriendly(piece.player, player));
     });
 }
 

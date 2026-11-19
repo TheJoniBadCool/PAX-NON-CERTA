@@ -3,6 +3,46 @@ function getPieceLabel(type) {
     return map[type] || type;
 }
 
+function getSquarePieces(square) {
+    return Array.isArray(square) ? square : square ? [square] : [];
+}
+
+function getPiecesAt(r, c) {
+    return getSquarePieces(gameState.board[r][c]);
+}
+
+function getPieceAt(r, c, player = null) {
+    const pieces = getPiecesAt(r, c);
+    return (player === null ? pieces[0] : pieces.find(piece => piece.player === player)) || null;
+}
+
+function getPieceByIdAt(r, c, id) {
+    return getPiecesAt(r, c).find(piece => piece.id === id) || null;
+}
+
+function setPiecesAt(r, c, pieces) {
+    gameState.board[r][c] = pieces.length > 1 ? pieces : pieces[0] || null;
+}
+
+function removePieceAt(r, c, id) {
+    setPiecesAt(r, c, getPiecesAt(r, c).filter(piece => piece.id !== id));
+}
+
+function putPieceAt(r, c, piece) {
+    setPiecesAt(r, c, [...getPiecesAt(r, c).filter(other => other.player !== piece.player), piece]);
+}
+
+function arePlayersAllied(a, b) {
+    return a !== b && a >= 1 && a <= 4 && b >= 1 && b <= 4 &&
+        !gameState.eliminated[a - 1] && !gameState.eliminated[b - 1] &&
+        Boolean(gameState.diplomacy?.some(pair => pair.status === 'allied' &&
+            pair.players.includes(a - 1) && pair.players.includes(b - 1)));
+}
+
+function arePlayersFriendly(a, b) {
+    return a === b || arePlayersAllied(a, b);
+}
+
 function getUnitType(unit) {
     return typeof unit === 'string' ? unit : unit.type;
 }

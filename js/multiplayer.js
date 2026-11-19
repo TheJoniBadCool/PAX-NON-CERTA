@@ -130,7 +130,7 @@ const Multiplayer = (() => {
 
     function hideAllModals() {
         [mainMenuModal, mpModal, gameOverModal, playerSelectionModal, customSetupModal, playerNamesModal,
-            $('starting-position-modal')]
+            $('starting-position-modal'), $('alliance-review-modal'), $('allied-spoils-modal')]
             .forEach(modal => modal.classList.add('hidden'));
     }
 
@@ -326,6 +326,16 @@ const Multiplayer = (() => {
         } else if (message.type === 'unlock') {
             if (message.gameId !== m.gameId || message.round !== gameState.round) return;
             hostSetCommit(index, false);
+        } else if (message.type === 'diplomacy') {
+            if (message.gameId !== m.gameId || message.round !== gameState.round) return;
+            handleDiplomacy(index, message.target, message.action);
+        } else if (message.type === 'allied-spoils') {
+            if (message.gameId !== m.gameId || message.round !== gameState.round) return;
+            if (!decideAlliedSpoils(index + 1, message.id, message.action, message.target)) {
+                send(conn, { type: 'notice', text: 'Allied decision rejected: the decision or participants have changed.' });
+            }
+            renderAlliedSpoils();
+            syncNow();
         } else if (message.type === 'rename') {
             const name = cleanName(message.name, PLAYERS[index].colorName);
             m.slots[index].name = name;
@@ -405,7 +415,7 @@ const Multiplayer = (() => {
         for (const entry of plan) {
             if (!entry || !isSquare(entry.from) || !isSquare(entry.to)) return null;
             if (Math.max(Math.abs(entry.from[0] - entry.to[0]), Math.abs(entry.from[1] - entry.to[1])) > 1) return null;
-            const piece = gameState.board[entry.from[0]][entry.from[1]];
+            const piece = getPieceAt(...entry.from, index + 1);
             if (!piece || piece.player !== index + 1) return null;
             if (entry.prisonerAction) {
                 result.push({
@@ -435,7 +445,7 @@ const Multiplayer = (() => {
                 clean.pieceType = getMergedPieceType(units);
                 clean.pieceId = `${piece.id}::unmerge::${clean.unitIds.join('::')}`;
                 if (entry.from[0] === entry.to[0] && entry.from[1] === entry.to[1]) return null;
-                const destination = gameState.board[entry.to[0]][entry.to[1]];
+                const destination = getPieceAt(...entry.to);
                 if (destination && destination.player !== index + 1 && isTowerPiece(destination)) return null;
             } else {
                 if (entry.pieceId !== piece.id) return null;
@@ -452,6 +462,7 @@ const Multiplayer = (() => {
             }
             const target = getVisiblePiece(...entry.to, index + 1);
             if (!canUnitsTarget(clean.contents, target, index + 1)) return null;
+            if (!canUnitsEnterSquare(clean.contents, entry.to, index + 1)) return null;
             if (clean.contents.every(isPrisoner) && (entry.siegeAssault || entry.sallyOut || entry.siegeCancel)) return null;
             result.push(clean);
         }
@@ -461,7 +472,7 @@ const Multiplayer = (() => {
     function handleArmourRequest(index, unitId) {
         if (!['PLANNING', 'COMMITTED'].includes(gameState.phase) || gameState.eliminated[index]) return;
         for (const row of gameState.board) {
-            for (const piece of row) {
+            for (const piece of row.flatMap(getSquarePieces)) {
                 if (!piece || piece.player !== index + 1) continue;
                 const contents = getPieceContents(piece);
                 const unit = contents.find(candidate => candidate.id === unitId);
@@ -556,6 +567,7 @@ const Multiplayer = (() => {
         for (let i = 0; i < 4; i++) {
             if (!gameState.eliminated[i] && !gameState.committed[i]) return;
         }
+        if (getPendingAllianceRequests().length) return;
         resolveAllMoves().catch(error => {
             console.error(error);
             toast('Resolution error — see console.');
@@ -570,9 +582,48 @@ const Multiplayer = (() => {
                 gameState.committed[i] = true;
             }
         }
+        const declined = getPendingAllianceRequests().filter(pair =>
+            pair.players.some(index => m.roster[index] && !m.roster[index].connected));
+        declined.forEach(pair => { pair.requestedBy = null; });
+        if (declined.length) {
+            const text = 'Pending alliance requests involving skipped disconnected players were declined.';
+            toast(text);
+            broadcastToClients({ type: 'notice', text });
+        }
         updatePlayerCards();
         renderBoard();
+        syncNow();
         checkAllCommitted();
+    }
+
+    function handleDiplomacy(index, target, action) {
+        if (!m.started) return;
+        const error = applyDiplomacyAction(index, target, action);
+        if (error) {
+            if (index === m.myIndex) toast(error);
+            else send(m.slots[index]?.conn, { type: 'notice', text: error });
+        }
+        updatePlayerCards();
+        renderBoard();
+        syncNow();
+        if (!error) checkAllCommitted();
+    }
+
+    async function requestDiplomacy(target, action) {
+        if (isHost()) {
+            handleDiplomacy(m.myIndex, target, action);
+            return;
+        }
+        if (!m.conn || !m.conn.open) {
+            toast('Not connected to the host. Diplomacy action was not sent.');
+            return;
+        }
+        try {
+            await m.conn.send({ type: 'diplomacy', target, action, gameId: m.gameId, round: gameState.round });
+        } catch (error) {
+            console.error('Could not send diplomacy action:', error);
+            toast(`Could not send diplomacy action: ${error.message}`);
+        }
     }
 
     function beginNextRound() {
@@ -631,6 +682,7 @@ const Multiplayer = (() => {
                 startingPosition: gameState.startingPosition,
                 startingProvinces: gameState.startingProvinces,
                 startingConfirmed: gameState.startingConfirmed,
+                diplomacy: gameState.diplomacy,
                 sieges: gameState.sieges,
                 retreating: gameState.retreating,
                 deadPieces: gameState.deadPieces,
@@ -648,6 +700,7 @@ const Multiplayer = (() => {
                 objectives: gameState.objectives.map((objectives, i) => i === index ? objectives : []),
                 scores: gameState.scores,
                 pendingCapture: gameState.pendingCapture,
+                pendingSpoils: gameState.pendingSpoils,
                 gameOver: gameState.phase === 'GAME_OVER' ? {
                     title: $('gameover-title').innerText,
                     desc: $('gameover-desc').innerText
@@ -849,6 +902,8 @@ const Multiplayer = (() => {
             gameState.lockedPieceIds = new Set();
             clearTransientUi();
         }
+        const previousReleasedIds = new Set(gameState.retreating.flat()
+            .filter(entry => entry.released).flatMap(entry => entry.contents.map(unit => unit.id)));
         Object.assign(gameState, {
             board: game.board,
             biomes: game.biomes,
@@ -874,9 +929,11 @@ const Multiplayer = (() => {
             scores: game.scores,
             committed: message.committed,
             pendingCapture: game.pendingCapture || null,
+            pendingSpoils: game.pendingSpoils || null,
             startingPosition: game.startingPosition || 'corner',
             startingProvinces: game.startingProvinces || [null, null, null, null],
             startingConfirmed: game.startingConfirmed || [false, false, false, false],
+            diplomacy: game.diplomacy ?? createDiplomacyState(),
             turnIndex: message.you
         });
         $('map-seed-display').innerText = `Map seed: ${gameState.mapSeed}`;
@@ -885,7 +942,11 @@ const Multiplayer = (() => {
             : game.phase;
         renderStartingPositionSelection();
         renderCaptureChoices();
+        renderAlliedSpoils();
         if (message.myPlan && !gameState.plans[message.you].length) gameState.plans[message.you] = message.myPlan;
+        cancelReleasedPrisonerPlans(new Set(gameState.retreating.flat()
+            .filter(entry => entry.released).flatMap(entry => entry.contents.map(unit => unit.id))
+            .filter(id => !previousReleasedIds.has(id))));
         if (gameState.phase !== 'PLANNING') {
             gameState.selectedSquare = null;
             gameState.validMoves = [];
@@ -1058,14 +1119,15 @@ const Multiplayer = (() => {
             const waiting = PLAYERS
                 .filter((player, i) => !gameState.eliminated[i] && !gameState.committed[i])
                 .map(player => player.name);
-            return `Plan locked. Waiting for: ${waiting.join(', ') || '…'}. You can unlock to change it.`;
+            const pending = getPendingAllianceRequests().length;
+            return `Plan locked. Waiting for: ${waiting.join(', ') || 'no more plans'}.${pending ? ` ${pending} alliance request(s) must be answered on the player cards before resolution.` : ''} You can unlock to change it.`;
         }
         return 'Plan moves for your pieces, then Commit Plans.';
     }
 
     function refreshControls() {
         for (let i = 0; i < 4; i++) {
-            const label = $(`card-p${i + 1}`).firstElementChild;
+            const label = $(`card-p${i + 1}`).querySelector('.player-name');
             const entry = getRosterEntry(i);
             label.innerText = `${ICONS[i]} ${entry ? entry.name : `Player ${i + 1}`} (${PLAYERS[i].colorName})`;
         }
@@ -1079,7 +1141,8 @@ const Multiplayer = (() => {
         btnRestart.innerText = isHost() ? '🔄 Restart Room' : '🚪 Leave';
         activePlayerDescEl.innerText = describePhase();
         btnForceSkip.classList.toggle('hidden', !(isHost() && ['PLANNING', 'COMMITTED'].includes(gameState.phase) &&
-            [0, 1, 2, 3].some(i => !gameState.eliminated[i] && !gameState.committed[i] &&
+            [0, 1, 2, 3].some(i => !gameState.eliminated[i] &&
+                (!gameState.committed[i] || getPendingAllianceRequests().some(pair => pair.players.includes(i))) &&
                 m.roster[i] && !m.roster[i].connected)));
     }
 
@@ -1167,6 +1230,16 @@ const Multiplayer = (() => {
         toggleCommit,
         requestArmourUpgrade,
         requestCaptureDecision,
+        requestDiplomacy,
+        syncAlliedState: syncNow,
+        requestAlliedSpoils: (id, action, target) => {
+            if (!m.conn || !m.conn.open) {
+                toast('Not connected to the host. Allied decision was not sent.');
+                return;
+            }
+            m.conn.send({ type: 'allied-spoils', id, action, target, gameId: m.gameId, round: gameState.round })
+                .catch(error => toast(`Could not send allied decision: ${error.message}`));
+        },
         requestStartingProvince,
         requestStartingConfirmation,
         onBoardRendered,

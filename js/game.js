@@ -7,6 +7,7 @@
         const activePlayerDescEl = document.getElementById('active-player-desc');
         const btnFinishPlan = document.getElementById('btn-finish-plan');
         const btnClearPlan = document.getElementById('btn-clear-plan');
+        const btnStormCastle = document.getElementById('btn-storm-castle');
         const btnCancelSiege = document.getElementById('btn-cancel-siege');
         const btnSallyOut = document.getElementById('btn-sally-out');
         const btnRestart = document.getElementById('btn-restart');
@@ -120,7 +121,7 @@
                 const siege = gameState.sieges.find(entry => entry.id === move.siegeId);
                 const attacker = siege && siege.attackers.find(entry =>
                     entry.pieceId === move.pieceId && entry.player === move.player);
-                const piece = gameState.board[move.from[0]][move.from[1]];
+                const piece = getPieceByIdAt(...move.from, move.pieceId);
                 if (!attacker || !piece || piece.id !== move.pieceId) {
                     move.invalid = true;
                     return;
@@ -138,14 +139,14 @@
                 .filter(move => move.sallyOut && !move.invalid)
                 .map(move => {
                     const siege = gameState.sieges.find(entry => entry.id === move.siegeId);
-                    const tower = siege && gameState.board[siege.towerSquare[0]][siege.towerSquare[1]];
+                    const tower = siege && getPieceAt(...siege.towerSquare);
                     if (!siege || !tower || tower.id !== move.pieceId ||
                         !getCombatContents(tower).some(unit => getUnitType(unit) !== 'r')) {
                         move.invalid = true;
                         return null;
                     }
                     const attackers = siege.attackers.map(attacker => {
-                        const piece = gameState.board[attacker.sourceSquare[0]][attacker.sourceSquare[1]];
+                        const piece = getPieceByIdAt(...attacker.sourceSquare, attacker.pieceId);
                         return piece && piece.id === attacker.pieceId ? {
                             player: piece.player,
                             pieceId: piece.id,
@@ -249,7 +250,7 @@
             for (const move of visibleMoves) {
                 const sourcePiece = move.isUnmerge
                     ? { player: move.player, type: move.pieceType, contents: move.contents }
-                    : gameState.board[move.from[0]][move.from[1]];
+                    : getPieceByIdAt(...move.from, move.pieceId);
                 if (!sourcePiece) continue;
 
                 const kind = getPlanArrowKind(move, visibleMoves);
@@ -293,6 +294,11 @@
             gameState.round = 1;
             gameState.phase = gameState.startingPosition === 'agreement' ? 'STARTING_POSITION' : 'PLANNING';
             gameState.plans = [[], [], [], []];
+            gameState.diplomacy = createDiplomacyState();
+            gameState.diplomacyReviewer = null;
+            gameState.pendingSpoils = null;
+            document.getElementById('allied-spoils-modal').classList.add('hidden');
+            document.getElementById('alliance-review-modal').classList.add('hidden');
             gameState.selectedSquare = null;
             gameState.validMoves = [];
             gameState.lockedPieceIds = new Set();
@@ -303,6 +309,7 @@
             gameState.deadPieces = [[], [], [], []];
             gameState.sieges = [];
             gameState.pendingCapture = null;
+            gameState.captureRecipient = null;
             renderCaptureChoices();
             gameState.nextUnitSequence = [1, 1, 1, 1];
             if (gameState.phase === 'STARTING_POSITION') {
@@ -611,7 +618,7 @@
         }
 
         function showPieceTooltip(r, c, square) {
-            const piece = gameState.board[r][c];
+            const piece = getPieceAt(r, c, gameState.turnIndex + 1);
             if (!piece) return;
             if (isEliminatedPiece(piece) || piece.player !== gameState.turnIndex + 1 || !canEditPlans()) {
                 pieceTooltip.classList.add('hidden');
@@ -627,7 +634,10 @@
             pieceTooltipCount.innerText = '0 selected';
             btnChooseDestination.disabled = true;
             const siege = getSiegeAtSquare([r, c]);
-            btnCancelSiege.hidden = !getSiegeForAttacker(piece.id);
+            const attackerSiege = getSiegeForAttacker(piece.id);
+            btnStormCastle.hidden = !attackerSiege ||
+                !getReadySiegeAssault(piece, [r, c], attackerSiege.towerSquare);
+            btnCancelSiege.hidden = !attackerSiege;
             btnSallyOut.hidden = !(siege && contents.some(unit => !isPrisoner(unit) && getUnitType(unit) !== 'r'));
             pieceTooltipUnits.innerHTML = contents
                 .map((unit, index) => `<span class="held-piece-entry">
@@ -661,7 +671,7 @@
                 gameState.validMoves = getAdjacentMoves(r, c)
                     .filter(destination => isPassableSquare(...destination) &&
                         isTowerGateMove([r, c], destination) &&
-                        canUnitsTarget(units, getVisiblePiece(...destination, piece.player), piece.player))
+                        canUnitsEnterSquare(units, destination, piece.player))
                     .filter(destination => {
                         const target = getVisiblePiece(...destination, piece.player);
                         return !target || target.player === piece.player || !isTowerPiece(target);
@@ -729,9 +739,23 @@
             });
         }
 
+        btnStormCastle.onclick = () => {
+            if (!canEditPlans() || !gameState.selectedSquare) return;
+            const piece = getPieceAt(...gameState.selectedSquare, gameState.turnIndex + 1);
+            const siege = piece && getSiegeForAttacker(piece.id);
+            if (!siege || !getReadySiegeAssault(piece, gameState.selectedSquare, siege.towerSquare)) {
+                dismissPieceTooltip();
+                hintTextEl.innerText = "Assault unavailable: the siege must be ready and the catapult stack must contain a Pawn at the castle gate.";
+                return;
+            }
+            gameState.selectedHeldPiece = null;
+            gameState.validMoves = [siege.towerSquare];
+            handleSquareAction(...siege.towerSquare);
+        };
+
         btnCancelSiege.onclick = () => {
             if (!canEditPlans() || !gameState.selectedSquare) return;
-            const selectedPiece = gameState.board[gameState.selectedSquare[0]][gameState.selectedSquare[1]];
+            const selectedPiece = getPieceAt(...gameState.selectedSquare, gameState.turnIndex + 1);
             const siege = selectedPiece ? getSiegeForAttacker(selectedPiece.id) : null;
             const attacker = siege && siege.attackers.find(entry => entry.pieceId === selectedPiece.id);
             if (!siege || !attacker || attacker.player !== gameState.turnIndex + 1) return;
@@ -805,7 +829,7 @@
 
         function handleSquarePopup(r, c) {
             if (!canEditPlans()) return;
-            const piece = gameState.board[r][c];
+            const piece = getPieceAt(r, c, gameState.turnIndex + 1);
             if (!piece || isEliminatedPiece(piece) || piece.player !== gameState.turnIndex + 1) return;
             selectBoardPiece(r, c, piece);
             if (!gameState.selectedSquare) return;
@@ -848,7 +872,7 @@
             }
 
             if (gameState.selectedHeldPiece) {
-                const sourcePiece = gameState.board[gameState.selectedHeldPiece.from[0]][gameState.selectedHeldPiece.from[1]];
+                const sourcePiece = getPieceAt(...gameState.selectedHeldPiece.from, activePlayerId);
                 if (!sourcePiece || sourcePiece.id !== gameState.selectedHeldPiece.sourceId) {
                     gameState.selectedHeldPiece = null;
                     gameState.selectedSquare = null;
@@ -896,7 +920,7 @@
             }
 
             const [fromR, fromC] = gameState.selectedSquare;
-            const pieceToMove = gameState.board[fromR][fromC];
+            const pieceToMove = getPieceAt(fromR, fromC, activePlayerId);
             const targetPiece = getVisiblePiece(r, c, activePlayerId);
             const currentPlans = gameState.plans[gameState.turnIndex];
             if (!pieceToMove) {
@@ -994,7 +1018,7 @@
 
         btnSallyOut.addEventListener('click', () => {
             if (!canEditPlans() || !gameState.selectedSquare) return;
-            const tower = gameState.board[gameState.selectedSquare[0]][gameState.selectedSquare[1]];
+            const tower = getPieceAt(...gameState.selectedSquare, gameState.turnIndex + 1);
             const siege = tower ? getSiegeAtSquare(gameState.selectedSquare) : null;
             if (!tower || !siege || tower.player !== gameState.turnIndex + 1 ||
                 !getCombatContents(tower).some(unit => getUnitType(unit) !== 'r')) {
@@ -1121,8 +1145,7 @@
             }
 
             if (fullCycleCompleted) {
-                // All active players have planned: start simultaneous resolution phase
-                resolveAllMoves();
+                beginAllianceReview();
             } else {
                 gameState.turnIndex = nextIndex;
                 showPrivacyOverlay();
@@ -1131,14 +1154,45 @@
 
         btnPrivacyReady.addEventListener('click', () => {
             privacyOverlay.classList.add('hidden');
+            if (gameState.diplomacyReviewer !== null) {
+                gameState.phase = 'ALLIANCE_REVIEW';
+                updatePlayerCards();
+                renderBoard();
+                renderAllianceReview();
+                return;
+            }
             gameState.phase = 'PLANNING';
             updatePlayerCards();
             renderBoard();
         });
 
+        document.querySelectorAll('.diplomacy-actions, #alliance-review-requests').forEach(panel => {
+            panel.addEventListener('click', event => {
+                const button = event.target.closest('button[data-diplomacy-action]');
+                if (!button || button.disabled) return;
+                const target = Number(button.dataset.target);
+                const action = button.dataset.diplomacyAction;
+                if (gameState.multiplayer) {
+                    Multiplayer.requestDiplomacy(target, action);
+                    return;
+                }
+                const error = applyDiplomacyAction(gameState.turnIndex, target, action);
+                if (error) {
+                    hintTextEl.innerText = error;
+                    return;
+                }
+                updatePlayerCards();
+                if (gameState.phase === 'ALLIANCE_REVIEW') {
+                    if (getPendingAllianceRequests(gameState.turnIndex).length) renderAllianceReview();
+                    else beginAllianceReview();
+                }
+            });
+        });
+
         // --- SIMULTANEOUS TURN RESOLUTION & COMBAT ENGINE ---
         async function resolveAllMoves() {
             gameState.phase = 'RESOLVING';
+            syncSieges();
             updatePlayerCards();
 
             logRoundHeader(gameState.round);
@@ -1158,7 +1212,12 @@
                 if (gameState.eliminated[p]) continue;
                 for (const m of gameState.plans[p]) {
                     if (m.prisonerAction) continue;
-                    const source = gameState.board[m.from[0]][m.from[1]];
+                    if ((m.siegeAssault || m.sallyOut || m.siegeCancel) &&
+                        !gameState.sieges.some(siege => siege.id === m.siegeId)) {
+                        logAction(`P${p + 1}'s siege action cancelled: the siege is no longer active.`);
+                        continue;
+                    }
+                    const source = getPieceAt(...m.from, p + 1);
                     if (!source || (m.isUnmerge ? source.id !== m.sourcePieceId : source.id !== m.pieceId)) {
                         logAction(`P${p + 1}'s move cancelled: its source no longer exists.`);
                         continue;
@@ -1195,13 +1254,13 @@
 
             for (const move of unmergeMoves) {
                 if (move.invalid) continue;
-                const source = gameState.board[move.from[0]][move.from[1]];
+                const source = getPieceByIdAt(...move.from, move.sourcePieceId);
                 if (!source || source.id !== move.sourcePieceId) {
                     move.invalid = true;
                     continue;
                 }
 
-                const target = gameState.board[move.to[0]][move.to[1]];
+                const target = getPieceAt(...move.to);
                 if (target && target.player !== move.player && isTowerPiece(target)) {
                     move.invalid = true;
                     continue;
@@ -1213,7 +1272,7 @@
                 }
 
                 if (source.contents.length === 0) {
-                    gameState.board[move.from[0]][move.from[1]] = null;
+                    removePieceAt(...move.from, source.id);
                     allIntendedMoves
                         .filter(other => !other.isUnmerge && other.pieceId === source.id)
                         .forEach(other => { other.invalid = true; });
@@ -1230,7 +1289,7 @@
             allIntendedMoves
                 .filter(move => move.siegeAssault && !move.invalid)
                 .forEach(move => {
-                    const source = gameState.board[move.from[0]][move.from[1]];
+                    const source = getPieceByIdAt(...move.from, move.pieceId);
                     if (!source || !getCombatContents(source).some(unit => getUnitType(unit) === 'p')) {
                         move.invalid = true;
                         logAction(`🚫 Player ${move.player}'s assault was cancelled: the catapult stack no longer contains a Pawn.`);
@@ -1269,7 +1328,7 @@
 
                     if (m1.from[0] === m2.to[0] && m1.from[1] === m2.to[1] &&
                         m1.to[0] === m2.from[0] && m1.to[1] === m2.from[1]) {
-                        if (m1.player === m2.player) continue;
+                        if (arePlayersFriendly(m1.player, m2.player)) continue;
                         
                         collisionGroups.push({
                             type: 'SWAP',
@@ -1296,7 +1355,7 @@
             for (const key in destinationMap) {
                 const moves = destinationMap[key].filter(m => !resolvedPieceIDs.has(m.pieceId));
                 const [r, c] = key.split('_').map(Number);
-                const stationaryOccupant = gameState.board[r][c];
+                const occupants = getPiecesAt(r, c);
                 const interceptionGroups = collisionGroups.filter(group =>
                     group.type === 'SWAP' &&
                     group.candidates.some(candidate =>
@@ -1310,26 +1369,22 @@
                 // An unmerge moves only a held unit, so the source stack
                 // remainder is still a stationary occupant and must be able
                 // to defend against an attack on its original square.
-                const occupantIsMoving = stationaryOccupant && allIntendedMoves.some(m =>
+                const stationaryOccupants = occupants.filter(stationaryOccupant => !allIntendedMoves.some(m =>
                     m.from[0] === r && m.from[1] === c &&
                     !m.invalid && !m.siegeStart && !m.sallyOut && !m.siegeCancel &&
                     !m.isUnmerge &&
                     m.pieceId === stationaryOccupant.id &&
                     !interceptionSourceIds.has(m.pieceId)
-                );
-                const occupantIsInterceptionCandidate = stationaryOccupant &&
-                    interceptionSourceIds.has(stationaryOccupant.id);
+                ) && !interceptionSourceIds.has(stationaryOccupant.id));
 
                 const hasPostInterceptionCandidates = moves.length > 0 &&
                     interceptionGroups.length > 0;
-                const hasStationaryCollision = stationaryOccupant &&
-                    !occupantIsMoving &&
-                    !occupantIsInterceptionCandidate;
+                const hasStationaryCollision = stationaryOccupants.length > 0;
 
                 if (moves.length > 1 || hasStationaryCollision || hasPostInterceptionCandidates) {
                     const candidates = [...moves];
                     if (hasStationaryCollision) {
-                        candidates.push({
+                        stationaryOccupants.forEach(stationaryOccupant => candidates.push({
                             player: stationaryOccupant.player,
                             pieceId: stationaryOccupant.id,
                             from: [r, c],
@@ -1337,7 +1392,7 @@
                             pieceType: stationaryOccupant.type,
                             contents: getPieceContents(stationaryOccupant),
                             isStationary: true
-                        });
+                        }));
                     }
 
                     collisionGroups.push({
@@ -1351,7 +1406,11 @@
                     candidates.forEach(c => resolvedPieceIDs.add(c.pieceId));
                 }
             }
+            addSharedSquareConflicts(collisionGroups, allIntendedMoves);
             collisionGroups.push(...sallyGroups);
+            const alliedCastleGroups = collisionGroups.filter(isAlliedCastleGroup);
+            alliedCastleGroups.forEach(group => collisionGroups.splice(collisionGroups.indexOf(group), 1));
+            collisionGroups.push(...alliedCastleGroups);
 
             // Execute non-conflicting moves simultaneously: capture every source
             // piece before placing destinations so same-player swaps are safe.
@@ -1367,18 +1426,18 @@
                             type: move.pieceType,
                             contents: move.contents
                         }
-                        : gameState.board[move.from[0]][move.from[1]]
+                        : getPieceByIdAt(...move.from, move.pieceId)
                 }))
                 .filter(entry => entry.piece &&
                     (entry.move.isUnmerge || entry.piece.id === entry.move.pieceId));
 
             simpleMoves.forEach(({ move }) => {
                 if (!move.isUnmerge) {
-                    gameState.board[move.from[0]][move.from[1]] = null;
+                    removePieceAt(...move.from, move.pieceId);
                 }
             });
             simpleMoves.forEach(({ move, piece }) => {
-                gameState.board[move.to[0]][move.to[1]] = piece;
+                putPieceAt(...move.to, piece);
                 if (getBiome(...move.from) === 'forest' || getBiome(...move.to) === 'forest') {
                     logAction(`<b>Player ${move.player} (${PLAYERS[move.player - 1].name})</b> moved through a forest.`);
                 } else if (!isPubliclyVisiblePiece(piece, [move.from, move.to])) {
@@ -1404,6 +1463,7 @@
                 await processCollisionGroup(group);
                 renderBoard();
             }
+            await resolveRemainingSharedConflicts();
 
             // Reset planned moves for next turn
             gameState.plans = [[], [], [], []];
@@ -1441,9 +1501,12 @@
         }
 
         function processCollisionGroup(group) {
-            return new Promise((resolve) => {
+            return new Promise((resolve, reject) => {
                 if (group.type === 'SALLY') {
-                    processSallyBattle(group).then(resolve);
+                    const allied = group.candidates.some((candidate, index) =>
+                        group.candidates.slice(index + 1).some(other =>
+                            arePlayersAllied(candidate.player, other.player)));
+                    (allied ? resolveAlliedSally(group) : processSallyBattle(group)).then(resolve, reject);
                     return;
                 }
                 if (group.type === 'TARGET') {
@@ -1466,35 +1529,33 @@
 
                         candidates.forEach(candidate => {
                             const [fromR, fromC] = candidate.from;
-                            if (!candidate.isUnmerge &&
-                                gameState.board[fromR][fromC] &&
-                                gameState.board[fromR][fromC].id === candidate.pieceId) {
-                                gameState.board[fromR][fromC] = null;
-                            }
+                            if (!candidate.isUnmerge) removePieceAt(fromR, fromC, candidate.pieceId);
                         });
 
                         return {
                             player: candidates[0].player,
-                            pieceId: candidates[0].pieceId,
+                            pieceId: (candidates.find(candidate => candidate.isStationary) || candidates[0]).pieceId,
                             from: [targetR, targetC],
                             to: [targetR, targetC],
                             pieceType: getMergedPieceType(contents),
                             contents,
                             isStationary: true,
                             terrainBonus: Math.max(...candidates.map(candidate =>
-                                getDefenderTerrainBonus(candidate, group.targetSquare)))
+                                getDefenderTerrainBonus(candidate, group.targetSquare))),
+                            origins: candidates.flatMap(candidate => candidate.origins ||
+                                [{ square: candidate.from, ids: getPieceContents(candidate).map(unit => unit.id) }])
                         };
                     });
 
                     const [targetR, targetC] = group.targetSquare;
                     if (mergedCandidates.length === 1) {
                         const survivor = mergedCandidates[0];
-                        gameState.board[targetR][targetC] = {
+                        putPieceAt(targetR, targetC, {
                             id: survivor.pieceId,
                             player: survivor.player,
                             type: survivor.pieceType,
                             contents: survivor.contents
-                        };
+                        });
                         logAction(getBiome(targetR, targetC) === 'forest'
                             ? `🔗 <b>MERGE</b> in a forest for ${getPlayerInfo(survivor.player).name}.`
                             : !isPubliclyVisiblePiece(gameState.board[targetR][targetC], [[targetR, targetC]])
@@ -1508,6 +1569,13 @@
 
                     group.candidates = mergedCandidates;
                     group.sourcesCleared = true;
+                    if (mergedCandidates.some((candidate, index) =>
+                        mergedCandidates.slice(index + 1).some(other =>
+                            arePlayersAllied(candidate.player, other.player))) ||
+                        mergedCandidates.every(candidate => !getCombatContents(candidate).length)) {
+                        resolveAlliedEncounter(group).then(resolve, reject);
+                        return;
+                    }
                 }
 
                 if (group.type === 'MERGE') {
@@ -1525,17 +1593,15 @@
 
                     group.candidates.forEach(candidate => {
                         const [fromR, fromC] = candidate.from;
-                        if (gameState.board[fromR][fromC] && gameState.board[fromR][fromC].id === candidate.pieceId) {
-                            gameState.board[fromR][fromC] = null;
-                        }
+                        removePieceAt(fromR, fromC, candidate.pieceId);
                     });
 
-                    gameState.board[targetR][targetC] = {
+                    putPieceAt(targetR, targetC, {
                         id: group.candidates[0].pieceId,
                         player: mergedPlayer,
                         type: mergedType,
                         contents: mergedContents
-                    };
+                    });
 
                     const sourceLabels = group.candidates.map(candidate =>
                         `x${(candidate.contents || [candidate.pieceType]).length} ${getPieceLabel(candidate.pieceType)}`
@@ -1612,9 +1678,8 @@
                         group.candidates.forEach((cand, idx) => {
                             const [fr, fc] = cand.from;
                             if (!group.sourcesCleared && !cand.isStationary &&
-                                gameState.board[fr][fc] &&
-                                gameState.board[fr][fc].id === cand.pieceId) {
-                                gameState.board[fr][fc] = null;
+                                getPieceByIdAt(fr, fc, cand.pieceId)) {
+                                removePieceAt(fr, fc, cand.pieceId);
                             }
 
                             if (idx === survivorIdx) {
@@ -1624,7 +1689,7 @@
                                     cand.pieceId === group.siegeSwap.attackerPieceId &&
                                     tr === group.siegeSwap.towerSquare[0] &&
                                     tc === group.siegeSwap.towerSquare[1]
-                                    ? gameState.board[tr][tc]
+                                    ? getPieceAt(tr, tc)
                                     : null;
                                 if (conqueredTower && isTowerPiece(conqueredTower)) {
                                     const capturedTowers = getPieceContents(conqueredTower)
@@ -1638,12 +1703,12 @@
                                     survivorContents.push(...capturedTowers);
                                 }
                                 if (survivorContents.length) {
-                                    gameState.board[tr][tc] = {
+                                    putPieceAt(tr, tc, {
                                         id: cand.pieceId,
                                         player: cand.player,
                                         type: getMergedPieceType(survivorContents),
                                         contents: survivorContents
-                                    };
+                                    });
                                 }
                                 return;
                             }
@@ -1690,17 +1755,17 @@
                         capturedTowers.push(...recruitedRebels);
                         const destination = survivor.to;
                         if (capturedTowers.length) {
-                            const boardPiece = gameState.board[destination[0]][destination[1]];
+                            const boardPiece = getPieceAt(...destination, survivor.player);
                             if (boardPiece && boardPiece.player === survivor.player) {
                                 boardPiece.contents.push(...capturedTowers);
                                 boardPiece.type = getMergedPieceType(boardPiece.contents);
                             } else if (!boardPiece) {
-                                gameState.board[destination[0]][destination[1]] = {
+                                putPieceAt(...destination, {
                                     id: `${survivor.pieceId}::captured-tower`,
                                     player: survivor.player,
                                     type: 'r',
                                     contents: capturedTowers
-                                };
+                                });
                             }
                         }
                         retreatEntries.forEach(entry => queueRetreat(entry.player, entry.contents, destination));
@@ -1751,7 +1816,7 @@
                     if (gameState.pendingCapture) return;
                     if (group.type === 'SWAP' && group.survivor) {
                         const winner = group.survivor;
-                        const piece = gameState.board[winner.to[0]][winner.to[1]];
+                        const piece = getPieceAt(...winner.to, winner.player);
                         group.survivor = piece && piece.player === winner.player ? {
                             ...winner,
                             pieceId: piece.id,
@@ -1773,10 +1838,10 @@
 
         function processSallyBattle(group) {
             return new Promise((resolve) => {
-                const tower = gameState.board[group.targetSquare[0]][group.targetSquare[1]];
+                const tower = getPieceAt(...group.targetSquare);
                 const hasAttacker = group.candidates.some(candidate => {
                     if (!candidate.isSallyAttacker) return false;
-                    const piece = gameState.board[candidate.from[0]][candidate.from[1]];
+                    const piece = getPieceByIdAt(...candidate.from, candidate.pieceId);
                     return piece && piece.id === candidate.pieceId;
                 });
                 if (!tower || !isTowerPiece(tower) || !hasAttacker) {
@@ -1858,9 +1923,9 @@
                             .filter(candidate => !candidate.isSallyDefender && candidate !== survivor)
                             .forEach(candidate => {
                                 const result = candidateResults.get(candidate.pieceId);
-                                const source = gameState.board[candidate.from[0]][candidate.from[1]];
+                                const source = getPieceByIdAt(...candidate.from, candidate.pieceId);
                                 if (source && source.id === candidate.pieceId) {
-                                    gameState.board[candidate.from[0]][candidate.from[1]] = null;
+                                    removePieceAt(...candidate.from, candidate.pieceId);
                                 }
                                 if (result && result.survivors.length) {
                                     retreatEntries.push({
@@ -1872,13 +1937,13 @@
 
                         if (survivor.isSallyAttacker) {
                             const result = candidateResults.get(survivor.pieceId);
-                            const source = gameState.board[survivor.from[0]][survivor.from[1]];
+                            const source = getPieceByIdAt(...survivor.from, survivor.pieceId);
                             if (source && source.id === survivor.pieceId) {
                                 if (result.survivors.length) {
                                     source.contents = result.survivors;
                                     source.type = getMergedPieceType(source.contents);
                                 } else {
-                                    gameState.board[survivor.from[0]][survivor.from[1]] = null;
+                                    removePieceAt(...survivor.from, survivor.pieceId);
                                 }
                             }
                         } else {

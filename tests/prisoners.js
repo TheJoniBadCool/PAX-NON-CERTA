@@ -42,10 +42,11 @@ const context = vm.createContext({
     renderCaptureChoices() {}, renderRetreatTable() {}, updatePlayerCards() {},
     logAction(message) { logs.push(message); }, logRoundHeader() {}, saveCustomSetup() {},
     updateRoundDisplay() {}, showPrivacyOverlay() {},
-    Multiplayer: { broadcastResolutionStart() {}, beginNextRound() {} }
+    Multiplayer: { broadcastResolutionStart() {}, beginNextRound() {}, isPendingCommit() { return false; } }
 });
 ['constants', 'models', 'game-state', 'setup-utils', 'board-utils', 'movement-rules',
-    'planning-rules', 'battle-rules', 'retreat-rules', 'prisoner-rules', 'objective-rules', 'siege-rules', 'game']
+    'planning-rules', 'battle-rules', 'retreat-rules', 'prisoner-rules', 'objective-rules', 'siege-rules',
+    'allied-resolution', 'game']
     .forEach(name => vm.runInContext(fs.readFileSync(`js/${name}.js`, 'utf8'), context));
 const api = vm.runInContext(`({
     state: gameState, createUnit, getBattleCandidateData, casualtyChance,
@@ -265,6 +266,53 @@ async function run() {
     assert.equal(tower.contents.length, 2, 'Siege attrition must never kill prisoners');
     assert.equal(api.isValidSallyOutPlan(tower, [8, 8], [8, 8], 1, 'siege'), false,
         'Prisoners alone cannot sally out');
+    elements.get('board').children[8 * state.boardSize + 9] = element();
+    for (const multiplayer of [false, true]) {
+        for (const round of [3, 4]) {
+            state.multiplayer = multiplayer;
+            state.round = round;
+            state.phase = 'PLANNING';
+            state.turnIndex = 1;
+            state.plans = [[], [], [], []];
+            const attacker = state.sieges[0].attackers[0];
+            attacker.timer = 1;
+            elements.get('piece-tooltip').classList.add('hidden');
+            api.handleSquareClick(8, 9);
+            assert.equal(elements.get('btn-storm-castle').hidden, true,
+                'Storm Castle must be hidden until the catapult is ready');
+            attacker.timer = 0;
+            elements.get('piece-tooltip').classList.add('hidden');
+            api.handleSquareClick(8, 9);
+            assert.equal(elements.get('btn-storm-castle').hidden, false,
+                'A ready catapult must expose Storm Castle in its automatically opened popup');
+            assert.equal(state.validMoves.length, 0, 'The popup clears ordinary destination selection');
+            elements.get('btn-storm-castle').onclick();
+            assert.equal(state.plans[1].length, 1);
+            const assault = state.plans[1][0];
+            assert.equal(assault.siegeAssault, true);
+            assert.equal(assault.siegeId, 'siege');
+            assert.equal(assault.pieceId, 'catapult');
+            assert.deepEqual(Array.from(assault.from), [8, 9]);
+            assert.deepEqual(Array.from(assault.to), [8, 8]);
+            assert.equal(elements.get('piece-tooltip').classList.contains('hidden'), true);
+            assert.equal(state.selectedSquare, null);
+            assert.equal(elements.get('hint-text').innerText, 'Assault queued!');
+
+            api.handleSquareClick(8, 9);
+            elements.get('btn-storm-castle').onclick();
+            assert.equal(state.plans[1].length, 1, 'Repeated assault orders must replace, not duplicate');
+            api.handleSquareClick(8, 9);
+            attacker.timer = 1;
+            elements.get('btn-storm-castle').onclick();
+            assert.equal(state.plans[1].length, 1, 'A stale popup must not queue an unready assault');
+            assert(elements.get('hint-text').innerText.startsWith('Assault unavailable:'));
+        }
+    }
+    state.multiplayer = false;
+    state.turnIndex = 0;
+    state.round = 1;
+    state.plans = [[], [], [], []];
+    state.sieges[0].attackers[0].timer = 0;
     tower.contents.push(unit(1, 'p', 'guard'));
     const sallyDefender = { ...tower, contents: tower.contents.slice(1), from: [8, 8], to: [8, 8],
         isSallyDefender: true };

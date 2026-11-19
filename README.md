@@ -6,7 +6,7 @@ PaxNonCerta is a 4-player simultaneous chess battlefield.
 
 Open `PaxNonCerta.html` directly in a modern browser. No installation, server, or build step is required.
 
-Click or tap to select pieces and their destinations, or to place pieces in custom setup. Right-click a piece to open its unit list; on mobile, hold it for half a second instead. Clicking your catapult or besieged tower also opens that list, with its siege action alongside.
+Click or tap to select pieces and their destinations, or to place pieces in custom setup. Right-click a piece to open its unit list; on mobile, hold it for half a second instead. Clicking your catapult or besieged tower also opens that list, with its siege action alongside. When the catapult's assault timer reaches 0, choose **Storm Castle** in its unit list to queue an assault, including on even-numbered rounds.
 
 Each tower has one randomly chosen, in-bounds cardinal gate, shown by an arrow. Merges, transfers, unmerges, and sieges must use that adjacent square. Generated towers start at least two squares apart in every direction, including diagonals; sandbox placement has no spacing restriction.
 
@@ -39,6 +39,48 @@ The compact battle panel shows players side by side, with win odds and small uni
 Defeated units either route as before or are captured. The battle winner chooses **Prisoner** or **Execute** for each capture; winner casualties and automatic Tower conquest are unchanged. Prisoners keep their original color and artwork, with captor-colored chains. They move, unmerge, or transfer only on odd rounds and may merge into friendly stacks (including Towers through their gates). They cannot attack, contribute no combat bonuses, and never die or route in battle: an attacking winner captures them, including prisoners held in a defeated mixed stack. Recapturing your own original units restores them to normal service.
 
 The prisoner chain badge appears at the top-right of the board square. Click a prisoner-containing piece (or right-click/long-press) for icon-only **Execute** (skull) and **Release** (white flag) controls; hover for labels. These queue private decisions, including on even rounds, and **Reset Plans** cancels them. Once plans resolve, releases and executions are announced in the combat log and applied **before movement**. The remaining stack may still move that round; the scheduled prisoner cannot also unmerge or transfer. Release returns units to their original player through 3-round re-entry without routed penalties, waiting if no square is free; an eliminated original player's units stay stationary. Prisoners remain alive for death objectives until executed. In multiplayer these decisions are submitted with the owner's committed plan. Choices for newly captured units still belong to the battle winner and resolution waits for their decisions.
+
+## Alliances and war
+
+Everyone starts at war. Each player card shows public 🤝 alliances and ⚔️ wars
+with colored player balls and gray handshakes, separated by `|`. During planning,
+the button next to another player's name opens **Declare War** / **Request Allegiance**;
+the current relationship is grayed out and unselectable. Incoming requests highlight
+and gently pulse the sender's card (static highlight with reduced motion). Accept or decline online
+requests on the sender's card. Each pair allows only one initiation per round,
+including declined requests; Reset Plans and unlocking do not undo diplomacy.
+
+Online, committed players can still answer requests, and resolution waits until
+all requests are answered and everyone has committed. The host can skip disconnected
+players, declining pending requests involving them. Hotseat instead has private
+approval handoffs after everyone plans, before moves resolve. New games reset
+relationships; reconnecting preserves them.
+
+Allies can share ordinary squares without fighting or merging across owners.
+Their smaller, overlapping icons remain separate armies: click or long-press the
+square to control only your own stack. Same-player arrivals still merge normally.
+Allies cannot enter each other's Tower squares. Direct allies share fog vision
+and can see each other's forest troops; vision does not chain through friends
+of friends, and enemy forest concealment is unchanged.
+
+Accepting an alliance immediately releases both players' prisoners belonging to
+the other, including captives in retreating armies. They use the normal released
+prisoner retreat process and return after three rounds without routed penalties.
+Queued actions involving those prisoners are cancelled; other prisoners stay held.
+
+Allies fight together against common enemies, keeping their own survivors and
+experience. A player allied with both opponents stays neutral; complex encounters
+resolve compatible allied sides and then any remaining hostile pairs. Former allies
+still on the same square fight during resolution unless they move apart.
+
+Joint winners unanimously choose the castle owner and separately choose who
+handles prisoners. Each ally votes on their own device online, or after a Hotseat
+handoff. Disagreement offers **Re-decide** or **Declare War**, which overrides the
+round lock and immediately resumes fighting for the spoils. The agreed prisoner
+custodian then uses the normal Prisoner/Execute controls. Non-owners of a captured
+castle stay on their original siege squares, fighting immediately if an enemy has
+taken that square. Votes survive online reconnects; resolution waits for agreement
+or war. Resource ownership, objectives, and victory conditions are not shared.
 
 ## Objectives
 
@@ -117,6 +159,7 @@ deleted; follow Supabase's guidance for cleaning up old anonymous users.
 - `PaxNonCerta.html` - page structure and game controls
 - `styles.css` - all presentation styles
 - `js/game-state.js` - centralized mutable game state
+- `js/allied-resolution.js` - allied combat sides and castle/prisoner agreements
 - `js/objective-rules.js` - random objectives, reversible scoring, and score-based outcomes
 - `js/game.js` - game rules, rendering, input handling, and collision resolution
 

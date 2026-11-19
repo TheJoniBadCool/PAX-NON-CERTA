@@ -16,11 +16,13 @@ function getFogVisibility(viewer = null) {
     const visible = Array.from({ length: size }, () =>
         Array(size).fill(gameState.phase === 'GAME_OVER'));
     if (gameState.phase === 'GAME_OVER') return visible;
-    const viewers = viewer !== null ? [viewer] :
+    const baseViewers = viewer !== null ? [viewer] :
         !gameState.multiplayer && gameState.phase === 'RESOLVING'
             ? gameState.activePlayers.flatMap((active, index) =>
                 active && !gameState.eliminated[index] ? [index + 1] : [])
             : [gameState.turnIndex + 1];
+    const viewers = [1, 2, 3, 4].filter(player =>
+        baseViewers.some(other => arePlayersFriendly(player, other)));
     const owners = getProvinceOwners(gameState.board);
     const visibleProvinces = owners.map((_, province) => owners.some((other, index) =>
         viewers.includes(other) &&
@@ -40,11 +42,12 @@ function getFogVisibility(viewer = null) {
             }
         });
     }
-    gameState.board.forEach((row, r) => row.forEach((piece, c) => {
+    gameState.board.forEach((row, r) => row.forEach((square, c) => {
         if (gameState.fogSight !== 'small' && visibleProvinces[getProvinceIndex(r, c, size)]) visible[r][c] = true;
-        if (!piece || !viewers.includes(piece.player)) return;
-        const radius = (gameState.fogSight === 'large' ? 2 : 1) +
-            (getCombatContents(piece).some(unit => getUnitType(unit) === 'b') ? 1 : 0);
+        const scouts = getSquarePieces(square).filter(piece => viewers.includes(piece.player));
+        if (!scouts.length) return;
+        const radius = Math.max(...scouts.map(piece => (gameState.fogSight === 'large' ? 2 : 1) +
+            (getCombatContents(piece).some(unit => getUnitType(unit) === 'b') ? 1 : 0)));
         for (let rr = Math.max(0, r - radius); rr <= Math.min(size - 1, r + radius); rr++) {
             for (let cc = Math.max(0, c - radius); cc <= Math.min(size - 1, c + radius); cc++) {
                 visible[rr][cc] = true;
@@ -55,16 +58,25 @@ function getFogVisibility(viewer = null) {
 }
 
 function isConcealedPiece(piece, r, c, viewer = null, visibility = getFogVisibility(viewer)) {
-    return Boolean(piece && piece.player !== (viewer ?? gameState.turnIndex + 1) &&
+    return Boolean(piece && !arePlayersFriendly(piece.player, viewer ?? gameState.turnIndex + 1) &&
         gameState.phase !== 'GAME_OVER' &&
         (!visibility[r][c] || (piece.player !== REBEL_PLAYER_ID && getBiome(r, c) === 'forest')));
 }
 
 function getVisiblePiece(r, c, viewer = null, visibility = getFogVisibility(viewer)) {
-    const piece = gameState.board[r][c];
-    if (!isConcealedPiece(piece, r, c, viewer, visibility)) return piece;
-    if (!isTowerPiece(piece)) return null;
-    return { ...piece, type: 'r', contents: getPieceContents(piece).filter(unit => getUnitType(unit) === 'r') };
+    const pieces = getVisiblePieces(r, c, viewer, visibility);
+    const player = viewer ?? gameState.turnIndex + 1;
+    return pieces.find(piece => piece.player === player) ||
+        pieces.find(piece => !arePlayersFriendly(piece.player, player)) || pieces[0] || null;
+}
+
+function getVisiblePieces(r, c, viewer = null, visibility = getFogVisibility(viewer)) {
+    return getPiecesAt(r, c).flatMap(piece => {
+        if (!isConcealedPiece(piece, r, c, viewer, visibility)) return [piece];
+        return isTowerPiece(piece) ? [{
+            ...piece, type: 'r', contents: getPieceContents(piece).filter(unit => getUnitType(unit) === 'r')
+        }] : [];
+    });
 }
 
 function getVisibleMovements(moves, viewer = null) {
@@ -84,21 +96,26 @@ function isPubliclyVisiblePiece(piece, squares) {
 }
 
 function snapshotHillOccupants() {
-    return gameState.board.map((row, r) => row.map((piece, c) =>
-        piece && getBiome(r, c) === 'hill'
-            ? { player: piece.player, ids: getCombatContents(piece).map(unit => unit.id) }
-            : null));
+    return gameState.board.map((row, r) => row.map((square, c) => {
+        const held = getSquarePieces(square).map(piece => ({
+            player: piece.player, ids: getCombatContents(piece).map(unit => unit.id)
+        }));
+        return getBiome(r, c) === 'hill' && held.length ? held : null;
+    }));
 }
 
 function updateHillHeld(start, moves) {
     const moved = new Set(moves.filter(move => !move.invalid && !move.siegeStart &&
         !move.sallyOut && !move.siegeCancel).flatMap(move => move.contents.map(unit => unit.id)));
-    gameState.hillHeld = gameState.board.map((row, r) => row.map((piece, c) => {
-        const previous = start[r][c];
-        if (!piece || !previous || piece.player !== previous.player) return null;
-        const ids = getCombatContents(piece).map(unit => unit.id)
-            .filter(id => previous.ids.includes(id) && !moved.has(id));
-        return ids.length ? { player: piece.player, ids } : null;
+    gameState.hillHeld = gameState.board.map((row, r) => row.map((square, c) => {
+        const held = getSquarePieces(square).flatMap(piece => {
+            const previous = getSquarePieces(start[r][c]).find(entry => entry.player === piece.player);
+            if (!previous) return [];
+            const ids = getCombatContents(piece).map(unit => unit.id)
+                .filter(id => previous.ids.includes(id) && !moved.has(id));
+            return ids.length ? [{ player: piece.player, ids }] : [];
+        });
+        return held.length > 1 ? held : held[0] || null;
     }));
 }
 
@@ -106,7 +123,8 @@ function getDefenderTerrainBonus(candidate, square) {
     if (!candidate.isStationary || !square) return 0;
     const [r, c] = square;
     if (getBiome(r, c) === 'forest') return 0.25;
-    const held = gameState.hillHeld?.[r]?.[c];
+    const held = getSquarePieces(gameState.hillHeld?.[r]?.[c])
+        .find(entry => entry.player === candidate.player);
     return getBiome(r, c) === 'hill' && held && held.player === candidate.player &&
         getCombatContents(candidate).some(unit => held.ids.includes(unit.id)) ? 0.25 : 0;
 }
@@ -141,8 +159,10 @@ function getProvinceIndex(r, c, boardSize) {
 
 function getProvinceOwners(board) {
     const owners = Array.from({ length: 16 }, () => new Set());
-    board.forEach((row, r) => row.forEach((piece, c) => {
-        if (isTowerPiece(piece)) owners[getProvinceIndex(r, c, board.length)].add(piece.player);
+    board.forEach((row, r) => row.forEach((square, c) => {
+        getSquarePieces(square).forEach(piece => {
+            if (isTowerPiece(piece)) owners[getProvinceIndex(r, c, board.length)].add(piece.player);
+        });
     }));
     return owners.map(players => {
         const [owner] = players;
@@ -235,8 +255,8 @@ function getTowerGate(piece) {
 }
 
 function isTowerGateMove(from, to) {
-    const source = gameState.board[from[0]][from[1]];
-    const target = gameState.board[to[0]][to[1]];
+    const source = getPiecesAt(...from).find(isTowerPiece);
+    const target = getPiecesAt(...to).find(isTowerPiece);
     const matchesGate = (tower, towerSquare, otherSquare) => {
         const gate = getTowerGate(tower);
         return Array.isArray(gate) &&

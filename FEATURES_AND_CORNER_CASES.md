@@ -60,6 +60,86 @@ chess rules.
   and combat log.
 - Opening the page shows the player-selection modal.
 
+### Alliances and war
+
+- Every pair of selected players starts at war. Each player card publicly shows
+  its alliances with a handshake and wars with crossed swords, followed only by
+  the other players' colored balls. Unselected and eliminated players are omitted.
+- During planning, the button next to another player's name opens a popup with
+  **Declare War** and **Request Allegiance**. The current relationship's option
+  is grayed out and disabled; round and commitment locks disable both options.
+  Handshakes are gray. Alliance and war lists are separated by a visible `|`.
+  Incoming online requests show an amber highlighted, gently pulsing sender card
+  and an explicit request label beside the response controls. Reduced-motion
+  preferences replace the pulse with a static highlight.
+  Requests leave the pair at war until the recipient accepts. Requests are public.
+- Accepting immediately releases each new ally's prisoners belonging to the other,
+  including captives in retreating armies. Released units enter the usual
+  three-round retreat without routed penalties. Their queued prisoner actions,
+  splits/transfers, and moves of emptied stacks are cancelled, even if committed.
+  Other players' prisoners are unaffected.
+- Each pair permits one initiation per round. Declaring war, requesting an
+  alliance, accepting, or declining cannot be undone that round. A pending
+  request can only be answered by its recipient. Declining leaves the pair at war;
+  another request is possible next round. Actions do not propagate to third parties.
+- Multiplayer actions are validated and serialized by the host using the sender's
+  room slot and current match/round. Committed players must unlock to initiate,
+  but may accept or decline while committed. Resolution waits for everyone to
+  commit and for every request to be answered; requests do not expire silently.
+  The host's Skip Disconnected Players action explicitly declines outstanding
+  requests involving those players, including players who already committed.
+- In Hotseat, requests are made during planning but answered in a separate private
+  handoff stage after all players plan and before movement resolves. Only recipients
+  with pending requests are prompted, including an earlier planner receiving a
+  request from a later planner. Objectives, resources, and move controls stay hidden
+  or unavailable during review. Without requests, resolution starts as before.
+- Reset Plans and multiplayer unlocks never undo diplomacy. Snapshots/rejoins retain
+  relationships, pending requests, and round locks. New games reset all relationships
+  to war and clear pending reviews; diplomacy is unavailable during setup, handoffs,
+  resolution, or game over.
+- Allies may occupy the same ordinary square without fighting or combining
+  ownership. One stack per owner is retained; same-owner arrivals still merge.
+  Two to four smaller, staggered icons show each visible army, with one yellow
+  badge showing the total number of visible pieces on the square.
+  Clicking/right-clicking/long-pressing the square selects only the current
+  player's army, regardless of drawing order. Moves, group splits, prisoner
+  decisions, and multiplayer plan validation use that owner's stack.
+- Allied exchanges do not intercept. Allied Tower squares cannot be entered:
+  no visiting garrisons, ownership transfer, or new allied sieges. Existing
+  sieges against a newly allied player end at resolution and stale siege actions
+  are cancelled. Armies may share a besieger's ordinary square without sharing
+  ownership or its siege action.
+- Direct allies share province and troop sight, including Bishop and sight-size
+  effects. Allied troops are visible in forests; enemy forest concealment stays
+  unchanged. Vision is not transitive, and ends when war is declared or an ally
+  is eliminated. Private plans, objectives, and resources are not shared.
+- Allies on one combat side combine strength against common enemies; each side
+  must be mutually allied internally and hostile to every opposing member.
+  An ally of both combatants stays out. Remaining hostile pairs fight afterward.
+  Own survivors, casualties, experience, and routed retreats retain their owners.
+  Joint strength and its normal bonuses are calculated as one combat side;
+  stationary terrain defence is shared within that side.
+- Declaring war while co-located causes a battle at resolution if both armies
+  remain. Moving apart avoids it. Prisoner-only armies cannot fight one another
+  and remain separate until a combat-capable enemy is present.
+- Joint winners unanimously choose a castle owner, and separately a player to
+  handle all captured prisoners through the normal keep/execute controls.
+  Only victorious participants vote, not neutral bystanders.
+  Online votes belong to the authenticated room slot; Hotseat hands the device
+  to each participant. Votes and current negotiation survive guest reconnects.
+  Resolution waits, including for disconnected participants to rejoin.
+- Disagreement offers re-decision or unilateral war against another participant.
+  This exceptional declaration bypasses the normal round lock and immediately
+  starts another battle; castle/prisoner agreements are reconsidered afterward.
+  Castles keep their identities; the eventual owner alone receives ownership.
+  Other victorious armies stay on their original adjacent siege squares. An enemy
+  occupying that square triggers an immediate battle, including any prisoners
+  already assigned to the returning army. Sally Out keeps the castle in place
+  and returns surviving besiegers to their original squares.
+- Shared cells, per-owner hill history, and pending negotiations are included in
+  multiplayer state. New games clear pending prisoner recipients and negotiations.
+  Resources, objectives, and victory conditions remain per-player and unchanged.
+
 ### Terrain
 
 - Each match generates multiple irregular terrain patches aiming for 10%

@@ -7,20 +7,76 @@ function restorePrisoner(unit) {
     return restored;
 }
 
+function cancelReleasedPrisonerPlans(unitIds) {
+    if (!unitIds.size) return;
+    gameState.plans = gameState.plans.map(plans => plans.filter(plan => {
+        if (plan.prisonerAction) return !unitIds.has(plan.unitId);
+        if (plan.isUnmerge) return !(plan.unitIds || [plan.unitId]).some(id => unitIds.has(id));
+        if (!plan.contents?.length) return true;
+        const remaining = plan.contents.filter(unit => !unitIds.has(unit.id));
+        if (remaining.length === plan.contents.length) return true;
+        if (!remaining.length) {
+            gameState.lockedPieceIds.delete(plan.pieceId);
+            if (plan.mergeWithPieceId) gameState.lockedPieceIds.delete(plan.mergeWithPieceId);
+            return false;
+        }
+        plan.contents = remaining;
+        plan.pieceType = getMergedPieceType(remaining);
+        return true;
+    }));
+    gameState.selectedHeldPiece = null;
+    gameState.selectedSquare = null;
+    gameState.validMoves = [];
+    gameState.pendingMerge = null;
+    gameState.pendingTransfer = null;
+}
+
+function releaseAlliancePrisoners(a, b) {
+    const releasedIds = new Set();
+    const release = (army, square) => {
+        const ally = army.player === a ? b : army.player === b ? a : null;
+        if (ally === null) return;
+        const contents = getPieceContents(army);
+        const released = contents.filter(unit => isPrisoner(unit) && unit.originalPlayer === ally);
+        if (!released.length) return;
+        released.forEach(unit => releasedIds.add(unit.id));
+        army.contents = contents.filter(unit => !released.includes(unit));
+        if (army.contents.length) army.type = getMergedPieceType(army.contents);
+        queueRetreat(ally, released.map(restorePrisoner), [...square], true);
+        logAction(`P${army.player} automatically released ${released.length} prisoner(s) to new ally P${ally}.`);
+    };
+    gameState.board.forEach((row, r) => row.forEach((cell, c) => {
+        getSquarePieces(cell).forEach(army => {
+            release(army, [r, c]);
+            if (army.contents?.length === 0) removePieceAt(r, c, army.id);
+        });
+    }));
+    for (const player of [a, b]) {
+        gameState.retreating[player - 1] = gameState.retreating[player - 1].filter(army => {
+            release(army, army.battleSquare);
+            return army.contents.length > 0;
+        });
+    }
+    cancelReleasedPrisonerPlans(releasedIds);
+}
+
 function addCapturedUnit(player, unit, destination) {
     const [r, c] = destination;
-    let piece = gameState.board[r][c];
-    if (piece && piece.player !== player) throw new Error('Capture destination belongs to another player');
+    let piece = gameState.captureRecipient || getPieceAt(r, c, player);
+    if (!gameState.captureRecipient && getPiecesAt(r, c).some(other => !arePlayersFriendly(other.player, player))) {
+        throw new Error('Capture destination contains an enemy');
+    }
     if (!piece) {
         piece = { id: `captives_${unit.id}_${gameState.round}`, player, contents: [] };
-        gameState.board[r][c] = piece;
+        putPieceAt(r, c, piece);
     }
     piece.contents = [...getPieceContents(piece), unit];
     piece.type = getMergedPieceType(piece.contents);
 }
 
-function beginCaptureChoices(player, contents, destination) {
+function beginCaptureChoices(player, contents, destination, recipient = null) {
     if (gameState.pendingCapture) throw new Error('Previous captures have not been decided');
+    gameState.captureRecipient = recipient;
     const pending = [];
     contents.forEach(unit => {
         const originalPlayer = unit.originalPlayer || unit.player;
@@ -35,6 +91,7 @@ function beginCaptureChoices(player, contents, destination) {
         id: `capture_${gameState.round}_${contents.map(unit => unit.id).join('_')}`,
         player, contents: pending, destination: [...destination]
     } : null;
+    if (!gameState.pendingCapture) gameState.captureRecipient = null;
 }
 
 function decideCapture(player, captureId, unitId, fate) {
@@ -57,7 +114,10 @@ function decideCapture(player, captureId, unitId, fate) {
         logAction(`P${player} kept ${getUnitName(unit)} as a prisoner.`);
     }
     pending.contents = pending.contents.filter(entry => entry.id !== unitId);
-    if (!pending.contents.length) gameState.pendingCapture = null;
+    if (!pending.contents.length) {
+        gameState.pendingCapture = null;
+        gameState.captureRecipient = null;
+    }
     return true;
 }
 
@@ -67,7 +127,7 @@ function managePrisoner(player, unitId, action) {
         !['execute', 'release'].includes(action)) return false;
     for (let r = 0; r < gameState.boardSize; r++) {
         for (let c = 0; c < gameState.boardSize; c++) {
-            const piece = gameState.board[r][c];
+            const piece = getPieceAt(r, c, player);
             if (!piece || piece.player !== player) continue;
             const contents = getPieceContents(piece);
             const unit = contents.find(entry => entry.id === unitId && entry.prisonerOf === player);
@@ -91,7 +151,7 @@ function validatePrisonerPlans(player, plans) {
     return plans.filter(plan => plan.prisonerAction).every(plan => {
         if (!['execute', 'release'].includes(plan.prisonerAction) ||
             plan.from[0] !== plan.to[0] || plan.from[1] !== plan.to[1] || ids.has(plan.unitId)) return false;
-        const piece = gameState.board[plan.from[0]][plan.from[1]];
+        const piece = getPieceAt(...plan.from, player);
         const unit = piece && getPieceContents(piece).find(unit => unit.id === plan.unitId);
         if (!piece || piece.id !== plan.pieceId || piece.player !== player ||
             !unit || unit.prisonerOf !== player || plans.some(move =>
@@ -115,7 +175,7 @@ function resolvePrisonerPlans() {
         if (actions.length && !count) logAction('<b>PRISONER ACTIONS</b> — resolved before movement.');
         actions.forEach(plan => {
             const [r, c] = plan.from;
-            const piece = gameState.board[r][c];
+            const piece = getPieceAt(r, c, index + 1);
             const location = getBiome(r, c) === 'forest' ? 'in a forest' :
                 isPubliclyVisiblePiece(piece, [[r, c]]) ? `at ${coordsToNotation(r, c)}` : 'in fog of war';
             const contents = getPieceContents(piece);
@@ -125,7 +185,7 @@ function resolvePrisonerPlans() {
                 piece.contents = remaining;
                 piece.type = getMergedPieceType(remaining);
             } else {
-                gameState.board[r][c] = null;
+                removePieceAt(r, c, piece.id);
             }
             if (plan.prisonerAction === 'execute') {
                 recordDeadPieces(gameState, [unit]);

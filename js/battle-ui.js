@@ -43,7 +43,7 @@ function renderBattleCandidates(group, candidateResults = null, retreatedUnitIds
                 const routed = getRoutedStats(unit);
                 const label = escapeHtml(isPrisoner(unit) ? `${getUnitName(unit)} · ${getUnitStats(unit)}` :
                     `${getUnitName(unit)} · XP +${Math.round(experienceBonus * 100)}% · armour +${Math.round(armourBonus * 100)}% · winner casualty ${winnerCasualtyOdds}% · defeated capture ${loserCasualtyOdds}%${routed ? ` · ${routed}` : ''}${isCaptured ? ' · captured' : isDead ? ' · casualty' : isRetreating ? ' · retreating' : ''}`);
-                return `<span class="battle-unit ${getUnitDisplayClass(unit, candidate.player)}" role="img" tabindex="0" title="${label}" aria-label="${label}">
+                return `<span class="battle-unit ${getUnitDisplayClass(unit, candidate.members ? unit.player : candidate.player)}" role="img" tabindex="0" title="${label}" aria-label="${label}">
                     ${PIECE_SVGS[getUnitType(unit)]}${prisonerChain(unit)}${marker}
                 </span>`;
             })
@@ -63,7 +63,7 @@ function renderBattleCandidates(group, candidateResults = null, retreatedUnitIds
         return `
             <div class="battle-candidate">
                 <div class="battle-candidate-header">
-                    <span class="battle-candidate-title" style="color: ${player.color};" title="${player.name}">${player.name}</span>
+                    <span class="battle-candidate-title" style="color: ${player.color};" title="${escapeHtml(player.name)}">${escapeHtml(candidate.members ? candidate.members.map(member => getPlayerInfo(member.player).name).join(' & ') : player.name)}</span>
                     ${battleStat('⚖', `${(entry.probability * 100).toFixed(1)}%`, `Chance to win ${(entry.probability * 100).toFixed(1)}%`, 'battle-win-odds')}
                 </div>
                 <div class="battle-candidate-icons">${icons}</div>

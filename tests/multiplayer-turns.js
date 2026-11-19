@@ -18,6 +18,7 @@ function element() {
     return {
         handlers, style: {}, value: '', checked: false, innerText: '', innerHTML: '', disabled: false,
         firstElementChild: { innerText: '' },
+        querySelector() { return this.firstElementChild; },
         classList: {
             add: value => classes.add(value),
             remove: value => classes.delete(value),
@@ -73,6 +74,7 @@ class PaxRelay {
 
 const state = {
     board: [], eliminated: [false, false, true, true], plans: [[], [], [], []],
+    retreating: [[], [], [], []],
     committed: [false, false, false, false], phase: 'PLANNING', round: 1, boardSize: 16,
     objectives: [
         [{ label: 'Host secret', points: 4 }],
@@ -88,6 +90,7 @@ state.lastResourceProductionRound = 4;
 let resolutions = 0;
 let captureRequest;
 let prisonerRequest;
+let spoilsRequest;
 let starts = 0;
 let agreementsFinished = 0;
 const ctx = {
@@ -127,6 +130,7 @@ const ctx = {
         state.startingPosition = startingPosition;
         state.startingProvinces = [null, null, null, null];
         state.startingConfirmed = [false, false, false, false];
+        state.diplomacy = ctx.createDiplomacyState();
     },
     updatePlayerCards() {}, renderBoard() {}, logAction() {}, showPlayerSelection() {},
     showCustomSetup(players, board, map) {
@@ -148,12 +152,20 @@ const ctx = {
         state.phase = 'PLANNING';
     },
     isPassableSquare: (r, c) => state.biomes?.[r]?.[c] !== 'mountain',
-    getVisiblePiece: (r, c) => state.board[r][c],
+    getVisiblePiece: (r, c, player) => {
+        const pieces = ctx.getSquarePieces(state.board[r][c]);
+        return pieces.find(piece => piece.player === player) || pieces[0] || null;
+    },
+    getVisiblePieces: (r, c) => ctx.getSquarePieces(state.board[r][c]),
     getPieceContents: piece => piece.contents || [{ id: 'unit', type: 'p' }],
     canUnitsTarget: () => true, isPrisoner: () => false,
-    renderCaptureChoices() {},
+    renderCaptureChoices() {}, renderAlliedSpoils() {},
     decideCapture(player, captureId, unitId, fate) {
         captureRequest = { player, captureId, unitId, fate };
+        return player === 2;
+    },
+    decideAlliedSpoils(player, id, action, target) {
+        spoilsRequest = { player, id, action, target };
         return player === 2;
     },
     managePrisoner(player, unitId, action) {
@@ -162,6 +174,12 @@ const ctx = {
     },
     resolveAllMoves() { resolutions++; state.phase = 'RESOLVING'; return Promise.resolve(); }
 };
+Object.assign(ctx, new Function('ctx', `with (ctx) {
+    ${readSource('js/game-state.js')}
+    ${readSource('js/diplomacy-rules.js')}
+    return { createDiplomacyState, getDiplomacyPair, getPendingAllianceRequests, applyDiplomacyAction };
+}`)(ctx));
+state.diplomacy = ctx.createDiplomacyState();
 Object.assign(ctx, new Function('ctx', `with (ctx) {
     ${readSource('js/starting-position.js')}
     return { chooseStartingProvince, confirmStartingProvince, allStartingProvincesConfirmed };
@@ -183,7 +201,9 @@ Object.assign(ctx, new Function('ctx', `with (ctx) {
     ${readSource('js/models.js')}
     ${readSource('js/movement-rules.js')}
     return { validatePrisonerPlans, getPlannedPieceContents, isPrisoner, canMoveWholePiece, canMoveHeldUnit,
-        getMergedPieceType };
+        getMergedPieceType, getSquarePieces, getPieceAt, getPieceByIdAt, getPiecesAt, arePlayersAllied,
+        arePlayersFriendly, putPieceAt, removePieceAt, canUnitsEnterSquare,
+        releaseAlliancePrisoners, cancelReleasedPrisonerPlans };
 }`)(ctx));
 
 async function run() {
@@ -361,6 +381,13 @@ async function run() {
         player: 1, captureId: 'battle', unitId: 'unit', fate: 'keep' });
     assert(captureRequest.player === 2 && captureRequest.captureId === 'battle',
         'Capture authority must use the authenticated slot, not a submitted player');
+    guest.emit('data', { type: 'allied-spoils', gameId: 99, round: 1, id: 'decision', action: 'choose', target: 1 });
+    guest.emit('data', { type: 'allied-spoils', gameId: 1, round: 99, id: 'decision', action: 'choose', target: 1 });
+    assert(!spoilsRequest, 'Stale game and round spoils decisions must not reach the authority');
+    guest.emit('data', { type: 'allied-spoils', gameId: 1, round: 1,
+        player: 1, id: 'decision', action: 'choose', target: 2 });
+    assert(spoilsRequest.player === 2 && spoilsRequest.id === 'decision' && spoilsRequest.target === 2,
+        'Spoils votes must use the authenticated player slot');
     guest.emit('data', { type: 'prisoner-action', gameId: 1, round: 1,
         player: 1, unitId: 'unit', action: 'release' });
     assert(!prisonerRequest, 'Immediate prisoner-action messages must no longer be accepted');
@@ -369,6 +396,23 @@ async function run() {
     assert(!state.committed[1], 'A stale or future turn must be ignored');
     const guestPlan = [{ from: [0, 0], to: [0, 1], pieceId: 'guest-piece' }];
     const guestPiece = state.board[0][0];
+    const sharedHostArmy = { id: 'shared-host', player: 1, type: 'n',
+        contents: [{ id: 'host-unit', player: 1, type: 'n' }] };
+    state.board[0][0] = [sharedHostArmy, guestPiece];
+    guest.emit('data', { type: 'commit', gameId: 1, round: 1, plan: guestPlan });
+    assert(state.committed[1] && state.plans[1][0].contents[0].id === 'unit',
+        'Guests can plan moves for a secondary army without using another owner’s units');
+    guest.emit('data', { type: 'unlock', gameId: 1, round: 1 });
+    guest.emit('data', { type: 'commit', gameId: 1, round: 1,
+        plan: [{ ...guestPlan[0], pieceId: sharedHostArmy.id }] });
+    assert(!state.committed[1], 'A shared square never grants control of another player’s army');
+    state.pendingSpoils = { id: 'shared-spoils', kind: 'castle', participants: [1, 2], choices: { 1: 2 } };
+    multiplayer.syncAlliedState();
+    const sharedSync = JSON.parse(JSON.stringify(guest.sent.filter(message => message.type === 'sync').pop()));
+    assert(sharedSync.game.board[0][0].length === 2 && sharedSync.game.pendingSpoils.choices[1] === 2,
+        'Snapshots retain every co-located army and pending agreement votes');
+    state.pendingSpoils = null;
+    state.board[0][0] = guestPiece;
     const prisoner = { id: 'guest-prisoner', player: 2, originalPlayer: 1, prisonerOf: 2, type: 'q' };
     guestPiece.contents.push(prisoner);
     guestPiece.contents[0].type = 'n';
@@ -425,6 +469,14 @@ async function run() {
     guestPiece.contents.pop();
     guestPiece.contents[0].type = 'p';
     state.round = 1;
+    guest.emit('data', { type: 'diplomacy', gameId: 99, round: 1, target: 0, action: 'request' });
+    guest.emit('data', { type: 'diplomacy', gameId: 1, round: 99, target: 0, action: 'request' });
+    assert(ctx.getPendingAllianceRequests().length === 0, 'Stale match and round diplomacy must be ignored');
+    guest.emit('data', { type: 'diplomacy', gameId: 1, round: 1, target: 0, action: 'request', actor: 0 });
+    assert(ctx.getDiplomacyPair(0, 1).requestedBy === 1,
+        'The authenticated slot, not the payload actor, owns a diplomacy action');
+    guest.emit('data', { type: 'diplomacy', gameId: 1, round: 1, target: 0, action: 'accept' });
+    assert(ctx.getDiplomacyPair(0, 1).status === 'war', 'Guests cannot accept their own requests');
     guest.emit('data', { type: 'commit', gameId: 1, round: 1, plan: guestPlan });
     assert(state.committed[1] && resolutions === 0, 'Guest commitment must wait for host');
     const pending = multiplayer.toggleCommit();
@@ -433,10 +485,54 @@ async function run() {
         'Host commitment must be persisted before resolving');
     finishSave();
     await pending;
+    assert(resolutions === 0 && state.phase === 'COMMITTED',
+        'All committed plans must still wait for alliance responses');
+    const diplomacySync = JSON.parse(JSON.stringify(guest.sent.filter(message => message.type === 'sync').pop()));
+    assert(diplomacySync.game.diplomacy[0].requestedBy === 1 &&
+        diplomacySync.game.diplomacy[0].changedRound === 1, 'Snapshots preserve requests and round locks');
+    await multiplayer.requestDiplomacy(1, 'accept');
     assert(resolutions === 1 && state.phase === 'RESOLVING', 'Both commitments must resolve once');
     assert(state.plans[1][0].contents[0].id === 'unit', 'Host must rebuild submitted unit contents');
     guest.emit('data', { type: 'commit', gameId: 1, round: 1, plan: guestPlan });
     assert(resolutions === 1, 'Repeated commitments must not restart resolution');
+    state.round = 2;
+    multiplayer.beginNextRound();
+    await multiplayer.requestDiplomacy(1, 'war');
+    assert(ctx.getDiplomacyPair(0, 1).status === 'war', 'Host war declarations apply immediately');
+    guest.emit('data', { type: 'diplomacy', gameId: 1, round: 2, target: 0, action: 'request' });
+    assert(ctx.getPendingAllianceRequests().length === 0, 'War cannot be reversed in the same round');
+    state.round = 3;
+    multiplayer.beginNextRound();
+    await multiplayer.requestDiplomacy(1, 'request');
+    guest.emit('data', { type: 'commit', gameId: 1, round: 3, plan: [] });
+    const secondCommit = multiplayer.toggleCommit();
+    finishSave();
+    await secondCommit;
+    assert(resolutions === 1, 'Host requests also block resolution');
+    guest.emit('data', { type: 'diplomacy', gameId: 1, round: 3, target: 0, action: 'accept' });
+    assert(resolutions === 2 && ctx.getDiplomacyPair(0, 1).status === 'allied',
+        'A committed guest can accept and start resolution');
+    state.round = 4;
+    multiplayer.beginNextRound();
+    await multiplayer.requestDiplomacy(1, 'war');
+    state.round = 5;
+    multiplayer.beginNextRound();
+    await multiplayer.requestDiplomacy(1, 'request');
+    guest.emit('data', { type: 'commit', gameId: 1, round: 5, plan: [] });
+    const thirdCommit = multiplayer.toggleCommit();
+    finishSave();
+    await thirdCommit;
+    guest.close();
+    multiplayer.refreshControls();
+    assert(!document.getElementById('btn-force-skip').classList.contains('hidden'),
+        'Skipping must remain available for a committed disconnected player with pending requests');
+    document.getElementById('btn-force-skip').handlers.click();
+    assert(resolutions === 3 && ctx.getPendingAllianceRequests().length === 0 &&
+        ctx.getDiplomacyPair(0, 1).status === 'war',
+        'Skipping disconnected players declines their requests and unblocks resolution');
+    guest.open = true;
+    relay.handlers.connection(guest);
+    guest.emit('data', { type: 'join', name: 'Guest' });
     state.phase = 'GAME_OVER';
     multiplayer.onNewGameRequested();
     document.getElementById('mp-count').handlers.change({ target: { value: '3' } });
@@ -500,6 +596,40 @@ async function run() {
     state.fogSight = 'small';
     relay.connection.emit('data', sync);
     assert(state.fogSight === 'large', 'A guest must restore the host-selected fog sight from a snapshot');
+    relay.connection.emit('data', sharedSync);
+    assert(ctx.getPiecesAt(0, 0).length === 2 && state.pendingSpoils.id === 'shared-spoils' &&
+        state.pendingSpoils.choices[1] === 2, 'Rejoining guests recover shared cells and in-progress votes');
+    multiplayer.requestAlliedSpoils('shared-spoils', 'choose', 2);
+    const guestSpoils = relay.connection.sent.at(-1);
+    assert(guestSpoils.type === 'allied-spoils' && guestSpoils.gameId === 1 && guestSpoils.round === 1 &&
+        guestSpoils.target === 2, 'Guest spoils decisions carry the current game and round');
+    relay.connection.emit('data', diplomacySync);
+    assert(ctx.getDiplomacyPair(0, 1).requestedBy === 1 && ctx.getDiplomacyPair(0, 1).changedRound === 1,
+        'Clients restore pending requests and same-round locks on reconnect');
+    await multiplayer.requestDiplomacy(0, 'decline');
+    const diplomacyRequest = relay.connection.sent.at(-1);
+    assert(diplomacyRequest.type === 'diplomacy' && diplomacyRequest.target === 0 &&
+        diplomacyRequest.action === 'decline' && diplomacyRequest.gameId === 1 && diplomacyRequest.round === 1,
+        'Guest diplomacy messages carry their target and current match/round identity');
+    const releaseSync = JSON.parse(JSON.stringify(diplomacySync));
+    releaseSync.game.phase = 'PLANNING';
+    releaseSync.committed[releaseSync.you] = false;
+    const freedUnit = { id: 'freed-on-alliance', player: 2, type: 'n' };
+    releaseSync.game.retreating = [[], [{
+        player: 2, released: true, battleSquare: [0, 0], reentryRound: 4, contents: [freedUnit]
+    }], [], []];
+    state.plans[1] = [
+        { prisonerAction: 'execute', unitId: freedUnit.id },
+        { isUnmerge: true, unitIds: [freedUnit.id] },
+        { pieceId: 'emptied-stack', contents: [freedUnit] },
+        { pieceId: 'unaffected-stack', contents: [{ id: 'still-here', player: 2, type: 'n' }] }
+    ];
+    relay.connection.emit('data', releaseSync);
+    assert(state.plans[1].length === 1 && state.plans[1][0].pieceId === 'unaffected-stack',
+        'Alliance releases must cancel conflicting private guest plans, not just host plans');
+    state.selectedSquare = [1, 1];
+    relay.connection.emit('data', releaseSync);
+    assert(state.selectedSquare !== null, 'Repeated release snapshots must not keep clearing guest selections');
     const oldSnapshot = { ...sync, game: { ...sync.game } };
     delete oldSnapshot.game.fogSight;
     relay.connection.emit('data', oldSnapshot);

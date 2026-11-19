@@ -16,6 +16,7 @@ function element() {
     const classes = new Set();
     node.classList = {
         add(name) { classes.add(name); node.className += ` ${name}`; },
+        remove(name) { classes.delete(name); },
         toggle(name, force) { if (force) classes.add(name); else classes.delete(name); },
         contains(name) { return classes.has(name); }
     };
@@ -38,10 +39,11 @@ const context = vm.createContext({
     activePlayerNameEl: element(), roundTagEl: element(),
     Multiplayer: {
         getBadge: () => ({ text: 'Ready', ready: true }),
+        isPendingCommit: () => false,
         refreshControls() {}, onBoardRendered() {}
     }
 });
-['constants', 'models', 'game-state', 'setup-utils', 'board-utils', 'movement-rules', 'planning-rules',
+['constants', 'models', 'game-state', 'diplomacy-rules', 'setup-utils', 'board-utils', 'movement-rules', 'planning-rules',
     'board-setup', 'board-renderer', 'setup-renderer', 'status-ui'].forEach(name =>
     vm.runInContext(fs.readFileSync(`js/${name}.js`, 'utf8'), context));
 const api = vm.runInContext(`const gameState = new GameState();
@@ -416,7 +418,7 @@ assert.equal(api.resolveResourceProduction(8), false, 'Older rounds must not pro
 
 for (const multiplayer of [false, true]) {
     state.multiplayer = multiplayer;
-    for (const phase of ['PLANNING', 'TRANSITION', 'RESOLVING', 'COMMITTED', 'GAME_OVER']) {
+    for (const phase of ['PLANNING', 'TRANSITION', 'ALLIANCE_REVIEW', 'RESOLVING', 'COMMITTED', 'GAME_OVER']) {
         state.phase = phase;
         for (const viewer of [0, 1]) {
             state.turnIndex = viewer;
