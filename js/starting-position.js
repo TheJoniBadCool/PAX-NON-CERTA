@@ -38,7 +38,8 @@ function applyStartingProvinces() {
                 return;
             }
             const gate = getTowerGate(piece);
-            const castle = createPlayerCastle(index, random, gameState.progressionMode);
+            const castle = createPlayerCastle(index, random, gameState.progressionMode,
+                gameState.startingArmy);
             getPieceContents(castle).filter(unit => unit.type === 'r')
                 .forEach(unit => { unit.gate = [...gate]; });
             row[c] = castle;
@@ -128,6 +129,7 @@ function renderStartingPositionSelection() {
 function finishStartingPositionSelection() {
     applyStartingProvinces();
     initializeObjectives();
+    PlanningTimer.start();
     renderStartingPositionSelection();
     updatePlayerCards();
     renderBoard();

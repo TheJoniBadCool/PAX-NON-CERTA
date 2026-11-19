@@ -145,7 +145,7 @@
                         <div id="resources-p4" class="resources-row hidden" aria-label="Yellow resources"></div>
                     </div>
                     <div class="plan-actions">
-                        <div id="round-clock" class="plan-action round-clock" role="img" aria-label="Round clock: 0 of 4 rounds completed">
+                        <div id="round-clock" class="plan-action round-clock" role="group" aria-label="Round clock: 0 of 4 rounds completed">
                             <svg class="plan-action-icon round-clock-face" viewBox="0 0 32 32" aria-hidden="true">
                                 <circle cx="16" cy="16" r="14"></circle>
                                 <path class="round-clock-ticks" d="M16 3v3 M29 16h-3 M16 29v-3 M3 16h3"></path>
@@ -155,6 +155,7 @@
                                 <circle class="round-clock-pivot" cx="16" cy="16" r="1.5"></circle>
                             </svg>
                             <span id="round-clock-status">0 / 4</span>
+                            <span id="planning-countdown" class="hidden" role="timer" aria-label="Planning time remaining" title="Planning time remaining"></span>
                         </div>
                         <button id="btn-finish-plan" class="plan-action plan-commit" type="button" aria-label="Commit Plans">
                             <span id="commit-plan-icon" class="plan-action-icon" aria-hidden="true">✓</span>
@@ -297,6 +298,25 @@
                             <option value="off">Unbalanced (default)</option>
                             <option value="allow-empty">Balanced: allow empty quadrants</option>
                             <option value="require-all">Balanced: at least one resource per quadrant</option>
+                            <option value="all-100">100%: all resources</option>
+                            <option value="tiered">Unbalanced: 3 at 100%, 4 at 50%, rest at 20%</option>
+                        </select>
+                    </label>
+                    <label class="mp-field" for="mp-resource-production-interval">Resource production
+                        <select id="mp-resource-production-interval">
+                            <option value="1" selected>Every turn (default)</option>
+                            <option value="2">Every 2 turns (even-numbered turns)</option>
+                            <option value="4">Every 4 turns</option>
+                        </select>
+                    </label>
+                    <label><input id="mp-planning-timer-enabled" type="checkbox"> Enable planning timer (per player, each round)</label>
+                    <label class="mp-field" for="mp-planning-time">Planning time
+                        <input id="mp-planning-time" type="number" min="1" max="86400" step="1" value="2" required disabled>
+                    </label>
+                    <label class="mp-field" for="mp-planning-time-unit">Time unit
+                        <select id="mp-planning-time-unit" disabled>
+                            <option value="minutes" selected>Minutes</option>
+                            <option value="seconds">Seconds</option>
                         </select>
                     </label>
                     <div class="map-preview-controls">
@@ -307,6 +327,12 @@
                         <div id="mp-map-preview" class="map-preview-grid" role="img" aria-label="Map preview"></div>
                         <div id="mp-map-preview-status" class="mp-status" aria-live="polite">Generate a map to preview the starting layout.</div>
                     </div>
+                    <label class="mp-field" for="mp-starting-army">Starting army
+                        <select id="mp-starting-army">
+                            <option value="default" selected>Default: 2 Pawns, 1 Horse, 1 Bishop, 1 King, 1 Queen, 1 Tower</option>
+                            <option value="full">Current: 4 Pawns, 2 Horses, 2 Bishops, 1 King, 1 Queen, 1 Tower</option>
+                        </select>
+                    </label>
                     <div class="setup-option">
                         <strong>Unit progression</strong>
                         <label><input type="radio" name="mp-progression" value="zero" checked> All level 0</label>
@@ -388,6 +414,25 @@
                         <option value="off">Unbalanced (default)</option>
                         <option value="allow-empty">Balanced: allow empty quadrants</option>
                         <option value="require-all">Balanced: at least one resource per quadrant</option>
+                        <option value="all-100">100%: all resources</option>
+                        <option value="tiered">Unbalanced: 3 at 100%, 4 at 50%, rest at 20%</option>
+                    </select>
+                </label>
+                <label class="mp-field" for="resource-production-interval">Resource production
+                    <select id="resource-production-interval">
+                        <option value="1" selected>Every turn (default)</option>
+                        <option value="2">Every 2 turns (even-numbered turns)</option>
+                        <option value="4">Every 4 turns</option>
+                    </select>
+                </label>
+                <label><input id="planning-timer-enabled" type="checkbox"> Enable planning timer (per player, each round)</label>
+                <label class="mp-field" for="planning-time">Planning time
+                    <input id="planning-time" type="number" min="1" max="86400" step="1" value="2" required disabled>
+                </label>
+                <label class="mp-field" for="planning-time-unit">Time unit
+                    <select id="planning-time-unit" disabled>
+                        <option value="minutes" selected>Minutes</option>
+                        <option value="seconds">Seconds</option>
                     </select>
                 </label>
                 <div id="hotseat-map-preview-controls" class="map-preview-controls">
@@ -398,6 +443,12 @@
                     <div id="map-preview" class="map-preview-grid" role="img" aria-label="Map preview"></div>
                     <div id="map-preview-status" class="mp-status" aria-live="polite">Generate a map to preview the starting layout.</div>
                 </div>
+                <label class="mp-field" for="starting-army">Starting army
+                    <select id="starting-army">
+                        <option value="default" selected>Default: 2 Pawns, 1 Horse, 1 Bishop, 1 King, 1 Queen, 1 Tower</option>
+                        <option value="full">Current: 4 Pawns, 2 Horses, 2 Bishops, 1 King, 1 Queen, 1 Tower</option>
+                    </select>
+                </label>
                 <div class="setup-option">
                     <strong>Unit progression</strong>
                     <label><input type="radio" name="progression-mode" value="zero" checked> All level 0</label>
@@ -459,6 +510,8 @@
                             <option value="off">Unbalanced (default)</option>
                             <option value="allow-empty">Balanced: allow empty quadrants</option>
                             <option value="require-all">Balanced: at least one resource per quadrant</option>
+                            <option value="all-100">100%: all resources</option>
+                            <option value="tiered">Unbalanced: 3 at 100%, 4 at 50%, rest at 20%</option>
                         </select>
                     </label>
                 </div>
@@ -577,6 +630,7 @@
     <script src="js/constants.js"></script>
     <script src="js/models.js"></script>
     <script src="js/game-state.js"></script>
+    <script src="js/planning-timer.js"></script>
     <script src="js/diplomacy-rules.js"></script>
     <script src="js/objective-rules.js"></script>
     <script src="js/setup-utils.js"></script>

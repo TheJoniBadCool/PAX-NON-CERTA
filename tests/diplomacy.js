@@ -26,7 +26,7 @@ const panels = [1, 2, 3, 4].map(id => element(`diplomacy-actions-p${id}`));
 panels.push(element('alliance-review-requests'));
 let resolutions = 0;
 const context = vm.createContext({
-    console,
+    console, clearTimeout() {},
     document: {
         getElementById: element,
         querySelectorAll: selector => selector === '.diplomacy-actions, #alliance-review-requests' ? panels : []
@@ -36,7 +36,7 @@ const context = vm.createContext({
     initializeObjectives() {}, renderCaptureChoices() {}, renderStartingPositionSelection() {},
     initBoard() {}, Multiplayer: { isPendingCommit: () => false, refreshControls() {}, getBadge: () => ({}) }
 });
-['constants', 'models', 'game-state', 'diplomacy-rules', 'retreat-rules', 'prisoner-rules',
+['constants', 'models', 'game-state', 'planning-timer', 'diplomacy-rules', 'retreat-rules', 'prisoner-rules',
     'setup-utils', 'status-ui', 'game'].forEach(name =>
     vm.runInContext(fs.readFileSync(`js/${name}.js`, 'utf8'), context));
 context.finishResolution = () => { resolutions++; };

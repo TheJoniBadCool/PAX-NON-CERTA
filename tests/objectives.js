@@ -33,7 +33,7 @@ const document = {
 };
 const context = vm.createContext({
     document, window: { addEventListener() {} }, console, Math: Object.create(Math),
-    setTimeout(fn) { fn(); }, requestAnimationFrame() {},
+    setTimeout(fn) { fn(); }, clearTimeout() {}, requestAnimationFrame() {},
     bindBoardInteractions() {}, renderBoard() {}, renderBattleCandidates() {}, renderBattleRolls() {},
     renderCaptureChoices() {},
     renderCustomSetupBoard() {}, renderCustomSetupPlayers() {},
@@ -48,7 +48,7 @@ const context = vm.createContext({
     }
 });
 [
-    'constants', 'models', 'game-state', 'diplomacy-rules', 'setup-utils', 'board-utils', 'battle-rules',
+    'constants', 'models', 'game-state', 'planning-timer', 'diplomacy-rules', 'setup-utils', 'board-utils', 'battle-rules',
     'siege-rules', 'movement-rules', 'planning-rules', 'retreat-rules', 'prisoner-rules', 'objective-rules',
     'board-setup', 'starting-position', 'setup-actions', 'status-ui', 'allied-resolution', 'game'
 ].forEach(name => vm.runInContext(fs.readFileSync(`js/${name}.js`, 'utf8'), context));
@@ -152,6 +152,9 @@ async function run() {
         /Cannot place a resource in every quadrant/);
     assert.equal(document.getElementById('btn-confirm-custom-setup').disabled, false,
         'A failed generator must not prevent starting a manually painted sandbox');
+    document.getElementById('custom-resource-balance').handlers.change({ target: { value: 'tiered' } });
+    assert.equal(state.resourceBalance, 'tiered');
+    assert.equal(balanceSelector.value, 'tiered');
     document.getElementById('custom-resource-balance').handlers.change({ target: { value: 'off' } });
     assert.equal(state.resourceBalance, 'off');
     assert.equal(balanceSelector.value, 'off');
@@ -177,7 +180,7 @@ async function run() {
     for (let player = 1; player <= 2; player++) {
         const castle = state.board.flat().find(piece => piece && piece.player === player);
         assert.equal(state.board.flat().filter(piece => piece && piece.player === player).length, 1);
-        assert.equal(castle.contents.length, 12);
+        assert.equal(castle.contents.length, 7);
         assert.equal(state.objectives[player - 1].filter(objective => objective.kind === 'lose').length, 1,
             'One physical starting castle must create one loss objective');
     }
@@ -187,8 +190,9 @@ async function run() {
     context.Math.random = () => 0.99;
     for (let completed = 1; completed <= 4; completed++) {
         await api.resolveAllMoves();
-        assert.equal(state.resources[0].food, completed === 4 ? 1 : 0,
-            'Production happens after the fourth resolved round, not at the start of round four');
+        assert.equal(state.resources[0].food, completed,
+            'Default production happens after each completed round');
+        assert.equal(state.lastResourceProductionRound, completed);
     }
     assert.equal(state.round, 5);
     assert.equal(state.lastResourceProductionRound, 4);

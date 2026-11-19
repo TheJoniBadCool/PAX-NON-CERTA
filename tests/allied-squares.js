@@ -47,7 +47,7 @@ const context = vm.createContext({
         getBadge: () => ({ text: '', ready: false })
     }
 });
-['constants', 'models', 'game-state', 'setup-utils', 'diplomacy-rules', 'board-utils',
+['constants', 'models', 'game-state', 'planning-timer', 'setup-utils', 'diplomacy-rules', 'board-utils',
     'movement-rules', 'planning-rules', 'battle-rules', 'siege-rules', 'retreat-rules', 'prisoner-rules',
     'objective-rules', 'board-renderer', 'status-ui', 'battle-ui', 'allied-resolution', 'game']
     .forEach(name => vm.runInContext(fs.readFileSync(`js/${name}.js`, 'utf8'), context));

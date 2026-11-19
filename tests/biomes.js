@@ -128,7 +128,7 @@ for (const size of [12, 16]) {
             assert.equal(piece.player === api.rebelId, !isPlayerProvince,
                 'Each province has its player castle or one rebel castle, never both');
             if (isPlayerProvince) {
-                assert.equal(api.getPieceContents(piece).length, 12,
+                assert.equal(api.getPieceContents(piece).length, 7,
                     'All starting player units must be in their province castle');
             }
         }

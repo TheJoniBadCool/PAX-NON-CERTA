@@ -69,6 +69,19 @@ function assertBalanced(resources, requireAll) {
     }
 }
 
+function assertChanceProfile(resources, balance) {
+    const chances = resources.filter(Boolean).map(resource => resource.productionChance).sort((a, b) => a - b);
+    if (balance === 'all-100') {
+        assert(chances.every(chance => chance === 100), 'Every resource has a 100% chance');
+        return;
+    }
+    assert.deepEqual(plain(chances), [
+        ...Array(Math.max(0, chances.length - 7)).fill(20),
+        ...Array(Math.min(4, Math.max(0, chances.length - 3))).fill(50),
+        ...Array(Math.min(3, chances.length)).fill(100)
+    ].sort((a, b) => a - b), 'Tiered chances use the 100%, 50%, and 20% profile');
+}
+
 for (const size of [12, 16]) {
     for (const mode of ['8', '12', '16']) {
         state.resourceCapitals = false;
@@ -98,7 +111,7 @@ for (const size of [12, 16]) {
             .filter(child => child.className === 'province-resource');
         assert.equal(markers.length, Number(mode), 'One icon per resource-bearing province');
         assert(markers.every(marker => !/\d/.test(marker.innerText) &&
-            /Production chance: \d+% every 4 rounds/.test(marker.title)));
+            /Production chance: \d+% per production check/.test(marker.title)));
         assert(boardEl.children.some(square => square.className.includes('sq-fog') &&
             square.children.some(child => child.className === 'province-resource')),
         'Resource icons remain visible in fog');
@@ -185,6 +198,23 @@ for (const size of [12, 16]) {
         }
     }
 }
+for (const size of [12, 16]) {
+    for (const mode of ['8', '12', '16']) {
+        for (const balance of ['all-100', 'tiered']) {
+            const starting = api.createStartingBoard(allPlayers, size, 'chance-profile', null, 'zero', mode, balance);
+            assertChanceProfile(starting.provinceResources, balance);
+            assert.deepEqual(plain(starting.provinceResources), plain(api.createStartingBoard(
+                allPlayers, size, 'chance-profile', null, 'zero', mode, balance).provinceResources),
+            'Chance profiles are reproduced by the map seed');
+            state.activePlayers = allPlayers;
+            state.resourceMode = mode;
+            state.resourceBalance = balance;
+            api.initBoard(null, size, 'chance-profile');
+            assert.deepEqual(plain(state.provinceResources), plain(starting.provinceResources),
+                'Chance-profile preview and game must match');
+        }
+    }
+}
 state.resourceBalance = 'off';
 state.resourceCapitals = false;
 
@@ -209,7 +239,7 @@ for (const players of [[true, true, false, false], [true, true, true, false]]) {
 
 for (const size of [12, 16]) {
     for (const mode of ['8', '12', '16']) {
-        for (const balance of ['off', 'allow-empty', 'require-all']) {
+        for (const balance of ['off', 'allow-empty', 'require-all', 'all-100', 'tiered']) {
             state.resourceCapitals = false;
             const excluded = api.createStartingBoard(allPlayers, size, 'capital-pool', null, 'zero', mode, balance, false);
             const included = api.createStartingBoard(allPlayers, size, 'capital-pool', null, 'zero', mode, balance, true);
@@ -220,7 +250,11 @@ for (const size of [12, 16]) {
             assert.deepEqual(plain(included.biomes), plain(excluded.biomes));
             assert.deepEqual(counts(included.provinceResources, 'type', Array.from(api.types, type => type.key)),
                 plain(api.modes[mode].counts));
-            if (balance !== 'off') assertBalanced(included.provinceResources, balance === 'require-all');
+            if (balance === 'allow-empty' || balance === 'require-all') {
+                assertBalanced(included.provinceResources, balance === 'require-all');
+            } else if (balance === 'all-100' || balance === 'tiered') {
+                assertChanceProfile(included.provinceResources, balance);
+            }
             if (mode === '16') assert.deepEqual(plain(included), plain(excluded));
             state.activePlayers = allPlayers;
             state.resourceMode = mode;
@@ -344,6 +378,8 @@ assert.equal(api.generateProvinceResources(state.board, '8', api.createSeededRan
     .filter(Boolean).length, 0, 'Sparse custom maps never generate a negative count');
 assert.equal(api.generateProvinceResources(state.board, '12', api.createSeededRandom('custom'))
     .filter(Boolean).length, 3);
+assertChanceProfile(api.generateProvinceResources(state.board, '12',
+    api.createSeededRandom('custom'), 'tiered'), 'tiered');
 state.board[1][1] = castle(1, 'contested');
 assert.equal(api.generateProvinceResources(state.board, '12', api.createSeededRandom('custom'))[0], null,
     'A province shared with a player is not a rebel province');
@@ -367,6 +403,7 @@ for (const chance of [5, 95]) {
         'Random assignment includes both 5% and 95%');
 }
 state.board = Array.from({ length: 16 }, () => Array(16).fill(null));
+state.biomes = Array.from({ length: 16 }, () => Array(16).fill('plains'));
 state.board[0][0] = castle(1, 'probability-test');
 for (const chance of [5, 25, 50, 75, 95]) {
     state.provinceResources[0] = { type: 'food', productionChance: chance };
@@ -380,8 +417,27 @@ for (const chance of [5, 25, 50, 75, 95]) {
 }
 
 state.reset();
-state.activePlayers = [true, true, true, false];
 state.board = Array.from({ length: 16 }, () => Array(16).fill(null));
+state.biomes = Array.from({ length: 16 }, () => Array(16).fill('plains'));
+state.board[0][0] = castle(1, 'interval-test');
+state.provinceResources[0] = { type: 'food', productionChance: 100 };
+assert.equal(state.resourceProductionInterval, 1, 'Every-turn production is the default');
+for (const interval of [1, 2, 4]) {
+    state.resourceProductionInterval = interval;
+    state.lastResourceProductionRound = null;
+    state.resources[0].food = 0;
+    for (let round = 1; round <= 8; round++) {
+        assert.equal(api.resolveResourceProduction(round, () => 0), round % interval === 0,
+            `Interval ${interval} checks only at its matching completed rounds`);
+    }
+    assert.equal(state.resources[0].food, 8 / interval);
+}
+
+state.reset();
+state.activePlayers = [true, true, true, false];
+state.resourceProductionInterval = 4;
+state.board = Array.from({ length: 16 }, () => Array(16).fill(null));
+state.biomes = Array.from({ length: 16 }, () => Array(16).fill('plains'));
 state.board[0][0] = castle(1, 'red');
 state.board[0][4] = castle(2, 'blue');
 state.board[0][8] = castle(5, 'rebel');
@@ -433,9 +489,171 @@ for (const multiplayer of [false, true]) {
         }
     }
 }
+for (const size of [12, 16]) {
+    function setupRaid() {
+        state.reset();
+        state.boardSize = size;
+        state.board = Array.from({ length: size }, () => Array(size).fill(null));
+        state.biomes = Array.from({ length: size }, () => Array(size).fill('plains'));
+        state.board[1][1] = castle(1, 'resource-owner');
+        state.provinceResources[0] = { type: 'food', productionChance: 100 };
+    }
+    function army(player, types) {
+        return { id: `army-${player}`, player, type: types[0],
+            contents: types.map((type, index) => api.createUnit(player, type, `unit-${player}-${index}`)) };
+    }
+    function produce(random = () => 0) {
+        api.resolveResourceProduction((state.lastResourceProductionRound || 0) + 1, random);
+    }
+    for (const type of ['p', 'n', 'b', 'q', 'k']) {
+        setupRaid();
+        state.board[0][0] = army(2, [type]);
+        produce();
+        const raids = ['p', 'n'].includes(type);
+        assert.equal(state.resources[0].food, raids ? 0 : 1);
+        assert.equal(state.resources[1].food, raids ? 1 : 0,
+            'Only Pawns and Horses raid enemy resources');
+    }
+    setupRaid();
+    state.board[0][0] = castle(2, 'foreign-tower');
+    produce();
+    assert.equal(state.resources[0].food, 0);
+    assert.equal(state.resources[1].food, 0, 'Tower-only stacks cannot raid a contested province');
+    setupRaid();
+    state.board[0][1] = army(2, ['p']);
+    produce();
+    assert.equal(state.resources[0].food, 1, 'Standing nearby in the province does not raid');
+    state.board[0][0] = state.board[0][1];
+    state.board[0][1] = null;
+    produce();
+    produce();
+    assert.equal(state.resources[0].food, 1);
+    assert.equal(state.resources[1].food, 2, 'Raiding continues while the army occupies the site');
+    assert.equal(api.resolveResourceProduction(state.lastResourceProductionRound), false);
+    assert.equal(state.resources[1].food, 2, 'Duplicate checks cannot pay raiders twice');
+    state.board[0][0] = null;
+    produce();
+    assert.equal(state.resources[0].food, 2, 'Owner income resumes after the raider leaves');
+
+    setupRaid();
+    const mixed = army(2, ['q', 'p', 'b']);
+    state.board[0][0] = mixed;
+    produce();
+    assert.equal(state.resources[1].food, 1, 'A free Pawn in a mixed stack enables raiding');
+    Object.assign(mixed.contents[1], { prisonerOf: 2, originalPlayer: 3 });
+    produce();
+    assert.equal(state.resources[0].food, 1, 'Captured Pawns do not enable raiding');
+    mixed.contents = [mixed.contents[1]];
+    produce();
+    assert.equal(state.resources[0].food, 2, 'Prisoner-only stacks do not raid');
+    mixed.contents.push(api.createUnit(2, 'n', 'free-horse'));
+    produce();
+    assert.equal(state.resources[1].food, 2, 'A free Horse alongside prisoners enables raiding');
+
+    setupRaid();
+    state.board[0][0] = army(2, ['p']);
+    const pair = state.diplomacy.find(pair => pair.players.includes(0) && pair.players.includes(1));
+    pair.status = 'allied';
+    produce();
+    assert.equal(state.resources[0].food, 1, 'Allies neither steal nor block owner income');
+    state.board[0][0] = [army(1, ['p']), army(2, ['n'])];
+    produce();
+    assert.equal(state.resources[0].food, 2, 'Allied co-occupancy leaves owner income unchanged');
+    state.board[0][0] = army(2, ['p']);
+    pair.status = 'war';
+    produce();
+    assert.equal(state.resources[1].food, 1, 'Declaring war enables raiding without moving');
+    pair.status = 'allied';
+    produce();
+    assert.equal(state.resources[0].food, 3, 'A new alliance immediately ends raiding');
+
+    for (const player of [2, 5]) {
+        setupRaid();
+        state.board[0][0] = army(player, ['p']);
+        if (player === 2) state.eliminated[1] = true;
+        produce();
+        assert.equal(state.resources[0].food, 1, 'Eliminated players and rebels cannot raid or block production');
+    }
+    setupRaid();
+    state.board[0][0] = army(2, ['n']);
+    state.activePlayers[1] = false;
+    produce();
+    assert.equal(state.resources[0].food, 1, 'Inactive players cannot raid');
+
+    for (const ownership of ['empty', 'rebel', 'contested', 'eliminated', 'inactive']) {
+        setupRaid();
+        if (ownership === 'empty') state.board[1][1] = null;
+        if (ownership === 'rebel') state.board[1][1] = castle(5, 'rebel-owner');
+        if (ownership === 'contested') state.board[1][0] = castle(3, 'other-owner');
+        if (ownership === 'eliminated') state.eliminated[0] = true;
+        if (ownership === 'inactive') state.activePlayers[0] = false;
+        state.board[0][0] = army(2, ['n']);
+        produce();
+        assert.equal(state.resources[1].food, 1, `Raiders collect from ${ownership} provinces`);
+        state.board[0][0] = null;
+        produce();
+        assert.equal(state.resources[1].food, 1, 'Otherwise non-producing provinces stop paying when raiders leave');
+        assert.equal(state.resources[0].food, 0);
+    }
+
+    setupRaid();
+    state.diplomacy.find(pair => pair.players.includes(1) && pair.players.includes(2)).status = 'allied';
+    state.board[0][0] = [army(2, ['p']), army(3, ['n'])];
+    for (let roll = 0; roll < 100; roll++) {
+        const rolls = [0, roll / 100];
+        produce(() => {
+            assert(rolls.length, 'Only production and recipient selection need random rolls');
+            return rolls.shift();
+        });
+        assert.equal(rolls.length, 0);
+    }
+    assert.equal(state.resources[0].food, 0);
+    assert.equal(state.resources[1].food, 50);
+    assert.equal(state.resources[2].food, 50, 'Multiple raiders have equal chances; production is not duplicated');
+    state.diplomacy.find(pair => pair.players.includes(0) && pair.players.includes(1)).status = 'allied';
+    produce();
+    assert.equal(state.resources[1].food, 50, 'Allies of the owner are excluded from recipient selection');
+    assert.equal(state.resources[2].food, 51);
+
+    setupRaid();
+    state.biomes[0][0] = 'mountain';
+    state.board[0][0] = army(2, ['p']);
+    produce();
+    assert.equal(state.resources[0].food, 1, 'Generated resources use the same mountain avoidance as rendering');
+    state.board[0][1] = state.board[0][0];
+    state.board[0][0] = null;
+    produce();
+    assert.equal(state.resources[1].food, 1, 'Raiding uses the displayed generated resource position');
+
+    setupRaid();
+    state.provinceResources[0] = [
+        { type: 'food', productionChance: 100, row: 0, column: 1 },
+        { type: 'wood', productionChance: 100, row: 0, column: 1 },
+        { type: 'gold', productionChance: 100, row: 1, column: 0 }
+    ];
+    state.board[0][1] = army(2, ['n']);
+    produce();
+    assert.equal(state.resources[1].food, 1);
+    assert.equal(state.resources[1].wood, 1, 'All custom resource types on the occupied square are raided');
+    assert.equal(state.resources[0].gold, 1, 'Other sites in the same province keep paying the owner');
+    for (const chance of [0, 12.5, 50, 100]) {
+        state.provinceResources[0] = [{ type: 'food', productionChance: chance, row: 0, column: 1 }];
+        state.resources[1].food = 0;
+        for (let roll = 0; roll < 200; roll++) produce(() => roll / 200);
+        assert.equal(state.resources[1].food, chance * 2, 'Raiding preserves exact production probabilities');
+    }
+    setupRaid();
+    state.resourceProductionInterval = 4;
+    state.board[0][0] = army(2, ['p']);
+    for (const round of [1, 2, 3]) assert.equal(api.resolveResourceProduction(round), false);
+    assert.equal(state.resources[1].food, 0, 'Raiding does not pay between scheduled production checks');
+    api.resolveResourceProduction(4, () => 0);
+    assert.equal(state.resources[1].food, 1);
+}
 state.reset();
 assert(state.resources.every(stock => Object.values(stock).every(count => count === 0)));
 assert.equal(state.lastResourceProductionRound, null);
 assert.equal(state.provinceResources.filter(Boolean).length, 0);
 assert.equal(state.resourceCapitals, false);
+assert.equal(state.resourceProductionInterval, 1);
 console.log('Resource distribution, production, fog rendering and private stockpile checks passed.');

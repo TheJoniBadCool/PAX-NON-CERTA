@@ -28,12 +28,12 @@ const document = {
 };
 let objectiveInitializations = 0;
 const context = vm.createContext({
-    console, document, randomLevel: () => 0,
+    console, document, randomLevel: () => 0, clearTimeout() {},
     initializeObjectives() { objectiveInitializations++; },
     updatePlayerCards() {}, renderBoard() {},
     renderProvinceResource() {}
 });
-['constants', 'models', 'game-state', 'setup-utils', 'board-utils', 'board-setup', 'starting-position']
+['constants', 'models', 'game-state', 'planning-timer', 'setup-utils', 'board-utils', 'board-setup', 'starting-position']
     .forEach(name => vm.runInContext(fs.readFileSync(`js/${name}.js`, 'utf8'), context));
 context.gameState = vm.runInContext('new GameState()', context);
 const api = vm.runInContext(`({
@@ -53,6 +53,18 @@ const castleProvince = (board, player) => {
 };
 
 assert.equal(api.state.startingPosition, 'corner');
+assert.equal(api.state.startingArmy, 'default');
+for (const [preset, expected] of [
+    ['default', { r: 1, b: 1, p: 2, n: 1, q: 1, k: 1 }],
+    ['full', { r: 1, b: 2, p: 4, n: 2, q: 1, k: 1 }]
+]) {
+    const generated = api.createStartingBoard([true, false, false, false], 12,
+        `starting-army-${preset}`, null, 'zero', '8', 'off', false, null, 'corner', preset);
+    const castle = generated.board.flat().find(piece => piece?.player === 1);
+    const counts = Object.fromEntries(api.getPieceContents(castle).map(unit => unit.type)
+        .reduce((entries, type) => entries.set(type, (entries.get(type) || 0) + 1), new Map()));
+    assert.deepEqual(counts, expected, `The ${preset} starting army must match its selected roster`);
+}
 for (const size of [12, 16]) {
     const randomProvinces = new Set();
     for (let mask = 1; mask < 16; mask++) {
@@ -74,7 +86,7 @@ for (const size of [12, 16]) {
                 piece && api.getProvinceIndex(r, c, size) === province));
             const playerProvince = claimed.includes(province);
             assert.equal(pieces.length, playerProvince ? 1 : 2);
-            if (playerProvince) assert.equal(pieces[0].contents.length, 12);
+            if (playerProvince) assert.equal(pieces[0].contents.length, 7);
             else assert(pieces.every(piece => piece.player === 5));
         }
         random.board.forEach((row, r) => row.forEach((piece, c) => {
@@ -87,7 +99,7 @@ for (const size of [12, 16]) {
     }
     assert(randomProvinces.size > 4, 'Random mode must use more than the four corners');
     for (const mode of ['8', '12', '16']) {
-        for (const balance of ['off', 'allow-empty', 'require-all']) {
+        for (const balance of ['off', 'allow-empty', 'require-all', 'all-100', 'tiered']) {
             const map = api.createStartingBoard([true, true, true, true], size, 'balanced-starts',
                 null, 'zero', mode, balance, false, null, 'random');
             assert(map.provinceResources);
@@ -144,12 +156,26 @@ for (const size of [12, 16]) {
     api.state.board.forEach((row, r) => row.forEach((piece, c) => {
         if ([5, 6, 10].includes(api.getProvinceIndex(r, c, size))) {
             if (piece) {
-                assert.equal(piece.contents.length, 12);
-                assert.equal(piece.contents.filter(unit => unit.type === 'r').length, 2);
+                assert.equal(piece.contents.length, 7);
+                assert.equal(piece.contents.filter(unit => unit.type === 'r').length, 1);
                 assert.deepEqual(copy(api.getTowerGate(piece)), copy(api.getTowerGate(neutral[r][c])));
             }
         } else assert.deepEqual(copy(piece), neutral[r][c], 'Unchosen rebels stay unchanged');
     }));
     assert(api.chooseStartingProvince(0, 7), 'Selection messages are rejected after setup');
 }
+api.state.activePlayers = [true, false, false, false];
+api.state.startingPosition = 'agreement';
+api.state.startingArmy = 'full';
+api.initBoard(null, 12, 'agreement-full-army');
+api.state.phase = 'STARTING_POSITION';
+api.state.startingProvinces = [null, null, null, null];
+api.state.startingConfirmed = [false, false, false, false];
+assert.equal(api.chooseStartingProvince(0, 0), '');
+assert.equal(api.confirmStartingProvince(0), '');
+api.applyStartingProvinces();
+const fullAgreementCastle = api.state.board.flat().find(piece => piece?.player === 1);
+assert.equal(fullAgreementCastle.contents.length, 11,
+    "Gentleman's Agreement must apply the selected full roster");
+assert.equal(fullAgreementCastle.contents.filter(unit => unit.type === 'r').length, 1);
 console.log('Starting position generation, selection and hotseat checks passed.');

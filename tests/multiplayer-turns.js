@@ -84,6 +84,7 @@ const state = {
 };
 state.resourceMode = '8';
 state.resourceBalance = 'off';
+state.resourceProductionInterval = 1;
 state.provinceResources = [{ type: 'gold', productionChance: 75 }];
 state.resources = [{ gold: 99 }, { gold: 3 }, { gold: 0 }, { gold: 0 }];
 state.lastResourceProductionRound = 4;
@@ -93,8 +94,10 @@ let prisonerRequest;
 let spoilsRequest;
 let starts = 0;
 let agreementsFinished = 0;
+let now = 100000;
 const ctx = {
     document, PaxRelay,
+    Date: { now: () => now },
     BOARD_SIZES: [12, 16],
     REBEL_PLAYER_ID: 5,
     RESOURCE_TYPES: ['horse', 'food', 'wood', 'metal', 'gold'].map(key => ({ key })),
@@ -175,6 +178,10 @@ const ctx = {
     resolveAllMoves() { resolutions++; state.phase = 'RESOLVING'; return Promise.resolve(); }
 };
 Object.assign(ctx, new Function('ctx', `with (ctx) {
+    ${readSource('js/planning-timer.js')}
+    return { PlanningTimer };
+}`)(ctx));
+Object.assign(ctx, new Function('ctx', `with (ctx) {
     ${readSource('js/game-state.js')}
     ${readSource('js/diplomacy-rules.js')}
     return { createDiplomacyState, getDiplomacyPair, getPendingAllianceRequests, applyDiplomacyAction };
@@ -213,7 +220,9 @@ async function run() {
     document.getElementById('mp-resource-mode').value = '12';
     document.getElementById('mp-resource-balance').value = 'require-all';
     document.getElementById('mp-resource-capitals').checked = true;
+    document.getElementById('mp-resource-production-interval').value = '2';
     document.getElementById('mp-fog-sight').value = 'large';
+    document.getElementById('mp-starting-army').value = 'full';
     document.getElementById('btn-mp-create').handlers.click();
     await Promise.resolve();
 
@@ -351,6 +360,8 @@ async function run() {
         'The host-selected balance must be used and synchronized');
     assert(state.resourceCapitals === true && sync.game.resourceCapitals === true,
         'Capital eligibility must be used and synchronized');
+    assert(state.resourceProductionInterval === 2 && sync.game.resourceProductionInterval === 2,
+        'The host-selected production interval must be used and synchronized');
     assert(state.fogSight === 'large' && sync.game.fogSight === 'large',
         'The host-selected fog sight must be used and synchronized to guests');
     assert(sync.game.provinceResources === state.provinceResources &&
@@ -551,6 +562,12 @@ async function run() {
     setupMode.value = 'agreement';
     setupMode.handlers.change();
     assert(document.getElementById('btn-mp-start').disabled, 'Changing starting mode invalidates the preview');
+    const startingArmy = document.getElementById('mp-starting-army');
+    startingArmy.value = 'default';
+    startingArmy.handlers.change();
+    assert(document.getElementById('btn-mp-start').disabled,
+        'Changing starting army invalidates the preview');
+    startingArmy.value = 'full';
     document.getElementById('btn-mp-generate-map').handlers.click();
     document.getElementById('btn-mp-start').handlers.click();
     assert(starts === 3 && state.phase === 'STARTING_POSITION',
@@ -584,12 +601,53 @@ async function run() {
     assert(agreementSync.game.phase === 'STARTING_POSITION' &&
         agreementSync.game.startingProvinces[1] === 5 && agreementSync.game.startingConfirmed[1],
         'Rejoining guests must recover their province and confirmation');
+    assert(agreementSync.game.startingArmy === 'full',
+        'Rejoining guests must recover the host-selected starting army');
     multiplayer.requestStartingProvince(6);
     multiplayer.requestStartingConfirmation();
     assert(agreementsFinished === 1 && state.phase === 'PLANNING',
         'The final confirmation begins play exactly once');
     guest.emit('data', { type: 'starting-confirm', gameId: 3 });
     assert(agreementsFinished === 1, 'Duplicate confirmations must not restart play');
+
+    state.planningTimeSeconds = 5;
+    state.round = 1;
+    state.plans = [[], [], [], []];
+    state.committed = [false, false, false, false];
+    ctx.PlanningTimer.start();
+    const deadline = state.planningDeadline;
+    state.board[0][0] = { id: 'timed-guest', player: 2, type: 'n',
+        contents: [{ id: 'timed-unit', player: 2, type: 'n' }] };
+    const timedPlan = [{ pieceId: 'timed-guest', from: [0, 0], to: [0, 1] }];
+    guest.emit('data', { type: 'draft', gameId: 3, round: 1, plan: [] });
+    assert(!state.committed[1], 'Draft updates do not commit a player');
+    guest.emit('data', { type: 'draft', gameId: 3, round: 1, plan: timedPlan });
+    assert(state.plans[1][0].pieceId === 'timed-guest', 'The host retains the latest validated private draft');
+    multiplayer.onBoardRendered();
+    guest.close();
+    ctx.getDiplomacyPair(0, 1).requestedBy = 1;
+    now = deadline;
+    const previousResolutions = resolutions;
+    ctx.PlanningTimer.refresh();
+    assert(state.committed[0] && state.committed[1] && resolutions === previousResolutions + 1,
+        'The host auto-commits all active players at the exact deadline, including disconnected players');
+    assert(state.plans[1][0].pieceId === 'timed-guest', 'Expiration commits the last received draft, not an empty plan');
+    assert(ctx.getPendingAllianceRequests().length === 0,
+        'Expiration declines unanswered requests and allows resolution');
+    ctx.PlanningTimer.refresh();
+    assert(resolutions === previousResolutions + 1, 'Timer expiration resolves only once');
+    state.round++;
+    multiplayer.beginNextRound();
+    assert(state.planningDeadline === now + 5000 && state.phase === 'PLANNING',
+        'Every online round receives a fresh simultaneous deadline');
+    state.eliminated[0] = true;
+    state.phase = 'COMMITTED';
+    now += 5000;
+    ctx.PlanningTimer.refresh();
+    assert(resolutions === previousResolutions + 2 && state.committed[1],
+        'An eliminated host still enforces the deadline for surviving players');
+    ctx.PlanningTimer.stop();
+
     document.getElementById('mp-code').value = 'ABCDE';
     document.getElementById('btn-mp-join').handlers.click();
     await Promise.resolve();
@@ -645,6 +703,37 @@ async function run() {
     assert(requests[0].type === 'starting-province' && requests[0].province === null &&
         requests[1].type === 'starting-confirm' && requests.every(message => message.gameId === 3),
         'Client selection and confirmation requests must carry the current match identity');
+
+    const timedSync = JSON.parse(JSON.stringify(sync));
+    timedSync.game.phase = 'PLANNING';
+    timedSync.committed = [false, false, true, true];
+    timedSync.game.planningTimeSeconds = 5;
+    timedSync.hostNow = 5000;
+    timedSync.game.planningDeadline = 10000;
+    timedSync.myPlan = [{ pieceId: 'restored-draft' }];
+    relay.connection.emit('data', timedSync);
+    assert(!ctx.PlanningTimer.expired() && document.getElementById('planning-countdown').innerText.endsWith('0:05'),
+        'Guest clocks use host time even with a different local clock');
+    assert(state.plans[1][0].pieceId === 'restored-draft', 'Rejoining restores the latest host-received private draft');
+    state.plans[1] = [{ pieceId: 'draft-marker' }];
+    multiplayer.onBoardRendered();
+    const draftMessage = relay.connection.sent.at(-1);
+    assert(draftMessage.type === 'draft' && draftMessage.plan[0].pieceId === 'draft-marker',
+        'Timed guests send private drafts to the host before committing');
+    const sentCount = relay.connection.sent.length;
+    multiplayer.onBoardRendered();
+    assert(relay.connection.sent.length === sentCount, 'Unchanged drafts are not sent repeatedly');
+    now += 1000;
+    timedSync.hostNow += 1000;
+    relay.connection.emit('data', timedSync);
+    assert(state.plans[1][0].pieceId === 'draft-marker', 'Routine snapshots preserve unsent local editing');
+    assert(document.getElementById('planning-countdown').innerText.endsWith('0:04'),
+        'Repeated snapshots do not restart the deadline');
+    now += 4000;
+    ctx.PlanningTimer.refresh();
+    await multiplayer.toggleCommit();
+    assert(document.getElementById('planning-countdown').innerText.endsWith('0:00') && ctx.btnFinishPlan.disabled,
+        'Guests cannot edit or unlock at expiry while waiting for the host snapshot');
     print('Multiplayer turn checks passed');
 }
 

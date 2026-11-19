@@ -19,6 +19,10 @@ const REBEL_PLAYER_ID = 5;
 const REBEL_PLAYER = { id: REBEL_PLAYER_ID, name: 'Rebels', colorName: 'Grey', color: '#94a3b8', class: 'piece-p1 piece-eliminated' };
 const PLAYER_CODES = ['A', 'B', 'C', 'D', 'R'];
 const BOARD_SIZES = [12, 16];
+const STARTING_ARMY_PRESETS = {
+    default: ['r', 'b', 'p', 'p', 'n', 'q', 'k'],
+    full: ['r', 'b', 'p', 'p', 'n', 'q', 'b', 'p', 'p', 'n', 'k']
+};
 const RESOURCE_TYPES = [
     { key: 'horse', label: 'Horse', icon: '🐎' },
     { key: 'food', label: 'Food', icon: '🌾' },
@@ -31,6 +35,15 @@ const RESOURCE_MODES = {
     '12': { counts: [2, 4, 3, 2, 1] },
     '16': { counts: [3, 5, 4, 3, 1] }
 };
+const RESOURCE_PRODUCTION_INTERVALS = [1, 2, 4];
+
+function getResourceProductionInterval(interval = gameState.resourceProductionInterval) {
+    const value = Number(interval ?? 1);
+    if (!RESOURCE_PRODUCTION_INTERVALS.includes(value)) {
+        throw new Error(`Unsupported resource production interval: ${interval}`);
+    }
+    return value;
+}
 
 function createResourceStockpiles() {
     return Array.from({ length: 4 }, () =>

@@ -16,10 +16,11 @@ function element(id) {
 }
 const state = {
     round: 1, turnIndex: 0, phase: 'TRANSITION', multiplayer: false,
-    scores: [0, 0, 0, 0], objectives: [[], [], [], []]
+    scores: [0, 0, 0, 0], objectives: [[], [], [], []], resourceProductionInterval: 4
 };
 const context = vm.createContext({
     gameState: state,
+    getResourceProductionInterval: interval => Number(interval ?? state.resourceProductionInterval ?? 1),
     document: { getElementById: element },
     roundTagEl: element('round-tag'),
     PLAYERS: [{ name: 'Red' }]
@@ -35,7 +36,7 @@ for (let round = 1; round <= 13; round++) {
     const progress = (round - 1) % 4;
     assert.equal(element('round-clock-hand').style.transform, `rotate(${(round - 1) * 90}deg)`);
     assert.equal(element('round-clock-status').innerText, `${progress} / 4`);
-    assert.match(element('round-clock')['aria-label'], new RegExp(`production in ${4 - progress} rounds`));
+    assert.match(element('round-clock')['aria-label'], new RegExp(`production in ${4 - progress} rounds?`));
     for (const phase of ['PLANNING', 'COMMITTED', 'RESOLVING', 'TRANSITION', 'GAME_OVER']) {
         state.phase = phase;
         state.multiplayer = phase === 'COMMITTED';
@@ -54,7 +55,21 @@ render();
 assert.equal(element('round-clock-hand').style.transform, 'rotate(2430deg)', 'Snapshots restore round progress');
 assert.equal(element('round-clock-status').innerText, '3 / 4');
 
+for (const interval of [1, 2, 4]) {
+    state.resourceProductionInterval = interval;
+    for (let round = 1; round <= 8; round++) {
+        state.round = round;
+        render();
+        const progress = (round - 1) % interval;
+        assert.equal(element('round-clock-status').innerText, `${progress} / ${interval}`);
+        assert.match(element('round-clock')['aria-label'],
+            new RegExp(`production in ${interval - progress} rounds?`));
+    }
+}
+
 const html = fs.readFileSync('PaxNonCerta.html', 'utf8');
+assert.match(html, /id="resource-production-interval"[\s\S]*?Every turn \(default\)/);
+assert.match(html, /id="mp-resource-production-interval"[\s\S]*?Every turn \(default\)/);
 assert.match(html, /id="round-clock"[\s\S]*?id="btn-finish-plan"/);
 assert.match(html, /class="plan-action-icon round-clock-face"/, 'Clock and commit icon share dimensions');
 console.log('Round clock progression and lifecycle checks passed.');

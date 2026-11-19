@@ -282,9 +282,11 @@
         }
 
         function startNewGame(selectedPlayers, customBoard = null, boardSize = gameState.boardSize, seed = null,
-            customMap = null, startingPosition = 'corner') {
+            customMap = null, startingPosition = 'corner', startingArmy = gameState.startingArmy) {
+            PlanningTimer.stop();
             gameState.activePlayers = selectedPlayers;
             gameState.startingPosition = customBoard ? 'custom' : startingPosition;
+            gameState.startingArmy = startingArmy;
             gameState.startingProvinces = [null, null, null, null];
             gameState.startingConfirmed = [false, false, false, false];
             btnEditNames.classList.remove('hidden');
@@ -339,9 +341,14 @@
             updatePlayerCards();
             renderBoard();
             renderStartingPositionSelection();
+            PlanningTimer.start();
         }
 
         function showCustomSetup(selectedPlayers, setupBoard = null, setupMap = null) {
+            const planningTime = PlanningTimer.readSettings(Multiplayer.isEditingSetup() ? 'mp-' : '');
+            if (planningTime === null) return;
+            PlanningTimer.stop();
+            gameState.planningTimeSeconds = planningTime;
             gameState.activePlayers = selectedPlayers;
             if (setupBoard) gameState.boardSize = setupBoard.length;
             gameState.customSetupBoard = setupBoard || createEmptySetupBoard();
@@ -357,6 +364,8 @@
                 multiplayerSetup ? 'mp-resource-mode' : 'resource-mode').value;
             gameState.resourceBalance = document.getElementById(
                 multiplayerSetup ? 'mp-resource-balance' : 'resource-balance').value;
+            gameState.resourceProductionInterval = Number(document.getElementById(
+                multiplayerSetup ? 'mp-resource-production-interval' : 'resource-production-interval').value || 1);
             gameState.resourceCapitals = gameState.resourceMode === '16' || document.getElementById(
                 multiplayerSetup ? 'mp-resource-capitals' : 'resource-capitals').checked;
             document.getElementById('custom-resource-options').classList.toggle('hidden', multiplayerSetup);
@@ -494,6 +503,7 @@
         }
 
         function showPlayerSelection() {
+            PlanningTimer.stop();
             playerSelectionError.innerText = '';
             document.getElementById('board-size').value = String(gameState.boardSize);
             document.querySelectorAll('.player-name-input').forEach(input => {
@@ -523,6 +533,7 @@
                 resourceBalance: document.getElementById('resource-balance').value,
                 resourceCapitals: document.getElementById('resource-capitals').checked,
                 startingPosition: document.querySelector('input[name="setup-mode"]:checked').value,
+                startingArmy: document.getElementById('starting-army').value,
                 seed
             });
         }
@@ -554,7 +565,8 @@
                     document.getElementById('resource-mode').value,
                     document.getElementById('resource-balance').value,
                     document.getElementById('resource-capitals').checked, null,
-                    document.querySelector('input[name="setup-mode"]:checked').value);
+                    document.querySelector('input[name="setup-mode"]:checked').value,
+                    document.getElementById('starting-army').value);
             } catch (error) {
                 if (!(error instanceof ResourceBalanceError)) throw error;
                 hotseatMapPreview = null;
@@ -614,6 +626,7 @@
 
         function canEditPlans() {
             return gameState.phase === 'PLANNING' &&
+                !PlanningTimer.expired() &&
                 (!gameState.multiplayer || !Multiplayer.isPendingCommit());
         }
 
@@ -1114,7 +1127,7 @@
             renderBoard();
         });
 
-        btnFinishPlan.addEventListener('click', () => {
+        function commitCurrentPlans() {
             if (gameState.multiplayer) {
                 Multiplayer.toggleCommit();
                 return;
@@ -1122,9 +1135,12 @@
             if (gameState.phase !== 'PLANNING') return;
             pieceTooltip.classList.add('hidden');
             advanceTurn();
-        });
+        }
+
+        btnFinishPlan.addEventListener('click', commitCurrentPlans);
 
         function advanceTurn() {
+            PlanningTimer.stop();
             gameState.selectedSquare = null;
             gameState.validMoves = [];
 
@@ -1162,6 +1178,7 @@
                 return;
             }
             gameState.phase = 'PLANNING';
+            PlanningTimer.start();
             updatePlayerCards();
             renderBoard();
         });
@@ -1191,6 +1208,7 @@
 
         // --- SIMULTANEOUS TURN RESOLUTION & COMBAT ENGINE ---
         async function resolveAllMoves() {
+            PlanningTimer.stop();
             gameState.phase = 'RESOLVING';
             syncSieges();
             updatePlayerCards();
@@ -2027,6 +2045,9 @@
         });
         btnConfirmCustomSetup.addEventListener('click', confirmCustomSetup);
         btnStartSelectedGame.addEventListener('click', () => {
+            const planningTime = PlanningTimer.readSettings();
+            if (planningTime === null) return;
+            gameState.planningTimeSeconds = planningTime;
             const selectedPlayers = getSelectedHotseatPlayers();
             if (selectedPlayers.filter(Boolean).length < 2) {
                 playerSelectionError.innerText = 'Select at least two players to start.';
@@ -2040,8 +2061,11 @@
             gameState.fogSight = document.getElementById('fog-sight').value;
             gameState.resourceMode = document.getElementById('resource-mode').value;
             gameState.resourceBalance = document.getElementById('resource-balance').value;
+            gameState.resourceProductionInterval =
+                Number(document.getElementById('resource-production-interval').value || 1);
             gameState.resourceCapitals = gameState.resourceMode === '16' ||
                 document.getElementById('resource-capitals').checked;
+            gameState.startingArmy = document.getElementById('starting-army').value;
             gameState.boardSize = Number(document.getElementById('board-size').value);
             const setupMode = document.querySelector('input[name="setup-mode"]:checked').value;
             if (setupMode === 'custom') {
@@ -2055,7 +2079,8 @@
                 updateHotseatMapControls();
                 return;
             }
-            startNewGame(selectedPlayers, null, gameState.boardSize, hotseatMapPreview.seed, null, setupMode);
+            startNewGame(selectedPlayers, null, gameState.boardSize, hotseatMapPreview.seed, null,
+                setupMode, gameState.startingArmy);
         });
         document.getElementById('btn-generate-map').addEventListener('click', generateHotseatMapPreview);
         document.getElementById('btn-custom-generate-map').addEventListener('click', generateCustomMapPreview);
@@ -2090,7 +2115,7 @@
             updateHotseatMapControls();
         };
         document.querySelectorAll(
-            '#player-selection-list input[type="checkbox"], #board-size, #map-seed, #resource-mode, #resource-balance, #resource-capitals, ' +
+            '#player-selection-list input[type="checkbox"], #board-size, #map-seed, #resource-mode, #resource-balance, #resource-capitals, #starting-army, ' +
             'input[name="progression-mode"]'
         ).forEach(input => input.addEventListener(input.id === 'map-seed' ? 'input' : 'change',
             invalidateHotseatPreview));

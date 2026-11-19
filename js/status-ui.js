@@ -52,11 +52,15 @@ function showPrivacyOverlay() {
 function updateRoundDisplay() {
     roundTagEl.innerText = `Round ${gameState.round}`;
     const completedRounds = gameState.round - 1;
-    const cycleProgress = completedRounds % 4;
+    const interval = getResourceProductionInterval();
+    const cycleProgress = completedRounds % interval;
     const clock = document.getElementById('round-clock');
-    const description = `Round clock: ${cycleProgress} of 4 rounds completed; resource production in ${4 - cycleProgress} rounds`;
-    document.getElementById('round-clock-hand').style.transform = `rotate(${completedRounds * 90}deg)`;
-    document.getElementById('round-clock-status').innerText = `${cycleProgress} / 4`;
+    const roundsUntilProduction = interval - cycleProgress;
+    const roundLabel = roundsUntilProduction === 1 ? 'round' : 'rounds';
+    const description = `Round clock: ${cycleProgress} of ${interval} rounds completed; resource production in ${roundsUntilProduction} ${roundLabel}`;
+    document.getElementById('round-clock-hand').style.transform =
+        `rotate(${completedRounds * 360 / interval}deg)`;
+    document.getElementById('round-clock-status').innerText = `${cycleProgress} / ${interval}`;
     clock.setAttribute('aria-label', description);
     clock.title = description;
     renderObjectives();

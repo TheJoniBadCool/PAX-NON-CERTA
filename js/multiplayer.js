@@ -30,7 +30,8 @@ const Multiplayer = (() => {
         logTimer: null,
         retryTimer: null,
         pendingCommit: null,
-        pendingTimer: null
+        pendingTimer: null,
+        draftSignature: null
     };
 
     const $ = id => document.getElementById(id);
@@ -60,6 +61,7 @@ const Multiplayer = (() => {
             resourceBalance: $('mp-resource-balance').value,
             resourceCapitals: $('mp-resource-capitals').checked,
             setupMode: $('mp-setup-mode').value,
+            startingArmy: $('mp-starting-army').value,
             setupBoard: m.setupBoard,
             setupMap: m.setupMap,
             seed
@@ -89,7 +91,8 @@ const Multiplayer = (() => {
             starting = createStartingBoard(
                 activePlayers, m.boardSize, seed, custom ? m.setupBoard : null, progression,
                 $('mp-resource-mode').value, $('mp-resource-balance').value,
-                $('mp-resource-capitals').checked, custom ? m.setupMap : null, $('mp-setup-mode').value);
+                $('mp-resource-capitals').checked, custom ? m.setupMap : null, $('mp-setup-mode').value,
+                $('mp-starting-army').value);
         } catch (error) {
             if (!(error instanceof ResourceBalanceError)) throw error;
             invalidateLobbyMapPreview(error.message);
@@ -314,15 +317,24 @@ const Multiplayer = (() => {
         }
         const index = conn._slot;
         if (index === undefined || !m.slots[index] || m.slots[index].conn !== conn) return;
-        if (message.type === 'commit') {
+        if (['draft', 'commit', 'unlock', 'diplomacy', 'armour'].includes(message.type) &&
+            PlanningTimer.expired()) {
+            expirePlanning();
+            syncTo(index);
+            return;
+        }
+        if (message.type === 'draft' || message.type === 'commit') {
             if (message.gameId !== m.gameId || message.round !== gameState.round) return;
+            if (message.type === 'draft' && (!(gameState.planningTimeSeconds > 0) ||
+                gameState.committed[index])) return;
             const plan = sanitizePlan(index, message.plan);
             if (!plan) {
                 conn.send({ type: 'notice', text: 'Your plan was rejected by the host. Please re-plan.' });
                 syncTo(index);
                 return;
             }
-            hostSetCommit(index, true, plan);
+            if (message.type === 'draft') gameState.plans[index] = plan;
+            else hostSetCommit(index, true, plan);
         } else if (message.type === 'unlock') {
             if (message.gameId !== m.gameId || message.round !== gameState.round) return;
             hostSetCommit(index, false);
@@ -487,6 +499,8 @@ const Multiplayer = (() => {
 
     function startMatch() {
         if (!isHost() || m.started) return;
+        const planningTime = PlanningTimer.readSettings('mp-');
+        if (planningTime === null) return;
         const needed = m.roster.slice(0, m.count);
         if (!needed.every(entry => entry && entry.connected)) return;
         const custom = $('mp-setup-mode').value === 'custom';
@@ -506,14 +520,17 @@ const Multiplayer = (() => {
         gameState.fogSight = $('mp-fog-sight').value;
         gameState.resourceMode = $('mp-resource-mode').value;
         gameState.resourceBalance = $('mp-resource-balance').value;
+        gameState.resourceProductionInterval = Number($('mp-resource-production-interval').value || 1);
         gameState.resourceCapitals = gameState.resourceMode === '16' || $('mp-resource-capitals').checked;
+        gameState.startingArmy = $('mp-starting-army').value;
+        gameState.planningTimeSeconds = planningTime;
         m.started = true;
         m.gameId++;
         gameState.multiplayer = true;
         gameState.committed = [false, false, false, false];
         startNewGame([0, 1, 2, 3].map(i => i < m.count),
             custom ? m.setupBoard : null, m.boardSize, m.mapSeed, custom ? m.setupMap : null,
-            $('mp-setup-mode').value);
+            $('mp-setup-mode').value, gameState.startingArmy);
         gameState.turnIndex = m.myIndex;
         hideAllModals();
         renderStartingPositionSelection();
@@ -562,6 +579,29 @@ const Multiplayer = (() => {
         if (value) checkAllCommitted();
     }
 
+    function expirePlanning() {
+        if (!m.started || !PlanningTimer.expired() ||
+            !['PLANNING', 'COMMITTED'].includes(gameState.phase)) return;
+        clearTransientUi();
+        if (!isHost()) {
+            refreshControls();
+            return;
+        }
+        gameState.eliminated.forEach((eliminated, index) => {
+            if (!eliminated) gameState.committed[index] = true;
+        });
+        gameState.phase = 'COMMITTED';
+        getPendingAllianceRequests().forEach(pair => { pair.requestedBy = null; });
+        const text = 'Planning time expired. Plans committed; unanswered alliance requests declined.';
+        logAction(text);
+        toast(text);
+        broadcastToClients({ type: 'notice', text });
+        updatePlayerCards();
+        renderBoard();
+        syncNow();
+        checkAllCommitted();
+    }
+
     function checkAllCommitted() {
         if (gameState.phase === 'RESOLVING') return;
         for (let i = 0; i < 4; i++) {
@@ -576,6 +616,10 @@ const Multiplayer = (() => {
 
     function forceSkipDisconnected() {
         if (!isHost() || !['PLANNING', 'COMMITTED'].includes(gameState.phase)) return;
+        if (PlanningTimer.expired()) {
+            expirePlanning();
+            return;
+        }
         for (let i = 0; i < 4; i++) {
             if (!gameState.eliminated[i] && !gameState.committed[i] && m.roster[i] && !m.roster[i].connected) {
                 gameState.plans[i] = [];
@@ -598,6 +642,10 @@ const Multiplayer = (() => {
 
     function handleDiplomacy(index, target, action) {
         if (!m.started) return;
+        if (PlanningTimer.expired()) {
+            expirePlanning();
+            return;
+        }
         const error = applyDiplomacyAction(index, target, action);
         if (error) {
             if (index === m.myIndex) toast(error);
@@ -610,6 +658,10 @@ const Multiplayer = (() => {
     }
 
     async function requestDiplomacy(target, action) {
+        if (PlanningTimer.expired()) {
+            expirePlanning();
+            return;
+        }
         if (isHost()) {
             handleDiplomacy(m.myIndex, target, action);
             return;
@@ -631,6 +683,7 @@ const Multiplayer = (() => {
         gameState.turnIndex = m.myIndex;
         gameState.lockedPieceIds = new Set();
         gameState.phase = gameState.eliminated[m.myIndex] ? 'COMMITTED' : 'PLANNING';
+        PlanningTimer.start();
         clearTransientUi();
         hintTextEl.innerText = 'New round! Plan your moves, then press Commit Plans.';
         updatePlayerCards();
@@ -645,6 +698,7 @@ const Multiplayer = (() => {
     }
 
     function returnToLobby() {
+        PlanningTimer.stop();
         m.started = false;
         gameState.multiplayer = false;
         $('btn-edit-names').classList.add('hidden');
@@ -667,6 +721,7 @@ const Multiplayer = (() => {
             roster: m.roster,
             committed: gameState.committed,
             noRender,
+            hostNow: Date.now(),
             game: null,
             myPlan: null
         };
@@ -680,6 +735,7 @@ const Multiplayer = (() => {
                 round: gameState.round,
                 phase: gameState.phase === 'COMMITTED' ? 'PLANNING' : gameState.phase,
                 startingPosition: gameState.startingPosition,
+                startingArmy: gameState.startingArmy,
                 startingProvinces: gameState.startingProvinces,
                 startingConfirmed: gameState.startingConfirmed,
                 diplomacy: gameState.diplomacy,
@@ -694,6 +750,9 @@ const Multiplayer = (() => {
                 resourceMode: gameState.resourceMode,
                 resourceBalance: gameState.resourceBalance,
                 resourceCapitals: gameState.resourceCapitals,
+                resourceProductionInterval: gameState.resourceProductionInterval,
+                planningTimeSeconds: gameState.planningTimeSeconds,
+                planningDeadline: gameState.planningDeadline,
                 provinceResources: gameState.provinceResources,
                 resources: gameState.resources.map((resources, i) => i === index ? resources : null),
                 lastResourceProductionRound: gameState.lastResourceProductionRound,
@@ -706,7 +765,9 @@ const Multiplayer = (() => {
                     desc: $('gameover-desc').innerText
                 } : null
             };
-            if (gameState.committed[index]) message.myPlan = gameState.plans[index];
+            if (gameState.committed[index] || gameState.planningTimeSeconds > 0) {
+                message.myPlan = gameState.plans[index];
+            }
         }
         return message;
     }
@@ -731,6 +792,22 @@ const Multiplayer = (() => {
     }
 
     function onBoardRendered() {
+        if (m.role === 'client' && m.started && gameState.planningTimeSeconds > 0 &&
+            gameState.phase === 'PLANNING' && !PlanningTimer.expired() &&
+            !gameState.committed[m.myIndex] && m.pendingCommit === null && m.conn?.open) {
+            const plan = gameState.plans[m.myIndex];
+            const signature = JSON.stringify([m.gameId, gameState.round, plan]);
+            if (signature !== m.draftSignature) {
+                m.draftSignature = signature;
+                m.conn.send({ type: 'draft', plan, gameId: m.gameId, round: gameState.round })
+                    .then(sent => { if (!sent) m.draftSignature = null; })
+                    .catch(error => {
+                        m.draftSignature = null;
+                        console.error('Could not send planning draft:', error);
+                        toast(`Could not send planning draft: ${error.message}`);
+                    });
+            }
+        }
         if (!isHost() || !m.started || m.syncTimer) return;
         m.syncTimer = setTimeout(syncNow, SYNC_DELAY_MS);
     }
@@ -828,6 +905,7 @@ const Multiplayer = (() => {
     function onClientConnectionLost(reason) {
         if (m.role !== 'client') return;
         clearPendingCommit();
+        m.draftSignature = null;
         clearTimeout(m.retryTimer);
         if (!m.joined) {
             if (m.peer) m.peer.destroy();
@@ -874,6 +952,7 @@ const Multiplayer = (() => {
             player.name = entry ? cleanName(entry.name, player.colorName) : player.colorName;
         });
         if (!message.started) {
+            PlanningTimer.stop();
             const wasStarted = m.started;
             m.started = false;
             gameState.multiplayer = false;
@@ -922,6 +1001,9 @@ const Multiplayer = (() => {
             resourceMode: game.resourceMode,
             resourceBalance: game.resourceBalance,
             resourceCapitals: game.resourceCapitals,
+            resourceProductionInterval: game.resourceProductionInterval ?? 1,
+            planningTimeSeconds: game.planningTimeSeconds ?? 0,
+            planningDeadline: game.planningDeadline ?? null,
             provinceResources: game.provinceResources,
             resources: game.resources,
             lastResourceProductionRound: game.lastResourceProductionRound,
@@ -931,6 +1013,7 @@ const Multiplayer = (() => {
             pendingCapture: game.pendingCapture || null,
             pendingSpoils: game.pendingSpoils || null,
             startingPosition: game.startingPosition || 'corner',
+            startingArmy: game.startingArmy || 'default',
             startingProvinces: game.startingProvinces || [null, null, null, null],
             startingConfirmed: game.startingConfirmed || [false, false, false, false],
             diplomacy: game.diplomacy ?? createDiplomacyState(),
@@ -943,7 +1026,11 @@ const Multiplayer = (() => {
         renderStartingPositionSelection();
         renderCaptureChoices();
         renderAlliedSpoils();
-        if (message.myPlan && !gameState.plans[message.you].length) gameState.plans[message.you] = message.myPlan;
+        if (message.myPlan && (gameState.planningTimeSeconds > 0
+            ? isNewRound || message.committed[message.you]
+            : !gameState.plans[message.you].length)) {
+            gameState.plans[message.you] = message.myPlan;
+        }
         cancelReleasedPrisonerPlans(new Set(gameState.retreating.flat()
             .filter(entry => entry.released).flatMap(entry => entry.contents.map(unit => unit.id))
             .filter(id => !previousReleasedIds.has(id))));
@@ -966,6 +1053,7 @@ const Multiplayer = (() => {
             updatePlayerCards();
             renderBoard();
         }
+        PlanningTimer.refresh(message.hostNow ?? null);
     }
 
     function applyBattle(message) {
@@ -1013,6 +1101,10 @@ const Multiplayer = (() => {
         const me = m.myIndex;
         if (gameState.eliminated[me] || m.pendingCommit !== null) return;
         if (!['PLANNING', 'COMMITTED'].includes(gameState.phase)) return;
+        if (PlanningTimer.expired()) {
+            expirePlanning();
+            return;
+        }
         const locked = gameState.phase === 'PLANNING';
         const gameId = m.gameId;
         const round = gameState.round;
@@ -1027,7 +1119,7 @@ const Multiplayer = (() => {
                     p_plan: plan, p_locked: locked
                 });
                 if (m.started && m.gameId === gameId && gameState.round === round &&
-                    gameState.phase === (locked ? 'PLANNING' : 'COMMITTED')) {
+                    gameState.phase === (locked ? 'PLANNING' : 'COMMITTED') && !PlanningTimer.expired()) {
                     hostSetCommit(me, locked, locked ? plan : null);
                 }
             } catch (error) {
@@ -1120,7 +1212,7 @@ const Multiplayer = (() => {
                 .filter((player, i) => !gameState.eliminated[i] && !gameState.committed[i])
                 .map(player => player.name);
             const pending = getPendingAllianceRequests().length;
-            return `Plan locked. Waiting for: ${waiting.join(', ') || 'no more plans'}.${pending ? ` ${pending} alliance request(s) must be answered on the player cards before resolution.` : ''} You can unlock to change it.`;
+            return `Plan locked. Waiting for: ${waiting.join(', ') || 'no more plans'}.${pending ? ` ${pending} alliance request(s) must be answered on the player cards before resolution.` : ''}${PlanningTimer.expired() ? '' : ' You can unlock to change it.'}`;
         }
         return 'Plan moves for your pieces, then Commit Plans.';
     }
@@ -1133,7 +1225,7 @@ const Multiplayer = (() => {
         }
         const me = m.myIndex;
         const canAct = ['PLANNING', 'COMMITTED'].includes(gameState.phase) && !gameState.eliminated[me];
-        btnFinishPlan.disabled = !canAct || m.pendingCommit !== null;
+        btnFinishPlan.disabled = !canAct || m.pendingCommit !== null || PlanningTimer.expired();
         const canUnlock = gameState.phase === 'COMMITTED' && !gameState.eliminated[me];
         $('commit-plan-icon').innerText = canUnlock ? '↶' : '✓';
         $('commit-plan-label').innerText = canUnlock ? 'Unlock Plan' : 'Commit Plans';
@@ -1178,6 +1270,7 @@ const Multiplayer = (() => {
     $('btn-mp-generate-map').addEventListener('click', generateLobbyMapPreview);
     $('btn-mp-setup').addEventListener('click', editCustomSetup);
     $('mp-setup-mode').addEventListener('change', () => invalidateLobbyMapPreview());
+    $('mp-starting-army').addEventListener('change', () => invalidateLobbyMapPreview());
     $('mp-map-seed').addEventListener('input', () => invalidateLobbyMapPreview());
     document.querySelectorAll('input[name="mp-progression"]').forEach(input =>
         input.addEventListener('change', () => invalidateLobbyMapPreview()));
@@ -1228,6 +1321,7 @@ const Multiplayer = (() => {
         confirmSetup,
         isPendingCommit: () => m.pendingCommit !== null,
         toggleCommit,
+        expirePlanning,
         requestArmourUpgrade,
         requestCaptureDecision,
         requestDiplomacy,

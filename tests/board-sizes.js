@@ -43,8 +43,8 @@ for (const size of api.sizes) {
         const [row, column] = api.state.board.flatMap((line, r) =>
             line.map((entry, c) => entry === castles[0] ? [r, c] : null)).find(Boolean);
         assert(row >= minRow && row <= maxRow && column >= minColumn && column <= maxColumn);
-        assert.equal(api.getPieceContents(castles[0]).length, 12);
-        assert.equal(api.getPieceContents(castles[0]).filter(unit => unit.type === 'r').length, 2);
+        assert.equal(api.getPieceContents(castles[0]).length, 7);
+        assert.equal(api.getPieceContents(castles[0]).filter(unit => unit.type === 'r').length, 1);
     }
     api.state.board.forEach((row, r) => row.forEach((piece, c) => {
         if (!api.isTowerPiece(piece)) return;
@@ -56,6 +56,16 @@ for (const size of api.sizes) {
     assert.equal(api.getAdjacentMoves(size - 1, size - 1).length, 3);
     assert.equal(api.coordsToNotation(size - 1, size - 1), `${String.fromCharCode(64 + size)}1`);
 }
+
+api.state.startingArmy = 'full';
+api.initBoard(null, 16, 'full-starting-army');
+for (let player = 1; player <= 4; player++) {
+    const castle = api.state.board.flat().find(piece => piece && piece.player === player);
+    const counts = Object.fromEntries(api.getPieceContents(castle).map(unit => unit.type)
+        .reduce((entries, type) => entries.set(type, (entries.get(type) || 0) + 1), new Map()));
+    assert.deepEqual(counts, { r: 1, b: 2, p: 4, n: 2, q: 1, k: 1 });
+}
+api.state.startingArmy = 'default';
 
 for (const size of api.sizes) {
     for (let mask = 1; mask < 16; mask++) {

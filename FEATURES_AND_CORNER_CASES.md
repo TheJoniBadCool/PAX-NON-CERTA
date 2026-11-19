@@ -17,8 +17,8 @@ chess rules.
 - **Corner Position** is the default: Red starts top-left, Blue top-right,
   Green bottom-right, and Yellow bottom-left. Each corner province is 3x3 on
   a 12x12 board or 4x4 on a 16x16 board.
-- Each selected player receives one castle stack holding their full 12-unit
-  roster: two Towers, two Bishops, four Pawns, two Horses, a Queen, and a King.
+- Each selected player receives one castle stack holding the selected roster:
+  the 7-unit default or the 11-unit full army.
 - Unselected players have no pieces and are marked eliminated from the start.
 - Starting-position options in Hotseat and the Multiplayer lobby are **Corner
   Position**, **Custom placement**, **Random**, and **Gentleman's Agreement**.
@@ -51,7 +51,7 @@ chess rules.
   - Custom pieces may be placed anywhere on the selected board.
   - The placement board keeps square, equally sized cells at either board size; scroll the modal to reach the full board on smaller screens.
   - Generate Map displays biomes, province ownership, and resources directly on the placement grid behind the pieces. Piece edits preserve the map.
-  - Editor tools paint any biome, erase pieces, and add/update or erase resource sites anywhere, including mountains. Different resource types can share a square; each site has its own 0–100% production probability and produces independently for its province owner.
+  - Editor tools paint any biome, erase pieces, and add/update or erase resource sites anywhere, including mountains. Different resource types can share a square; each site has its own 0–100% production probability and produces independently for its province owner unless raided.
   - Seed and generation-setting changes preserve manual edits. Generate Map explicitly replaces terrain/resources after confirmation.
   - Saved sandbox setups retain the complete map, probabilities, seed, and army; multiplayer uses the same edited map.
   - Reset clears pieces without changing terrain/resources; Confirm Placement can start any army composition, including an empty board. Without generation, the editor starts from blank plains.
@@ -195,18 +195,38 @@ chess rules.
   allowed (and total 0%) or prohibited, according to the host's selection.
   When prohibited, eligible provinces are selected to cover all quadrants;
   an impossible custom map or resource count produces a preview error instead.
-  Counts need not be equal across quadrants. Changing balance invalidates previews.
+  Counts need not be equal across quadrants. The all-100% option gives every
+  generated site a 100% chance. The tiered unbalanced option assigns 100% to
+  three sites, 50% to the next four, and 20% to all remaining sites; with fewer
+  than seven sites, tiers fill in that order. Tier assignments are randomized
+  among sites using the map seed. Changing balance invalidates previews.
   Resource icons are public even in fog and forests; tooltips show their chance.
   Resource types and chances are fixed to provinces, not castles, persist through
   conquest, and are reproduced by the map seed. There are no production numbers.
 - All resource icons use the first non-mountain square in their province, both
   on the board and in map previews; resources are never displayed on mountains.
-- After each fourth completed round (4, 8, 12, ...), after combat, sieges,
-  re-entry, and eliminations, each eligible province rolls independently against
+- At the selected production interval (every 1, 2, or 4 completed rounds), after combat, sieges,
+  re-entry, and eliminations, each eligible resource site rolls independently against
   its fixed chance to produce one resource for its current active,
   non-eliminated owner. Every resource can succeed or fail.
-  Rebel, empty, and contested provinces produce nothing. The public log announces
+  Without raiders, rebel, empty, contested, inactive, and eliminated provinces produce nothing. The public log announces
   production checks without revealing private results. Duplicate production is prevented.
+- An active, non-eliminated player's stack containing at least one non-prisoner
+  Pawn or Horse raids when standing on the resource's exact square at production
+  time. Other unit types may accompany it; prisoners do not enable raiding.
+  The raider receives production instead of the province owner, without changing
+  ownership or production chances. Allies of the owner neither raid nor block
+  production, including when sharing the square with the owner. Diplomacy is
+  checked at production time; hostile occupants fight through normal resolution first.
+- Eligible raiders can also collect from rebel, empty, contested, inactive, and
+  eliminated-player provinces. Rebels, inactive players, and eliminated players
+  cannot raid. If several eligible raiding players share a site, each successful
+  check awards exactly one resource to a uniformly random raiding player.
+- Raiding stops when the eligible army leaves or loses its last free Pawn/Horse.
+  No resources are transferred between scheduled checks, and existing stockpiles
+  are never stolen. Each custom site is checked separately: raiding one square
+  takes every resource type there but not resources elsewhere in the province.
+  Forest concealment does not prevent raiding, and stockpile results remain private.
 - Players start with zero resources; stockpiles have no cap and no spending
   mechanic. Cards use icon-and-count rows visible only to their own player.
   Hotseat handoff and resolution clear and hide all stockpile rows. Multiplayer
@@ -306,7 +326,17 @@ chess rules.
   - Blue: held-piece transfer.
 - Planned movement is animated before resolution.
 - The round number increments after resolution.
-- The clock is disabled. The objective checklist shows only the current player's
+- An optional pre-game planning timer accepts a whole-number duration in seconds
+  or minutes, shared by every player each round; it defaults off.
+- At zero, queued plans (including empty plans) commit automatically. Hotseat
+  starts each timer when planning begins, not during privacy handoffs, province
+  selection, alliance review, or resolution. Manual commitment stops that timer.
+- Online timers share a host-authoritative deadline. Timed guests send private
+  validated drafts to the host; expiry commits the latest received drafts even
+  for disconnected players and declines unanswered alliance requests. Plans
+  cannot be edited or unlocked after expiry. Rejoining preserves the deadline
+  and the last draft received by the host; each new round gets a fresh limit.
+- The objective checklist shows only the current player's
   objectives and score, clearing its contents during hotseat handoff and resolution.
 
 ### Movement rules
@@ -587,8 +617,9 @@ clarification rather than guessing.
 - An unselected player's corner must remain empty.
 - The first active turn must be the lowest-numbered selected player.
 - Every selected player's generated piece coordinates must be unique.
-- Random generation must create exactly two castle stacks and 12 units per
-  selected player, with one Queen castle and one King castle as specified above.
+- Random generation must create one castle stack per selected player containing
+  the chosen roster: 7 units for the default army or 11 for the full army. Each
+  selected player has one Queen castle and one King castle as specified above.
 - Every generated unit must have exactly one stable name, and names must be
   unique within each player and piece type.
 - Custom setup must allow any army composition, including empty armies, duplicate Kings,

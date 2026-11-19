@@ -15,6 +15,7 @@ class GameState {
         this.round = 1;
         this.phase = 'PLANNING';
         this.startingPosition = 'corner';
+        this.startingArmy = 'default';
         this.startingProvinces = [null, null, null, null];
         this.startingConfirmed = [false, false, false, false];
         this.activePlayers = [true, true, true, true];
@@ -35,6 +36,8 @@ class GameState {
         this.customSetupType = 'p';
         this.multiplayer = false;
         this.committed = [false, false, false, false];
+        this.planningTimeSeconds = 0;
+        this.planningDeadline = null;
         this.diplomacy = createDiplomacyState();
         this.diplomacyReviewer = null;
         this.objectives = [[], [], [], []];
@@ -45,6 +48,7 @@ class GameState {
         this.resourceMode = '8';
         this.resourceBalance = 'off';
         this.resourceCapitals = false;
+        this.resourceProductionInterval = 1;
         this.provinceResources = Array(16).fill(null);
         this.resources = createResourceStockpiles();
         this.lastResourceProductionRound = null;

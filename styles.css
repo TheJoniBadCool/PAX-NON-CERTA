@@ -439,6 +439,14 @@
         .plan-action:disabled { opacity: 0.4; cursor: not-allowed; }
 
         .round-clock { cursor: default; }
+        #planning-countdown {
+            margin-top: 0.35rem;
+            color: var(--text-main);
+            font-size: 1.5rem;
+            font-weight: 700;
+            font-variant-numeric: tabular-nums;
+            line-height: 1.2;
+        }
         .round-clock-face {
             fill: var(--bg-card);
             stroke: #a5b4fc;

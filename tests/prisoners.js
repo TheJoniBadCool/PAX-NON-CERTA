@@ -44,7 +44,7 @@ const context = vm.createContext({
     updateRoundDisplay() {}, showPrivacyOverlay() {},
     Multiplayer: { broadcastResolutionStart() {}, beginNextRound() {}, isPendingCommit() { return false; } }
 });
-['constants', 'models', 'game-state', 'setup-utils', 'board-utils', 'movement-rules',
+['constants', 'models', 'game-state', 'planning-timer', 'setup-utils', 'board-utils', 'movement-rules',
     'planning-rules', 'battle-rules', 'retreat-rules', 'prisoner-rules', 'objective-rules', 'siege-rules',
     'allied-resolution', 'game']
     .forEach(name => vm.runInContext(fs.readFileSync(`js/${name}.js`, 'utf8'), context));

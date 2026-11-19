@@ -113,10 +113,10 @@ function generateBiomes(board, random = Math.random) {
     return biomes;
 }
 
-// Place each player's full roster in one castle in their starting province.
+// Place each player's selected roster in one castle in their starting province.
 function generatePlayerPieces(playerIdx, random = Math.random, board = gameState.board,
     boardSize = gameState.boardSize, progressionMode = gameState.progressionMode,
-    province = [0, 3, 15, 12][playerIdx]) {
+    province = [0, 3, 15, 12][playerIdx], startingArmy = gameState.startingArmy) {
     const provinceRow = Math.floor(province / 4);
     const provinceColumn = province % 4;
     const minRow = Math.floor(provinceRow * boardSize / 4);
@@ -138,12 +138,13 @@ function generatePlayerPieces(playerIdx, random = Math.random, board = gameState
     }
 
     const [r, c] = coords[0];
-    board[r][c] = createPlayerCastle(playerIdx, random, progressionMode);
+    board[r][c] = createPlayerCastle(playerIdx, random, progressionMode, startingArmy);
 }
 
-function createPlayerCastle(playerIdx, random, progressionMode) {
+function createPlayerCastle(playerIdx, random, progressionMode, startingArmy = gameState.startingArmy) {
     const pieceId = `p${playerIdx + 1}_castle`;
-    const pieceTypes = ['r', 'b', 'p', 'p', 'n', 'q', 'r', 'b', 'p', 'p', 'n', 'k'];
+    const pieceTypes = STARTING_ARMY_PRESETS[startingArmy];
+    if (!pieceTypes) throw new Error(`Unsupported starting army: ${startingArmy}`);
     const typeCounts = {};
     const contents = pieceTypes.map((pieceType, unitIndex) => {
         typeCounts[pieceType] = (typeCounts[pieceType] || 0) + 1;
@@ -220,7 +221,7 @@ function getResourceQuadrant(province) {
 function generateProvinceResources(board, mode, random, balance = 'off', resourceCapitals = false) {
     const config = RESOURCE_MODES[mode];
     if (!config) throw new Error(`Unsupported resource mode: ${mode}`);
-    if (!['off', 'allow-empty', 'require-all'].includes(balance)) {
+    if (!['off', 'allow-empty', 'require-all', 'all-100', 'tiered'].includes(balance)) {
         throw new Error(`Unsupported resource balance: ${balance}`);
     }
     const rebels = new Set();
@@ -270,14 +271,19 @@ function generateProvinceResources(board, mode, random, balance = 'off', resourc
         return shuffle(shares.flatMap(share => Array(share.count).fill(share.index)));
     };
     const types = scale(config.counts);
+    const tieredChances = balance === 'tiered'
+        ? shuffle(selected.map((_, index) => index < 3 ? 100 : index < 7 ? 50 : 20))
+        : null;
     const resources = Array(16).fill(null);
     selected.forEach((province, index) => {
         resources[province] = {
             type: RESOURCE_TYPES[types[index]].key,
-            productionChance: balance === 'off' ? 5 + Math.floor(random() * 91) : 5
+            productionChance: balance === 'off' ? 5 + Math.floor(random() * 91)
+                : balance === 'all-100' ? 100
+                    : balance === 'tiered' ? tieredChances[index] : 5
         };
     });
-    if (balance !== 'off') {
+    if (balance === 'allow-empty' || balance === 'require-all') {
         for (let quadrant = 0; quadrant < 4; quadrant++) {
             const group = shuffle(selected.filter(province => getResourceQuadrant(province) === quadrant));
             if (!group.length) continue;
@@ -296,7 +302,7 @@ function generateProvinceResources(board, mode, random, balance = 'off', resourc
 function createStartingBoard(activePlayers, boardSize, seed, customBoard = null,
     progressionMode = gameState.progressionMode, resourceMode = gameState.resourceMode,
     resourceBalance = gameState.resourceBalance, resourceCapitals = gameState.resourceCapitals,
-    customMap = null, startingPosition = 'corner') {
+    customMap = null, startingPosition = 'corner', startingArmy = gameState.startingArmy) {
     resourceCapitals = resourceMode === '16' || resourceCapitals;
     const random = createSeededRandom(seed);
     const board = customBoard
@@ -313,7 +319,7 @@ function createStartingBoard(activePlayers, boardSize, seed, customBoard = null,
         for (let p = 0; p < 4; p++) {
             if (activePlayers[p] && startingPosition !== 'agreement') {
                 generatePlayerPieces(p, random, board, boardSize, progressionMode,
-                    startingPosition === 'random' ? provinces[p] : undefined);
+                    startingPosition === 'random' ? provinces[p] : undefined, startingArmy);
             }
         }
         generateRebelPieces(random, board, boardSize);
@@ -345,7 +351,7 @@ function initBoard(customBoard = null, boardSize = gameState.boardSize, seed = n
     const starting = createStartingBoard(
         gameState.activePlayers, gameState.boardSize, gameState.mapSeed, customBoard,
         gameState.progressionMode, gameState.resourceMode, gameState.resourceBalance,
-        gameState.resourceCapitals, customMap, gameState.startingPosition);
+        gameState.resourceCapitals, customMap, gameState.startingPosition, gameState.startingArmy);
     gameState.board = starting.board;
     gameState.biomes = starting.biomes;
     gameState.provinceResources = starting.provinceResources;

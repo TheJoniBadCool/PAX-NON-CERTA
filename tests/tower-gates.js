@@ -22,6 +22,7 @@ function containsSquare(moves, square) {
 
 for (let run = 0; run < 300; run++) {
     gameState.activePlayers = [true, true, true, true];
+    gameState.startingArmy = 'full';
     initBoard();
     assert(towersAreSpaced(gameState.board), 'Random towers must be spaced');
     assert(gameState.board.flat().filter(Boolean).length === 28,
@@ -35,12 +36,12 @@ for (let run = 0; run < 300; run++) {
         assert(castles.length === 1, 'Each selected player must have one starting castle');
         const contents = getPieceContents(castles[0]);
         const unitCounts = type => contents.filter(unit => unit.type === type).length;
-        assert(unitCounts('r') === 2 && unitCounts('b') === 2 &&
+        assert(unitCounts('r') === 1 && unitCounts('b') === 2 &&
             unitCounts('p') === 4 && unitCounts('n') === 2 &&
             unitCounts('q') === 1 && unitCounts('k') === 1,
-        'Each castle must hold the full standard 12-unit roster');
-        assert(contents.map(unit => unit.type).sort().join('') === 'bbknnppppqrr',
-            'The single castle must contain both Towers and every other starting piece');
+        'Each castle must hold the full selected 11-unit roster');
+        assert(contents.map(unit => unit.type).sort().join('') === 'bbknnppppqr',
+            'The single castle must contain the selected full roster');
         const namesByType = {};
         contents.forEach(unit => {
             (namesByType[unit.type] ||= []).push(unit.name);
@@ -48,7 +49,7 @@ for (let run = 0; run < 300; run++) {
         });
         Object.values(namesByType).forEach(names =>
             assert(new Set(names).size === names.length, 'Unit names must be unique by type'));
-        assert(contents.length === 12, 'Each starting castle must contain twelve units');
+        assert(contents.length === 11, 'Each full starting castle must contain eleven units');
     }
     for (let r = 0; r < 16; r++) {
         for (let c = 0; c < 16; c++) {

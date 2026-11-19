@@ -172,7 +172,7 @@ function getProvinceOwners(board) {
 
 function getProvinceResourceTooltip(resource) {
     const type = RESOURCE_TYPES.find(type => type.key === resource.type);
-    return `${type.label} · Production chance: ${resource.productionChance}% every 4 rounds`;
+    return `${type.label} · Production chance: ${resource.productionChance}% per production check`;
 }
 
 function getProvinceResources(resources, province) {
@@ -218,15 +218,25 @@ function renderProvinceResource(square, r, c, resources, size, biomes = gameStat
 }
 
 function resolveResourceProduction(completedRound, random = Math.random) {
-    if (completedRound < 1 || completedRound % 4 !== 0 ||
+    const interval = getResourceProductionInterval();
+    if (completedRound < 1 || completedRound % interval !== 0 ||
         gameState.lastResourceProductionRound >= completedRound) return false;
     const owners = getProvinceOwners(gameState.board);
     gameState.provinceResources.forEach((_, province) => {
         const owner = owners[province];
         for (const resource of getProvinceResources(gameState.provinceResources, province)) {
-            if (owner && gameState.activePlayers[owner - 1] &&
-                !gameState.eliminated[owner - 1] && random() * 100 < resource.productionChance) {
-                gameState.resources[owner - 1][resource.type]++;
+            const position = getResourcePosition(resource, province, gameState.boardSize, gameState.biomes);
+            const raiders = getPiecesAt(...position).filter(piece =>
+                gameState.activePlayers[piece.player - 1] && !gameState.eliminated[piece.player - 1] &&
+                !arePlayersFriendly(piece.player, owner) &&
+                getCombatContents(piece).some(unit => ['p', 'n'].includes(getUnitType(unit))))
+                .map(piece => piece.player);
+            const recipients = raiders.length ? raiders :
+                owner && gameState.activePlayers[owner - 1] && !gameState.eliminated[owner - 1] ? [owner] : [];
+            if (recipients.length && random() * 100 < resource.productionChance) {
+                const recipient = recipients.length === 1 ? recipients[0] :
+                    recipients[Math.floor(random() * recipients.length)];
+                gameState.resources[recipient - 1][resource.type]++;
             }
         }
     });
