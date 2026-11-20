@@ -96,8 +96,12 @@ state.resourceProductionInterval = 1;
 state.provinceResources = [{ type: 'gold', productionChance: 75 }];
 state.resources = [{ gold: 99 }, { gold: 3 }, { gold: 0 }, { gold: 0 }];
 state.lastResourceProductionRound = 4;
+state.provinceFood = [4, ...Array(15).fill(null)];
+state.provinceFoodOwners = [2, ...Array(15).fill(null)];
+state.lastProvinceFoodRound = 4;
 let resolutions = 0;
 let captureRequest;
+let refillRequest;
 let prisonerRequest;
 let spoilsRequest;
 let starts = 0;
@@ -183,6 +187,11 @@ const ctx = {
     getPieceContents: piece => piece.contents || [{ id: 'unit', type: 'p' }],
     canUnitsTarget: () => true, isPrisoner: () => false,
     renderCaptureChoices() {}, renderAlliedSpoils() {},
+    refillProvinceFood(player, province) {
+        refillRequest = { player, province };
+        state.provinceFood[province]++;
+        return true;
+    },
     decideCapture(player, captureId, unitId, fate) {
         captureRequest = { player, captureId, unitId, fate };
         return player === 2;
@@ -413,6 +422,15 @@ async function run() {
         sync.game.provinceResources[0][0].row === 1 &&
         sync.game.provinceResources[0][0].column === 1,
         'Rejoining guests must receive resource locations, chances and the last production round');
+    assert(sync.game.provinceFood[0] === 4 && sync.game.provinceFoodOwners[0] === 2 &&
+        sync.game.lastProvinceFoodRound === 4, 'Guest snapshots include province food state');
+    guest.emit('data', { type: 'purchase', action: 'province-food', targetId: '16', gameId: 1, round: 1 });
+    assert(!refillRequest, 'Out-of-range food refill targets are rejected');
+    guest.emit('data', { type: 'purchase', action: 'province-food', targetId: '0', gameId: 1, round: 1 });
+    assert(refillRequest.player === 2 && refillRequest.province === 0 && state.provinceFood[0] === 5,
+        'The host applies a guest food refill to the authenticated player and province');
+    assert(guest.sent.filter(message => message.type === 'sync' && message.game).pop().game.provinceFood[0] === 5,
+        'A food refill is synchronized to guests');
     document.getElementById('mp-show-resources-to-others').checked = false;
     state.showResourcesToOthers = false;
     multiplayer.syncAlliedState();

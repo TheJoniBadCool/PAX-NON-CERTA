@@ -52,8 +52,44 @@
         const pieceTooltipUnits = document.getElementById('piece-tooltip-units');
         const pieceTooltipCount = document.getElementById('piece-tooltip-count');
         const btnChooseDestination = document.getElementById('btn-choose-destination');
+        const recruitOptions = document.getElementById('castle-recruit-options');
+        const siegePopup = document.getElementById('siege-prepare-popup');
+        const siegeControl = document.getElementById('siege-prepare-control');
+        const requirementsPopup = document.getElementById('purchase-requirements');
+        function hideRequirements() {
+            requirementsPopup.classList.add('hidden');
+        }
+        function showRequirements(trigger) {
+            if (!trigger) return;
+            requirementsPopup.innerHTML = trigger.dataset.requirements;
+            requirementsPopup.classList.remove('hidden');
+            const rect = trigger.getBoundingClientRect();
+            const popup = requirementsPopup.getBoundingClientRect();
+            requirementsPopup.style.left = `${Math.max(4, Math.min(rect.left, window.innerWidth - popup.width - 4))}px`;
+            requirementsPopup.style.top = `${rect.top >= popup.height + 4 ? rect.top - popup.height - 4 : Math.min(rect.bottom + 4, window.innerHeight - popup.height - 4)}px`;
+        }
+        window.addEventListener('pointerover', event => {
+            const trigger = event.target.closest('.requirement-trigger');
+            if (trigger) showRequirements(trigger);
+        });
+        window.addEventListener('pointerdown', event => {
+            const trigger = event.target.closest('.requirement-trigger');
+            if (trigger) showRequirements(trigger);
+            else hideRequirements();
+        });
+        window.addEventListener('pointerout', event => {
+            const trigger = event.target.closest('.requirement-trigger');
+            if (event.pointerType !== 'touch' && trigger && !trigger.contains(event.relatedTarget)) hideRequirements();
+        });
+        window.addEventListener('focusin', event => showRequirements(event.target.closest('.requirement-trigger')));
+        window.addEventListener('focusout', event => {
+            const trigger = event.target.closest('.requirement-trigger');
+            if (trigger && !trigger.contains(event.relatedTarget)) hideRequirements();
+        });
         function dismissPieceTooltip() {
             pieceTooltip.classList.add('hidden');
+            recruitOptions.classList.add('hidden');
+            hideRequirements();
             gameState.selectedHeldPiece = null;
             gameState.selectedSquare = null;
             gameState.validMoves = [];
@@ -61,26 +97,69 @@
             renderBoard();
         }
         document.getElementById('btn-close-piece-tooltip').addEventListener('click', dismissPieceTooltip);
-        document.querySelectorAll('.resource-purchases').forEach(panel =>
-            panel.addEventListener('click', event => {
-                const button = event.target.closest('.resource-purchase-button');
-                if (!button || button.disabled || !canEditPlans()) return;
-                const action = button.dataset.purchase;
-                const targetId = button.dataset.target ?? null;
-                const player = gameState.turnIndex + 1;
-                if (gameState.multiplayer && !Multiplayer.isHost()) {
-                    Multiplayer.requestPurchase(action, targetId);
-                    return;
-                }
-                if (!purchaseResourceAction(player, action, targetId)) {
-                    hintTextEl.innerText = 'Purchase rejected. Check the turn, resources, and target requirements.';
-                    updatePlayerCards();
-                    return;
-                }
+        function handlePurchaseClick(event, refresh) {
+            const button = event.target.closest('[data-purchase]');
+            if (!button || button.disabled || !canEditPlans()) return;
+            const action = button.dataset.purchase;
+            const targetId = button.dataset.target ?? null;
+            const player = gameState.turnIndex + 1;
+            if (gameState.multiplayer && !Multiplayer.isHost()) {
+                Multiplayer.requestPurchase(action, targetId);
+                pieceTooltip.classList.add('hidden');
+                hideRequirements();
+                return;
+            }
+            const purchased = action === 'province-food'
+                ? typeof targetId === 'string' && /^(?:[0-9]|1[0-5])$/.test(targetId) &&
+                    refillProvinceFood(player, Number(targetId))
+                : purchaseResourceAction(player, action, targetId);
+            if (!purchased) {
+                hintTextEl.innerText = 'Purchase rejected. Check the turn, resources, and target requirements.';
                 updatePlayerCards();
-                renderBoard();
+                if (refresh) refresh();
+                return;
+            }
+            updatePlayerCards();
+            renderBoard();
+            hideRequirements();
+            if (gameState.multiplayer) Multiplayer.syncAlliedState();
+            if (refresh) refresh();
+        }
+        document.querySelectorAll('.resource-purchases').forEach(panel =>
+            panel.addEventListener('click', event => handlePurchaseClick(event)));
+        boardEl.addEventListener('click', event => {
+            const button = event.target.closest('[data-province-food]');
+            if (!button || button.disabled || !canEditPlans()) return;
+            const province = Number(button.dataset.provinceFood);
+            pieceTooltip.classList.add('hidden');
+            hideRequirements();
+            if (gameState.multiplayer && !Multiplayer.isHost()) {
+                Multiplayer.requestPurchase('province-food', String(province));
+                return;
+            }
+            if (!refillProvinceFood(gameState.turnIndex + 1, province)) {
+                hintTextEl.innerText = 'Food refill rejected. Check ownership, food, and the meter.';
+                return;
+            }
+            updatePlayerCards();
+            renderBoard();
+            if (gameState.multiplayer) Multiplayer.syncAlliedState();
+        });
+        pieceTooltip.addEventListener('click', event =>
+            handlePurchaseClick(event, () => {
+                const [r, c] = gameState.selectedSquare;
+                showPieceTooltip(r, c, boardEl.children[r * gameState.boardSize + c]);
             }));
+        document.getElementById('btn-close-siege-prepare').addEventListener('click', () => {
+            siegePopup.classList.add('hidden');
+            hideRequirements();
+        });
         window.addEventListener('click', event => {
+            if (!siegePopup.classList.contains('hidden') &&
+                !siegePopup.contains(event.target) && !boardEl.contains(event.target)) {
+                siegePopup.classList.add('hidden');
+                hideRequirements();
+            }
             if (pieceTooltip.classList.contains('hidden') || pieceTooltip.contains(event.target) ||
                 boardEl.contains(event.target)) return;
             event.stopImmediatePropagation();
@@ -88,6 +167,11 @@
             dismissPieceTooltip();
         }, true);
         window.addEventListener('keydown', event => {
+            if (event.key === 'Escape' && !siegePopup.classList.contains('hidden')) {
+                siegePopup.classList.add('hidden');
+                hideRequirements();
+                return;
+            }
             if (event.key === 'Escape' && !pieceTooltip.classList.contains('hidden')) {
                 dismissPieceTooltip();
             }
@@ -316,6 +400,10 @@
             startingPositionPlayer = gameState.turnIndex;
             gameState.round = 1;
             gameState.phase = gameState.startingPosition === 'agreement' ? 'STARTING_POSITION' : 'PLANNING';
+            gameState.provinceFood = Array(16).fill(null);
+            gameState.provinceFoodOwners = Array(16).fill(null);
+            gameState.lastProvinceFoodRound = null;
+            reconcileProvinceFood();
             gameState.plans = [[], [], [], []];
             gameState.diplomacy = createDiplomacyState();
             gameState.diplomacyReviewer = null;
@@ -676,23 +764,32 @@
             btnChooseDestination.disabled = true;
             const siege = getSiegeAtSquare([r, c]);
             const attackerSiege = getSiegeForAttacker(piece.id);
+            recruitOptions.classList.add('hidden');
             btnStormCastle.hidden = !attackerSiege ||
                 !getReadySiegeAssault(piece, [r, c], attackerSiege.towerSquare);
             btnCancelSiege.hidden = !attackerSiege;
             btnSallyOut.hidden = !(siege && contents.some(unit => !isPrisoner(unit) && getUnitType(unit) !== 'r'));
             pieceTooltipUnits.innerHTML = contents
-                .map((unit, index) => `<span class="held-piece-entry">
+                .map((unit, index) => `<span class="held-piece-entry${getUnitType(unit) === 'r' && !isPrisoner(unit) ? ' held-tower-entry' : ''}"><span class="held-piece-top">
+                    ${getUnitType(unit) === 'r' && !isPrisoner(unit) ? `<button type="button" class="castle-recruit-button" data-recruit-index="${index}" aria-label="Recruit units">+</button>` : ''}
                     <button class="held-piece-button ${getUnitDisplayClass(unit, piece.player)}${pendingIndices.has(index) ? ' pending' : ''}${unit.type === 'r' ? ' disabled' : ''}" data-held-index="${index}" title="${getUnitName(unit)}: ${unit.type === 'r' ? 'Tower' : 'Unmerge'}" aria-label="${getUnitName(unit)}">${PIECE_SVGS[unit.type]}${prisonerChain(unit)}</button>
+                    </span>
                     ${!isPrisoner(unit) ? `<span class="unit-levels" title="${escapeHtml(`${getUnitName(unit)} · ${getUnitStats(unit)}`)}">
                         <span class="experience-level">${['0', 'I', 'II', 'III'][getUnitLevel(unit, 'experience')]}</span> 🛡️${getUnitLevel(unit, 'armour')}${getRoutedStacks(unit) ? ` · ⚑${getRoutedStacks(unit)} (${unit.routedUntilRound - gameState.round})` : ''}
                     </span>` : ''}
-                    ${piece.player === gameState.turnIndex + 1 && !isPrisoner(unit) &&
-                        contents.some(other => other.type === 'r') &&
-                        getUnitLevel(unit, 'armour') === 0 && isResourcePurchaseRound()
-                        ? `<button class="armor-upgrade-button" data-armour-index="${index}" title="Buy level 1 armour · ${formatResourceCost(RESOURCE_PURCHASE_COSTS.armour)}"${canPurchaseResourceAction(gameState.turnIndex + 1, 'armour', unit.id) ? '' : ' disabled'}>🛡️</button>` : ''}
+                    ${!isPrisoner(unit) && isTowerPiece(piece)
+                        ? getUnitType(unit) === 'r'
+                            ? renderPurchaseControl(piece.player, 'castle', unit.id, 'Upgrade Castle', 'castle-upgrade-button', '<svg class="castle-wall-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 5h4v3h3V5h6v3h3V5h4v15H2z"/><path d="M2 13h20M8 8v5m8-5v5M6 13v7m12-7v7"/></svg><span class="upgrade-plus">+</span>')
+                            : renderPurchaseControl(piece.player, 'armour', unit.id, `Upgrade armour for ${getUnitName(unit)}`, 'armor-upgrade-button', '🛡️<span class="upgrade-plus">+</span>')
+                        : ''}
                     ${isPrisoner(unit) ? `<button class="prisoner-action-button" data-prisoner-index="${index}" data-action="execute" title="Plan execution of ${escapeHtml(getUnitName(unit))}" aria-label="Execute ${escapeHtml(getUnitName(unit))}">${PRISONER_EXECUTE_SVG}</button><button class="prisoner-action-button" data-prisoner-index="${index}" data-action="release" title="Plan release of ${escapeHtml(getUnitName(unit))}" aria-label="Release ${escapeHtml(getUnitName(unit))}">${PRISONER_RELEASE_SVG}</button>` : ''}
                 </span>`)
                 .join('');
+            const province = getProvinceIndex(r, c, gameState.boardSize);
+            if (isTowerPiece(piece) && gameState.provinceFoodOwners[province] === piece.player) {
+                const level = gameState.provinceFood[province];
+                pieceTooltipUnits.innerHTML += `<button type="button" class="province-food-refill" data-purchase="province-food" data-target="${province}"${canRefillProvinceFood(piece.player, province) ? '' : ' disabled'}>Food ${level}/6 · +1 for 1 Food</button>`;
+            }
             pieceTooltip.querySelectorAll('.held-piece-button').forEach((button, index) => {
                 const reason = getHeldSelectionUnavailableReason(piece, contents[index], [r, c]);
                 button.disabled = Boolean(reason);
@@ -766,22 +863,20 @@
                     renderBoard();
                 });
             });
-            pieceTooltip.querySelectorAll('.armor-upgrade-button').forEach(button => {
-                button.addEventListener('click', (event) => {
+            pieceTooltip.querySelectorAll('.castle-recruit-button').forEach(button => {
+                button.addEventListener('click', event => {
                     event.stopPropagation();
-                    if (!canEditPlans()) return;
-                    const unit = contents[Number(button.dataset.armourIndex)];
-                    if (gameState.multiplayer && !Multiplayer.isHost()) {
-                        Multiplayer.requestArmourUpgrade(unit.id);
-                        pieceTooltip.classList.add('hidden');
-                        return;
+                    const unit = contents[Number(button.dataset.recruitIndex)];
+                    const target = `castle:${unit.id}`;
+                    recruitOptions.innerHTML = ['horse', 'pawn'].map(action =>
+                        renderPurchaseControl(piece.player, action, target, `Recruit ${action}`,
+                            `recruit-purchase-button ${getUnitDisplayClass(unit, piece.player)}`,
+                            `${PIECE_SVGS[action === 'horse' ? 'n' : 'p']}<span class="recruit-plus">+</span>`)).join('');
+                    recruitOptions.classList.toggle('hidden');
+                    if (!recruitOptions.classList.contains('hidden')) {
+                        recruitOptions.classList.toggle('opens-above',
+                            pieceTooltip.offsetTop + pieceTooltip.offsetHeight + recruitOptions.offsetHeight > boardEl.clientHeight);
                     }
-                    if (!purchaseResourceAction(gameState.turnIndex + 1, 'armour', unit.id)) {
-                        hintTextEl.innerText = 'Armour upgrade rejected. Check the turn, resources, and Tower stack.';
-                        return;
-                    }
-                    updatePlayerCards();
-                    showPieceTooltip(r, c, square);
                 });
             });
         }
@@ -853,7 +948,17 @@
                 return;
             }
             pieceTooltip.classList.add('hidden');
+            siegePopup.classList.add('hidden');
+            hideRequirements();
             if (gameState.selectedSquare && gameState.validMoves.some(m => m[0] === r && m[1] === c)) {
+                const source = getPieceAt(...gameState.selectedSquare, gameState.turnIndex + 1);
+                const target = getVisiblePiece(r, c, gameState.turnIndex + 1);
+                if (!gameState.selectedHeldPiece && source && !getSiegeForAttacker(source.id) &&
+                    target && !arePlayersFriendly(target.player, source.player) &&
+                    isTowerPiece(target) && getCombatContents(source).some(unit => getUnitType(unit) === 'p')) {
+                    showSiegePreparePopup(r, c);
+                    return;
+                }
                 handleSquareAction(r, c);
                 return;
             }
@@ -872,6 +977,26 @@
                 hintTextEl.innerText = "Click or tap one of your pieces to select it, then an adjacent target square to act.";
                 renderBoard();
             }
+        }
+
+        function showSiegePreparePopup(r, c) {
+            const player = gameState.turnIndex + 1;
+            const cost = getSiegeAtSquare([r, c]) ? {} : SIEGE_COST;
+            const requirements = renderRequirements(player, cost, Object.keys(cost).length
+                ? [] : [{ label: 'Existing siege (no cost)', eligible: true }]);
+            siegeControl.innerHTML = `<span class="siege-requirements">${requirements}</span><span class="requirement-trigger" tabindex="0" data-requirements="${escapeHtml(requirements)}" aria-label="Siege requirements" aria-describedby="purchase-requirements"><button type="button" class="btn btn-amber" id="btn-prepare-siege"${hasPlayerResources(player, cost) ? '' : ' disabled'}>Prepare Siege</button></span>`;
+            const button = document.getElementById('btn-prepare-siege');
+            button.onclick = () => {
+                if (!canEditPlans() || !hasPlayerResources(player, getSiegeAtSquare([r, c]) ? {} : SIEGE_COST)) return;
+                siegePopup.classList.add('hidden');
+                hideRequirements();
+                handleSquareAction(r, c);
+            };
+            const anchor = boardEl.children[r * gameState.boardSize + c];
+            siegePopup.classList.remove('hidden');
+            siegePopup.style.left = `${Math.max(8, Math.min(anchor.offsetLeft, boardEl.clientWidth - siegePopup.offsetWidth - 8))}px`;
+            const above = anchor.offsetTop - siegePopup.offsetHeight - 4;
+            siegePopup.style.top = `${above >= 8 ? above : anchor.offsetTop + anchor.offsetHeight + 4}px`;
         }
 
         function handleSquarePopup(r, c) {
@@ -1001,7 +1126,16 @@
                 }
             }
 
-            if (!canMoveWholePiece(pieceToMove)) {
+            const siegeStart = targetPiece && !arePlayersFriendly(targetPiece.player, activePlayerId) &&
+                isTowerPiece(targetPiece) && getCombatContents(pieceToMove).some(unit => getUnitType(unit) === 'p') &&
+                (getSiegeAtSquare([r, c]) || hasPlayerResources(activePlayerId, SIEGE_COST));
+            if (targetPiece && !arePlayersFriendly(targetPiece.player, activePlayerId) &&
+                isTowerPiece(targetPiece) && !getSiegeAtSquare([r, c]) &&
+                !hasPlayerResources(activePlayerId, SIEGE_COST)) {
+                hintTextEl.innerText = 'Starting a siege requires 1 Food and 1 Wood.';
+                return;
+            }
+            if (!canMoveWholePiece(pieceToMove) && !siegeStart) {
                 hintTextEl.innerText = "Stacks containing Pawns or prisoners cannot move, merge, or attack on even rounds, except for a ready siege assault.";
                 return;
             }
@@ -1056,6 +1190,8 @@
             gameState.pendingTransfer = null;
             mergePrompt.classList.add('hidden');
             pieceTooltip.classList.add('hidden');
+            siegePopup.classList.add('hidden');
+            hideRequirements();
             btnMergeConfirm.innerText = 'Merge';
             gameState.selectedSquare = null;
             gameState.validMoves = [];
@@ -1162,6 +1298,8 @@
         });
 
         function commitCurrentPlans() {
+            siegePopup.classList.add('hidden');
+            hideRequirements();
             if (gameState.multiplayer) {
                 Multiplayer.toggleCommit();
                 return;
@@ -1563,10 +1701,12 @@
                     });
                 }
                 await processCollisionGroup(group);
+                reconcileProvinceFood();
                 if (typeof recordMissionCastleOwnership === 'function') recordMissionCastleOwnership();
                 renderBoard();
             }
             await resolveRemainingSharedConflicts();
+            reconcileProvinceFood();
             if (typeof recordMissionCastleOwnership === 'function') recordMissionCastleOwnership();
 
             // Reset planned moves for next turn
@@ -1581,6 +1721,7 @@
             if (resolveResourceProduction(gameState.round - 1)) {
                 logAction('Resource production checks completed.');
             }
+            resolveProvinceFood(gameState.round - 1);
             if (typeof finishMissionRound === 'function') finishMissionRound(gameState.round - 1);
             const { winners, draw } = resolveObjectiveRound();
             if (typeof issueMissionBatches === 'function' && (gameState.round - 1) % 16 === 0 &&

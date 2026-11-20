@@ -52,7 +52,7 @@ const context = vm.createContext({
     'capital-rules', 'battle-rules',
     'siege-rules', 'movement-rules', 'planning-rules', 'retreat-rules', 'prisoner-rules', 'objective-rules', 'mission-rules',
     'board-setup', 'starting-position', 'setup-actions', 'resource-purchases', 'status-ui',
-    'allied-resolution', 'game'
+    'province-food', 'allied-resolution', 'game'
 ].forEach(name => vm.runInContext(fs.readFileSync(`js/${name}.js`, 'utf8'), context));
 context.animatePlannedMovements = async () => {};
 context.renderMapPreview = () => {};
@@ -477,9 +477,20 @@ async function run() {
         'Objective labels must use the current player name');
     players[1].name = players[1].colorName;
     assert.equal((document.getElementById('objectives-list').innerHTML.match(/<li /g) || []).length, 7,
-        'The compact checklist must retain every objective');
+        'The permanent checklist must retain every objective');
     assert(!document.getElementById('objectives-list').innerHTML.includes('<tr'),
-        'Checklist entries must use list markup for the two-column layout');
+        'Checklist entries must use list markup');
+    state.missionBatches[0] = {
+        expiresRound: 16,
+        missions: [{ kind: 'attack-player', targetPlayer: 2, points: 2, status: 'active' }]
+    };
+    api.renderObjectives();
+    assert(!document.getElementById('objectives-list').innerHTML.includes('Attack Blue'));
+    assert(document.getElementById('temporary-objectives-list').innerHTML.includes('Attack Blue'));
+    assert(!document.getElementById('temporary-objectives-panel').classList.contains('hidden'));
+    state.missionBatches[0] = null;
+    api.renderObjectives();
+    assert(document.getElementById('temporary-objectives-panel').classList.contains('hidden'));
     api.showPrivacyOverlay();
     assert(document.getElementById('objectives-panel').classList.contains('hidden'));
     assert.equal(document.getElementById('objectives-list').innerHTML, '');
@@ -898,12 +909,12 @@ async function run() {
     const fogSquare = boardElement.children[4 * 16 + 10];
     fogSquare.classList.add('sq-fog');
     const button = { dataset: { missionIndex: '0' }, title: '', closest: () => button };
-    document.getElementById('objectives-list').handlers.click({ target: button });
+    document.getElementById('temporary-objectives-list').handlers.click({ target: button });
     assert(fogSquare.classList.contains('sq-mission-target'));
     assert(fogSquare.classList.contains('sq-fog'), 'Highlighting must not alter fog');
     state.board[5][10] = state.board[4][10];
     state.board[4][10] = null;
-    document.getElementById('objectives-list').handlers.click({ target: button });
+    document.getElementById('temporary-objectives-list').handlers.click({ target: button });
     assert(!fogSquare.classList.contains('sq-mission-target'));
     assert(boardElement.children[5 * 16 + 10].classList.contains('sq-mission-target'),
         'The target highlight follows the named unit');

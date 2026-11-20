@@ -37,7 +37,7 @@ const context = vm.createContext({
     initBoard() {}, Multiplayer: { isPendingCommit: () => false, refreshControls() {}, getBadge: () => ({}) }
 });
 ['constants', 'models', 'game-state', 'capital-rules', 'planning-timer', 'diplomacy-rules', 'retreat-rules', 'prisoner-rules',
-    'setup-utils', 'board-utils', 'resource-purchases', 'status-ui', 'game'].forEach(name =>
+    'setup-utils', 'board-utils', 'resource-purchases', 'province-food', 'status-ui', 'game'].forEach(name =>
     vm.runInContext(fs.readFileSync(`js/${name}.js`, 'utf8'), context));
 context.finishResolution = () => { resolutions++; };
 vm.runInContext("resolveAllMoves = () => { gameState.phase = 'RESOLVING'; finishResolution(); }; logAction = () => {};", context);
@@ -180,11 +180,18 @@ for (const multiplayer of [false, true]) {
 reset();
 api.renderPlayerDiplomacy(1);
 assert.match(element('diplomacy-p2').innerHTML, /At war with/);
+assert.match(element('diplomacy-p2').innerHTML,
+    /At war with.*diplomacy-separator"[^>]*>\|<\/span>.*aria-label="No allies"><span class="diplomacy-icon diplomacy-handshake"[^>]*>🤝/,
+    'The empty alliance indicator follows the war list');
 assert.doesNotMatch(element('diplomacy-p2').innerHTML, /<button/, 'Status row contains only relationship indicators');
 assert.match(element('diplomacy-actions-p2').innerHTML, /data-diplomacy-action="request"/);
 assert.match(element('diplomacy-actions-p2').innerHTML,
     /data-diplomacy-action="request"[^>]*><span class="diplomacy-icon diplomacy-handshake"[^>]*>🤝/);
 assert.match(element('diplomacy-actions-p2').innerHTML, /<details class="diplomacy-menu">/);
+assert.match(element('diplomacy-actions-p2').innerHTML,
+    /^<button[^>]*data-trade-action="propose"[^>]*title="Exchange resources with Blue"[^>]*aria-label="Exchange resources with Blue"[^>]*><span aria-hidden="true">⇄<\/span><\/button><details class="diplomacy-menu">/,
+    'The accessible, icon-only exchange button precedes the diplomacy menu');
+assert.doesNotMatch(element('diplomacy-actions-p2').innerHTML, /diplomacy-popup[^]*data-trade-action="propose"/);
 assert.match(element('diplomacy-actions-p2').innerHTML, /data-diplomacy-action="war"[^>]* disabled>/,
     'Declare War is disabled when already at war');
 assert.doesNotMatch(element('diplomacy-actions-p2').innerHTML, /data-diplomacy-action="request"[^>]* disabled>/);
@@ -198,6 +205,9 @@ assert.equal(pair().requestedBy, 0, 'Reset Plans must not cancel an alliance req
 assert.equal(pair().changedRound, 1, 'Reset Plans must not clear diplomacy locks');
 api.renderPlayerDiplomacy(1);
 assert.match(element('diplomacy-actions-p2').innerHTML, /Alliance request pending/);
+assert.match(element('diplomacy-actions-p2').innerHTML,
+    /^<button[^>]*data-trade-action="propose"[^>]*>[^]*<\/button><span class="diplomacy-pending"/,
+    'Exchange remains available to the left of a pending alliance');
 assert.doesNotMatch(element('diplomacy-actions-p2').innerHTML, /data-diplomacy-action="accept"/,
     'Hotseat approvals must not appear during planning');
 state.multiplayer = true;
@@ -205,6 +215,8 @@ state.turnIndex = 1;
 state.phase = 'COMMITTED';
 state.committed[1] = true;
 api.renderPlayerDiplomacy(0);
+assert.match(element('diplomacy-actions-p1').innerHTML, /data-trade-action="propose"[^>]* disabled>/,
+    'Committed players cannot propose exchanges');
 assert.match(element('diplomacy-actions-p1').innerHTML, /data-diplomacy-action="accept"/);
 assert.match(element('diplomacy-actions-p1').innerHTML, /data-diplomacy-action="decline"/);
 assert(element('card-p1').classList.contains('diplomacy-incoming'), 'Incoming requests highlight the sender card');
@@ -227,6 +239,8 @@ assert.match(element('diplomacy-p2').innerHTML, /diplomacy-separator"[^>]*>\|<\/
     'Mixed alliance and war lists have a visible separator');
 assert.match(element('diplomacy-p2').innerHTML, /diplomacy-icon diplomacy-handshake/,
     'Alliance indicators also use gray handshakes');
+assert.match(element('diplomacy-p2').innerHTML, /At war with.*diplomacy-separator.*Allied with/,
+    'War and alliance groups retain their order when both have players');
 assert.match(fs.readFileSync('styles.css', 'utf8'), /\.diplomacy-handshake\s*\{\s*filter:\s*grayscale\(1\)/);
 pair().changedRound = state.round;
 api.renderPlayerDiplomacy(1);
@@ -234,6 +248,20 @@ for (const action of ['war', 'request']) {
     assert.match(element('diplomacy-actions-p2').innerHTML,
         new RegExp(`data-diplomacy-action="${action}"[^>]* disabled>`), 'Round locks disable both popup options');
 }
+assert.doesNotMatch(element('diplomacy-actions-p2').innerHTML, /data-trade-action="propose"[^>]* disabled>/,
+    'Diplomacy round locks do not disable exchanges');
+
+reset();
+[0, 2, 3].forEach(other => { api.getDiplomacyPair(1, other).status = 'allied'; });
+api.renderPlayerDiplomacy(1);
+assert.match(element('diplomacy-p2').innerHTML, /aria-label="Allied with".*diplomacy-handshake/);
+assert.doesNotMatch(element('diplomacy-p2').innerHTML, /diplomacy-separator|At war with/,
+    'An empty war group does not leave a separator');
+state.activePlayers = [false, true, false, false];
+api.renderPlayerDiplomacy(1);
+assert.match(element('diplomacy-p2').innerHTML, /aria-label="No allies".*diplomacy-handshake/,
+    'The handshake remains visible without active opponents');
+assert.doesNotMatch(element('diplomacy-p2').innerHTML, /diplomacy-separator|diplomacy-ball/);
 
 reset();
 click('diplomacy-actions-p2', 1, 'request');
@@ -303,6 +331,8 @@ assert.equal(state.resourceTrades[0].receive.wood, 3);
 assert(element('resource-trade-modal').classList.contains('hidden'));
 api.renderPlayerDiplomacy(1);
 assert.match(element('diplomacy-actions-p2').innerHTML, /Cancel exchange/);
+assert.match(element('diplomacy-actions-p2').innerHTML, /data-trade-action="propose"[^>]* disabled>/,
+    'A pending exchange disables the exchange icon');
 assert.doesNotMatch(element('diplomacy-actions-p2').innerHTML, /Accept exchange/);
 state.multiplayer = true;
 state.turnIndex = 1;

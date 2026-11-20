@@ -16,7 +16,7 @@ const api = vm.runInContext(`const gameState = new GameState();
        canPurchaseResourceAction, purchaseResourceAction, getPlayerUnitCount,
        getCastleUpgradeLevel, getBattleCandidateData, refreshResourceTotals,
        getPieceContents, getValidMovesForPiece, registerSiegeStarts,
-       renderResourcePurchaseOptions,
+       renderResourcePurchaseOptions, renderRequirements, renderPurchaseControl, getPurchaseConditions,
        costs: RESOURCE_PURCHASE_COSTS })`, context);
 const { state } = api;
 state.boardSize = 16;
@@ -56,16 +56,22 @@ assert.equal(api.canPurchaseResourceAction(1, 'pawn', 0), false,
 assert.equal(api.canPurchaseResourceAction(1, 'pawn', 5), false,
     'Diagonal provinces are not adjacent to the capital');
 const purchaseOptions = api.renderResourcePurchaseOptions(1);
-assert.match(purchaseOptions, /Pawn · Province 2/);
-assert.match(purchaseOptions, /Horse · Province 5/);
-assert.doesNotMatch(purchaseOptions, /Province 6/,
-    'Diagonal provinces are not offered for recruitment');
-assert.match(purchaseOptions, /Castle level 1/);
-assert.match(purchaseOptions, /data-purchase="armour"/,
-    'The shop includes paid armour upgrades as well as recruitment, Castles, and cards');
 assert.match(purchaseOptions, /Lucky Card/);
-assert.doesNotMatch(purchaseOptions, /data-target="enemy-castle-tower"/,
-    'The shop never offers upgrades to enemy units');
+for (const action of ['pawn', 'horse', 'armour', 'castle']) {
+    assert.match(purchaseOptions, new RegExp(`data-purchase="${action}"`),
+        `The player-card shop also offers ${action}`);
+}
+assert.match(purchaseOptions, /data-purchase="pawn" data-target="castle:recruit-tower"[^>]*>/);
+assert.match(purchaseOptions, /data-purchase="pawn" data-target="castle:capital-tower"[^>]* disabled>/);
+assert.match(purchaseOptions, /data-purchase="armour" data-target="starting-pawn"[^>]*>/);
+assert.doesNotMatch(purchaseOptions, /data-purchase="armour" data-target="capital-tower"/,
+    'The shop does not offer armour for Towers');
+assert.doesNotMatch(purchaseOptions, /data-target="(?:castle:)?enemy-castle-tower"/);
+assert.equal(api.canPurchaseResourceAction(1, '__proto__'), false);
+assert(api.canPurchaseResourceAction(1, 'pawn', `castle:${recruitProvince.tower.id}`));
+assert(!api.canPurchaseResourceAction(1, 'pawn', `castle:${diagonalProvince.tower.id}`));
+assert(!api.canPurchaseResourceAction(1, 'pawn', `castle:${capital.tower.id}`));
+assert(!api.canPurchaseResourceAction(1, 'pawn', `castle:${enemyCastle.tower.id}`));
 state.round = 3;
 const closedOptions = api.renderResourcePurchaseOptions(1);
 assert.match(closedOptions, /Purchases open on rounds 4, 8, 12/);
@@ -92,8 +98,23 @@ assert.equal(state.resources[0].wood, 199);
 assert.equal(state.resources[0].gold, 199);
 assert.equal(api.canPurchaseResourceAction(1, 'horse', 1), false,
     'Pawn and Horse share the one-time province limit');
-assert(api.purchaseResourceAction(1, 'horse', 4));
-assert.equal(otherRecruitProvince.piece.contents.at(-1).type, 'n');
+assert.match(api.renderRequirements(1, api.costs.horse,
+    api.getPurchaseConditions(1, 'horse', `castle:${recruitProvince.tower.id}`)),
+    /requirement-missing">Province not already used: ineligible/);
+const secondCastle = castle(1, 'second-recruit', 5, 0);
+const sharedProvinceOptions = api.renderResourcePurchaseOptions(1);
+assert.match(sharedProvinceOptions, /data-purchase="horse" data-target="castle:second-recruit-tower"[^>]*>/);
+assert.match(sharedProvinceOptions, /data-purchase="horse" data-target="castle:other-recruit-tower"[^>]*>/);
+assert(api.purchaseResourceAction(1, 'horse', `castle:${secondCastle.tower.id}`));
+assert.equal(secondCastle.piece.contents.at(-1).type, 'n',
+    'Recruitment targets the selected Castle even when another Castle shares its province');
+assert.equal(otherRecruitProvince.piece.contents.length, 1);
+assert.match(api.renderResourcePurchaseOptions(1),
+    /data-purchase="horse" data-target="castle:other-recruit-tower"[^>]* disabled>/,
+    'A purchase from either Castle disables recruitment in the whole province');
+otherRecruitProvince.piece.contents.push(secondCastle.piece.contents.at(-1));
+state.board[5][0] = null;
+api.refreshResourceTotals();
 assert.equal(api.getPlayerUnitCount(1, 'n'), 1);
 state.board[8][8] = {
     id: 'existing-pawns', player: 1, type: 'p',
@@ -115,9 +136,10 @@ state.round = 4;
 const armourUnit = api.createUnit(1, 'q', 'armour-target', 'Aq-armour');
 capital.piece.contents.push(armourUnit);
 capital.piece.type = 'r';
-assert.match(api.renderResourcePurchaseOptions(1),
-    /data-purchase="armour" data-target="armour-target"(?! disabled)/,
-    'Eligible armour targets can be purchased directly from the shop');
+assert.match(api.renderPurchaseControl(1, 'armour', armourUnit.id, 'Armour'),
+    /data-purchase="armour" data-target="armour-target"[^>]*>/);
+assert.equal(api.canPurchaseResourceAction(1, 'armour', capital.tower.id), false,
+    'Towers cannot receive the armour purchase');
 assert(api.purchaseResourceAction(1, 'armour', armourUnit.id));
 assert.equal(armourUnit.armour, 1);
 assert.equal(api.canPurchaseResourceAction(1, 'armour', armourUnit.id), false,
@@ -176,10 +198,14 @@ const siegeMove = {
     player: 1, pieceId: attacker.id, from: [1, 8], to: [0, 8],
     contents: attacker.contents
 };
+const foodBeforeSiege = state.resources[0].food;
+const woodBeforeSiege = state.resources[0].wood;
 api.registerSiegeStarts([siegeMove]);
 assert(siegeMove.siegeStart);
 assert.equal(state.sieges.at(-1).towerTimer, 6);
 assert.equal(state.sieges.at(-1).attackers[0].timer, 3);
+assert.equal(state.resources[0].food, foodBeforeSiege - 1, 'Starting a siege costs 1 Food');
+assert.equal(state.resources[0].wood, woodBeforeSiege - 1, 'Starting a siege costs 1 Wood');
 const foodAfterFirstSiege = state.resources[0].food;
 const woodAfterFirstSiege = state.resources[0].wood;
 const secondAttacker = {
@@ -203,7 +229,7 @@ for (const piece of state.board.flatMap(row => row.flatMap(square =>
         if (unit.resourceStockpile) unit.resourceStockpile.food = 0;
     });
 }
-capital.tower.resourceStockpile.food = 1;
+capital.tower.resourceStockpile.food = 0;
 api.refreshResourceTotals();
 castle(2, 'second-enemy-castle', 4, 8, [1, 0]);
 const unaffordableAttacker = {
@@ -218,13 +244,17 @@ const rejectedSiege = {
 api.registerSiegeStarts([rejectedSiege]);
 assert.equal(rejectedSiege.invalid, true);
 assert.equal(state.sieges.length, 0, 'Siege deployment without its Food cost is rejected');
-assert.equal(state.resources[0].food, 1, 'Rejected siege deployment spends nothing');
+assert.equal(state.resources[0].food, 0, 'Rejected siege deployment spends nothing');
 state.round = 4;
 capital.tower.resourceStockpile.food = 0;
 api.refreshResourceTotals();
 const unaffordableOptions = api.renderResourcePurchaseOptions(1);
-assert.match(unaffordableOptions, /data-purchase="armour"[^>]* disabled>/,
-    'Unaffordable armour upgrades are disabled in the shop');
+assert.match(unaffordableOptions, /data-purchase="lucky"[^>]* disabled>/);
+const unavailableArmour = api.renderPurchaseControl(1, 'armour', 'starting-pawn', 'Armour');
+assert.match(unavailableArmour, /data-purchase="armour"[^>]* disabled>/);
+assert.match(unavailableArmour, /requirement-missing.*Food: 0 of 1/);
+assert(api.getValidMovesForPiece(5, 8).some(([row, column]) => row === 4 && column === 8),
+    'An unaffordable siege target remains accessible to show its disabled action');
 const html = fs.readFileSync('PaxNonCerta.html', 'utf8');
 for (let player = 1; player <= 4; player++) {
     assert.match(html, new RegExp(`id="diplomacy-actions-p${player}"[^<]*</span><details id="resource-purchases-p${player}"`),
@@ -233,4 +263,7 @@ for (let player = 1; player <= 4; player++) {
     assert.equal((html.match(new RegExp(`id="resource-purchases-p${player}"`, 'g')) || []).length, 1,
         'The inline purchase panel is replaced, not duplicated');
 }
+const styles = fs.readFileSync('styles.css', 'utf8');
+assert.match(styles, /\.resource-purchase-options\s*\{[^}]*top:\s*auto;[^}]*bottom:\s*100%;/,
+    'The purchase panel opens above the player card');
 console.log('Resource purchases, castle upgrades, and paid siege checks passed.');

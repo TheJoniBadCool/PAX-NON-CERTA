@@ -58,6 +58,9 @@ class GameState {
         this.resourceProductionInterval = 1;
         this.provinceResources = Array(16).fill(null);
         this.provinceRecruitmentUsed = Array(16).fill(false);
+        this.provinceFood = Array(16).fill(null);
+        this.provinceFoodOwners = Array(16).fill(null);
+        this.lastProvinceFoodRound = null;
         this.resources = createResourceStockpiles();
         this.lastResourceProductionRound = null;
     }

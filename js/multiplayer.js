@@ -364,7 +364,11 @@ const Multiplayer = (() => {
             handleArmourRequest(index, message.unitId);
         } else if (message.type === 'purchase') {
             if (message.gameId !== m.gameId || message.round !== gameState.round) return;
-            if (!purchaseResourceAction(index + 1, message.action, message.targetId)) {
+            const accepted = message.action === 'province-food'
+                ? typeof message.targetId === 'string' && /^(?:[0-9]|1[0-5])$/.test(message.targetId) &&
+                    refillProvinceFood(index + 1, Number(message.targetId))
+                : purchaseResourceAction(index + 1, message.action, message.targetId);
+            if (!accepted) {
                 send(conn, { type: 'notice', text: 'Purchase rejected. Check the turn, resources, and target requirements.' });
                 syncTo(index);
                 return;
@@ -480,7 +484,7 @@ const Multiplayer = (() => {
                     isTowerPiece(target) &&
                     getCombatContents(plannedPiece).some(unit => getUnitType(unit) === 'p') &&
                     (getSiegeAtSquare(entry.to) ||
-                        hasPlayerResources(index + 1, { food: 2, wood: 2 }));
+                        hasPlayerResources(index + 1, SIEGE_COST));
                 if (entry.siegeAssault) {
                     const siege = getReadySiegeAssault(piece, entry.from, entry.to);
                     if (!siege || entry.siegeId !== siege.id) return null;
@@ -821,6 +825,9 @@ const Multiplayer = (() => {
                 planningDeadline: gameState.planningDeadline,
                 provinceResources: gameState.provinceResources,
                 provinceRecruitmentUsed: gameState.provinceRecruitmentUsed || Array(16).fill(false),
+                provinceFood: gameState.provinceFood,
+                provinceFoodOwners: gameState.provinceFoodOwners,
+                lastProvinceFoodRound: gameState.lastProvinceFoodRound,
                 resources: gameState.resources.map((resources, i) =>
                     gameState.showResourcesToOthers || i === index ? resources : null),
                 lastResourceProductionRound: gameState.lastResourceProductionRound,
@@ -1109,6 +1116,9 @@ const Multiplayer = (() => {
             planningDeadline: game.planningDeadline ?? null,
             provinceResources: game.provinceResources,
             provinceRecruitmentUsed: game.provinceRecruitmentUsed || Array(16).fill(false),
+            provinceFood: game.provinceFood || Array(16).fill(null),
+            provinceFoodOwners: game.provinceFoodOwners || Array(16).fill(null),
+            lastProvinceFoodRound: game.lastProvinceFoodRound ?? null,
             resources: game.resources,
             lastResourceProductionRound: game.lastResourceProductionRound,
             objectives: game.objectives,
@@ -1197,6 +1207,8 @@ const Multiplayer = (() => {
         gameState.validMoves = [];
         mergePrompt.classList.add('hidden');
         pieceTooltip.classList.add('hidden');
+        document.getElementById('siege-prepare-popup').classList.add('hidden');
+        document.getElementById('purchase-requirements').classList.add('hidden');
         btnMergeConfirm.innerText = 'Merge';
     }
 
@@ -1316,7 +1328,7 @@ const Multiplayer = (() => {
         }
         if (gameState.phase === 'RESOLVING') return { text: 'Resolving', ready: false };
         if (gameState.committed[index]) return { text: 'Locked in ✔', ready: true };
-        return { text: 'Planning…', ready: false };
+        return { text: '', ready: false, hidden: true };
     }
 
     function describePhase() {

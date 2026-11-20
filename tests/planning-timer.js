@@ -39,10 +39,11 @@ const context = vm.createContext({
     clearTimeout(id) { timers.delete(id); },
     saveCustomSetup() {},
     bindBoardInteractions() {},
+    getProvinceOwners: () => Array(16).fill(null),
     Multiplayer: { isEditingSetup: () => false, isPendingCommit: () => false }
 });
 ['constants', 'models', 'game-state', 'capital-rules', 'planning-timer', 'resource-purchases',
-    'status-ui', 'game'].forEach(name =>
+    'province-food', 'status-ui', 'game'].forEach(name =>
     vm.runInContext(fs.readFileSync(`js/${name}.js`, 'utf8'), context));
 vm.runInContext(`
     updatePlayerCards = () => {};

@@ -30,36 +30,53 @@
         <!-- Board and player status -->
         <section class="board-container">
             <div class="board-dashboard">
-                <div class="board-edge">
-                    <div id="card-p1" class="player-card player-p1 active-turn">
-                        <div class="player-card-heading"><span class="player-name">🔴 Player 1 (Red)</span><span id="diplomacy-actions-p1" class="diplomacy-actions"></span><details id="resource-purchases-p1" class="resource-purchases diplomacy-menu hidden"><summary class="diplomacy-button" title="Resource shop" aria-label="Resource shop"><span aria-hidden="true">🛒</span></summary><div id="resource-purchase-options-p1" class="diplomacy-popup resource-purchase-options" aria-label="Available purchases"></div></details></div>
-                        <div id="diplomacy-p1" class="diplomacy-panel"></div>
-                        <span id="badge-p1" class="status-badge">Planning</span>
-                        <span id="horde-p1" class="horde-badge hidden" role="status">🐪 Horde</span>
-                        <div id="retreat-p1" class="retreat-row" aria-label="Red retreating units"></div>
-                        <div id="dead-p1" class="dead-row" aria-label="Red dead pieces"></div>
-                        <div id="resources-p1" class="resources-row hidden" aria-label="Red resources"></div>
-                    </div>
-                    <div class="board-top-controls">
+                <div class="board-top-controls">
+                    <div class="board-objectives">
                         <section id="objectives-panel" class="objectives-panel hidden" aria-labelledby="objectives-title">
                             <h2 id="objectives-title">Your objectives</h2>
                             <div id="objectives-score" aria-live="polite"></div>
-                            <div class="objectives-scroll">
-                                <ul id="objectives-list" class="objectives-list" aria-label="Private objective checklist"></ul>
+                            <div class="objectives-sections">
+                                <section class="objectives-section" aria-labelledby="permanent-objectives-title">
+                                    <h3 id="permanent-objectives-title">Permanent objectives</h3>
+                                    <div class="objectives-scroll">
+                                        <ul id="objectives-list" class="objectives-list" aria-label="Private permanent objective checklist"></ul>
+                                    </div>
+                                </section>
+                                <section id="temporary-objectives-panel" class="objectives-section temporary-objectives hidden" aria-labelledby="temporary-objectives-title">
+                                    <h3 id="temporary-objectives-title">Temporary objectives</h3>
+                                    <div id="temporary-objectives-summary" class="objectives-summary"></div>
+                                    <div class="objectives-scroll">
+                                        <ul id="temporary-objectives-list" class="objectives-list" aria-label="Private temporary objective checklist"></ul>
+                                    </div>
+                                </section>
                             </div>
                         </section>
                         <div class="siege-actions">
                             <button id="btn-force-skip" class="btn btn-amber hidden">⏭️ Skip Disconnected Players</button>
                         </div>
                     </div>
-                    <div id="card-p2" class="player-card player-p2">
-                        <div class="player-card-heading"><span class="player-name">🔵 Player 2 (Blue)</span><span id="diplomacy-actions-p2" class="diplomacy-actions"></span><details id="resource-purchases-p2" class="resource-purchases diplomacy-menu hidden"><summary class="diplomacy-button" title="Resource shop" aria-label="Resource shop"><span aria-hidden="true">🛒</span></summary><div id="resource-purchase-options-p2" class="diplomacy-popup resource-purchase-options" aria-label="Available purchases"></div></details></div>
-                        <div id="diplomacy-p2" class="diplomacy-panel"></div>
-                        <span id="badge-p2" class="status-badge">Waiting</span>
-                        <span id="horde-p2" class="horde-badge hidden" role="status">🐪 Horde</span>
-                        <div id="retreat-p2" class="retreat-row" aria-label="Blue retreating units"></div>
-                        <div id="dead-p2" class="dead-row" aria-label="Blue dead pieces"></div>
-                        <div id="resources-p2" class="resources-row hidden" aria-label="Blue resources"></div>
+                    <div class="plan-actions">
+                        <div id="round-clock" class="plan-action round-clock" role="group" aria-label="Round clock: round 1 of 4 in the purchase cycle">
+                            <svg class="plan-action-icon round-clock-face" viewBox="0 0 32 32" aria-hidden="true">
+                                <circle cx="16" cy="16" r="14"></circle>
+                                <path class="round-clock-ticks" d="M16 3v3 M29 16h-3 M16 29v-3 M3 16h3"></path>
+                                <g id="round-clock-hand">
+                                    <path d="M16 16V8"></path>
+                                </g>
+                                <circle class="round-clock-pivot" cx="16" cy="16" r="1.5"></circle>
+                            </svg>
+                            <span id="round-clock-status">1 / 4</span>
+                            <span id="planning-countdown" class="hidden" role="timer" aria-label="Planning time remaining" title="Planning time remaining"></span>
+                        </div>
+                        <div id="shopping-notice" class="shopping-notice" role="status" aria-live="polite"></div>
+                        <button id="btn-finish-plan" class="plan-action plan-commit" type="button" aria-label="Commit Plans">
+                            <span id="commit-plan-icon" class="plan-action-icon" aria-hidden="true">✓</span>
+                            <span id="commit-plan-label">Commit Plans</span>
+                        </button>
+                        <button id="btn-clear-plan" class="plan-action plan-reset" type="button" aria-label="Reset Plans">
+                            <span class="plan-action-icon" aria-hidden="true">✕</span>
+                            <span>Reset Plans</span>
+                        </button>
                     </div>
                 </div>
             <div class="board-wrapper">
@@ -130,53 +147,55 @@
                     <button id="btn-cancel-siege" class="btn btn-secondary" hidden>🏹 Cancel Siege</button>
                     <button id="btn-sally-out" class="btn btn-amber" hidden>⚔️ Sally Out</button>
                     <div id="piece-tooltip-units" class="piece-tooltip-units"></div>
+                    <div id="castle-recruit-options" class="castle-recruit-options hidden"></div>
                     <div class="piece-tooltip-selection">
                         <span id="piece-tooltip-count" role="status" aria-live="polite">0 selected</span>
-                        <button id="btn-choose-destination" class="btn btn-amber" type="button" disabled>Choose destination</button>
+                        <button id="btn-choose-destination" class="btn btn-amber" type="button" aria-label="Choose destination" title="Choose destination" disabled><svg viewBox="0 0 32 24" aria-hidden="true"><path d="M3 8l6 8M9 8l-6 8M12 12h10m-3-3 3 3-3 3"/><circle cx="27" cy="12" r="3"/></svg></button>
                     </div>
                     <button id="btn-close-piece-tooltip" class="piece-tooltip-close" type="button" aria-label="Close unit list">×</button>
                 </div>
+                <div id="siege-prepare-popup" class="siege-prepare-popup hidden">
+                    <span id="siege-prepare-control"></span>
+                    <button id="btn-close-siege-prepare" type="button" class="piece-tooltip-close" aria-label="Close siege popup">×</button>
+                </div>
             </div>
-                <div class="board-edge">
-                    <div id="card-p4" class="player-card player-p4">
-                        <div class="player-card-heading"><span class="player-name">🟡 Player 4 (Yellow)</span><span id="diplomacy-actions-p4" class="diplomacy-actions"></span><details id="resource-purchases-p4" class="resource-purchases diplomacy-menu hidden"><summary class="diplomacy-button" title="Resource shop" aria-label="Resource shop"><span aria-hidden="true">🛒</span></summary><div id="resource-purchase-options-p4" class="diplomacy-popup resource-purchase-options" aria-label="Available purchases"></div></details></div>
-                        <div id="diplomacy-p4" class="diplomacy-panel"></div>
-                        <span id="badge-p4" class="status-badge">Waiting</span>
-                        <span id="horde-p4" class="horde-badge hidden" role="status">🐪 Horde</span>
-                        <div id="retreat-p4" class="retreat-row" aria-label="Yellow retreating units"></div>
-                        <div id="dead-p4" class="dead-row" aria-label="Yellow dead pieces"></div>
-                        <div id="resources-p4" class="resources-row hidden" aria-label="Yellow resources"></div>
+            <div id="purchase-requirements" class="purchase-requirements hidden" role="tooltip"></div>
+                <div class="player-cards">
+                    <div id="card-p1" class="player-card player-p1 active-turn">
+                        <div class="player-card-heading"><span class="player-name">🔴 Player 1 (Red)</span><span id="diplomacy-actions-p1" class="diplomacy-actions"></span><details id="resource-purchases-p1" class="resource-purchases diplomacy-menu hidden"><summary class="diplomacy-button" title="Resource shop" aria-label="Resource shop"><span aria-hidden="true">🛒</span></summary><div id="resource-purchase-options-p1" class="diplomacy-popup resource-purchase-options" aria-label="Available purchases"></div></details></div>
+                        <div id="diplomacy-p1" class="diplomacy-panel"></div>
+                        <span id="badge-p1" class="status-badge hidden"></span>
+                        <span id="horde-p1" class="horde-badge hidden" role="status">🐪 Horde</span>
+                        <div id="retreat-p1" class="retreat-row" aria-label="Red retreating units"></div>
+                        <div id="dead-p1" class="dead-row" aria-label="Red dead pieces"></div>
+                        <div id="resources-p1" class="resources-row hidden" aria-label="Red resources"></div>
                     </div>
-                    <div class="plan-actions">
-                        <div id="round-clock" class="plan-action round-clock" role="group" aria-label="Round clock: 0 of 4 rounds completed">
-                            <svg class="plan-action-icon round-clock-face" viewBox="0 0 32 32" aria-hidden="true">
-                                <circle cx="16" cy="16" r="14"></circle>
-                                <path class="round-clock-ticks" d="M16 3v3 M29 16h-3 M16 29v-3 M3 16h3"></path>
-                                <g id="round-clock-hand">
-                                    <path d="M16 16V8"></path>
-                                </g>
-                                <circle class="round-clock-pivot" cx="16" cy="16" r="1.5"></circle>
-                            </svg>
-                            <span id="round-clock-status">0 / 4</span>
-                            <span id="planning-countdown" class="hidden" role="timer" aria-label="Planning time remaining" title="Planning time remaining"></span>
-                        </div>
-                        <button id="btn-finish-plan" class="plan-action plan-commit" type="button" aria-label="Commit Plans">
-                            <span id="commit-plan-icon" class="plan-action-icon" aria-hidden="true">✓</span>
-                            <span id="commit-plan-label">Commit Plans</span>
-                        </button>
-                        <button id="btn-clear-plan" class="plan-action plan-reset" type="button" aria-label="Reset Plans">
-                            <span class="plan-action-icon" aria-hidden="true">✕</span>
-                            <span>Reset Plans</span>
-                        </button>
+                    <div id="card-p2" class="player-card player-p2">
+                        <div class="player-card-heading"><span class="player-name">🔵 Player 2 (Blue)</span><span id="diplomacy-actions-p2" class="diplomacy-actions"></span><details id="resource-purchases-p2" class="resource-purchases diplomacy-menu hidden"><summary class="diplomacy-button" title="Resource shop" aria-label="Resource shop"><span aria-hidden="true">🛒</span></summary><div id="resource-purchase-options-p2" class="diplomacy-popup resource-purchase-options" aria-label="Available purchases"></div></details></div>
+                        <div id="diplomacy-p2" class="diplomacy-panel"></div>
+                        <span id="badge-p2" class="status-badge hidden"></span>
+                        <span id="horde-p2" class="horde-badge hidden" role="status">🐪 Horde</span>
+                        <div id="retreat-p2" class="retreat-row" aria-label="Blue retreating units"></div>
+                        <div id="dead-p2" class="dead-row" aria-label="Blue dead pieces"></div>
+                        <div id="resources-p2" class="resources-row hidden" aria-label="Blue resources"></div>
                     </div>
                     <div id="card-p3" class="player-card player-p3">
                         <div class="player-card-heading"><span class="player-name">🟢 Player 3 (Green)</span><span id="diplomacy-actions-p3" class="diplomacy-actions"></span><details id="resource-purchases-p3" class="resource-purchases diplomacy-menu hidden"><summary class="diplomacy-button" title="Resource shop" aria-label="Resource shop"><span aria-hidden="true">🛒</span></summary><div id="resource-purchase-options-p3" class="diplomacy-popup resource-purchase-options" aria-label="Available purchases"></div></details></div>
                         <div id="diplomacy-p3" class="diplomacy-panel"></div>
-                        <span id="badge-p3" class="status-badge">Waiting</span>
+                        <span id="badge-p3" class="status-badge hidden"></span>
                         <span id="horde-p3" class="horde-badge hidden" role="status">🐪 Horde</span>
                         <div id="retreat-p3" class="retreat-row" aria-label="Green retreating units"></div>
                         <div id="dead-p3" class="dead-row" aria-label="Green dead pieces"></div>
                         <div id="resources-p3" class="resources-row hidden" aria-label="Green resources"></div>
+                    </div>
+                    <div id="card-p4" class="player-card player-p4">
+                        <div class="player-card-heading"><span class="player-name">🟡 Player 4 (Yellow)</span><span id="diplomacy-actions-p4" class="diplomacy-actions"></span><details id="resource-purchases-p4" class="resource-purchases diplomacy-menu hidden"><summary class="diplomacy-button" title="Resource shop" aria-label="Resource shop"><span aria-hidden="true">🛒</span></summary><div id="resource-purchase-options-p4" class="diplomacy-popup resource-purchase-options" aria-label="Available purchases"></div></details></div>
+                        <div id="diplomacy-p4" class="diplomacy-panel"></div>
+                        <span id="badge-p4" class="status-badge hidden"></span>
+                        <span id="horde-p4" class="horde-badge hidden" role="status">🐪 Horde</span>
+                        <div id="retreat-p4" class="retreat-row" aria-label="Yellow retreating units"></div>
+                        <div id="dead-p4" class="dead-row" aria-label="Yellow dead pieces"></div>
+                        <div id="resources-p4" class="resources-row hidden" aria-label="Yellow resources"></div>
                     </div>
                 </div>
             </div>
@@ -674,6 +693,7 @@
     <script src="js/siege-rules.js"></script>
     <script src="js/retreat-rules.js"></script>
     <script src="js/prisoner-rules.js"></script>
+    <script src="js/province-food.js"></script>
     <script src="js/planning-rules.js"></script>
     <script src="js/plan-renderer.js"></script>
     <script src="js/board-setup.js"></script>

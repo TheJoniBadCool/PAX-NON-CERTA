@@ -90,4 +90,30 @@ assert.match(fs.readFileSync('PaxNonCerta.html', 'utf8'),
 assert(elements.get('horde-p2').classList.contains('hidden'),
     'Players with towers must not display the horde marker');
 
+state.phase = 'PLANNING';
+state.turnIndex = 0;
+api.updatePlayerCards();
+assert(elements.get('badge-p1').classList.contains('hidden'), 'Hotseat planning badge occupies no space');
+assert(elements.get('badge-p2').classList.contains('hidden'), 'Hotseat hidden badge occupies no space');
+state.eliminated[1] = true;
+api.updatePlayerCards();
+assert(!elements.get('badge-p2').classList.contains('hidden'), 'Elimination remains visible');
+assert.equal(elements.get('badge-p2').innerText, 'ELIMINATED');
+state.eliminated[1] = false;
+state.multiplayer = true;
+context.Multiplayer = {
+    getBadge: i => i === 0
+        ? { text: '', ready: false, hidden: true }
+        : { text: 'Locked in ✔', ready: true },
+    isPendingCommit: () => false,
+    refreshControls() {}
+};
+api.updatePlayerCards();
+assert(elements.get('badge-p1').classList.contains('hidden'), 'Online planning badge occupies no space');
+assert(!elements.get('badge-p2').classList.contains('hidden'), 'Online locked status remains visible');
+assert.equal(elements.get('badge-p2').innerText, 'Locked in ✔');
+state.multiplayer = false;
+api.updatePlayerCards();
+assert(elements.get('badge-p2').classList.contains('hidden'), 'Badges hide again when status changes');
+
 console.log('Capital and horde checks passed');

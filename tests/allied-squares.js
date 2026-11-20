@@ -6,7 +6,7 @@ const assert = require('node:assert/strict');
 function element() {
     const classes = new Set(['hidden']);
     return {
-        children: [], handlers: {}, style: {}, innerText: '', className: '', title: '', disabled: false,
+        children: [], handlers: {}, style: {}, dataset: {}, innerText: '', className: '', title: '', disabled: false,
         classList: {
             add(value) { classes.add(value); },
             remove(value) { classes.delete(value); },
@@ -18,7 +18,10 @@ function element() {
         appendChild(child) { this.children.push(child); },
         querySelector() { return element(); },
         querySelectorAll() { return []; },
-        addEventListener(event, handler) { this.handlers[event] = handler; },
+        addEventListener(event, handler) {
+            const previous = this.handlers[event];
+            this.handlers[event] = previous ? (...args) => { previous(...args); handler(...args); } : handler;
+        },
         setAttribute(name, value) { this[name] = value; }
     };
 }
@@ -51,7 +54,7 @@ const context = vm.createContext({
 'capital-rules',
     'movement-rules', 'planning-rules', 'battle-rules', 'siege-rules', 'retreat-rules', 'prisoner-rules',
     'objective-rules', 'board-renderer', 'resource-purchases', 'status-ui', 'battle-ui',
-    'allied-resolution', 'game']
+    'province-food', 'allied-resolution', 'game']
     .forEach(name => vm.runInContext(fs.readFileSync(`js/${name}.js`, 'utf8'), context));
 context.captureLog = text => logs.push(text);
 vm.runInContext(`
@@ -73,7 +76,8 @@ const api = vm.runInContext(`({
     renderBoard: actualRenderBoard, getPlanArrowKind, decideAlliedSpoils,
     chooseAlliedSpoils, renderAlliedSpoils, resolveAlliedSally, validatePrisonerPlans, managePrisoner, resolvePrisonerPlans,
     updateObjectiveScores, getDefenderTerrainBonus, snapshotHillOccupants, updateHillHeld,
-    beginCaptureChoices, decideCapture, getReadySiegeAssault, syncSieges, canUnitsTarget
+    beginCaptureChoices, decideCapture, getReadySiegeAssault, syncSieges, canUnitsTarget,
+    reconcileProvinceFood, refreshResourceTotals, showPieceTooltip
 })`, context);
 const state = api.state;
 const copy = value => JSON.parse(JSON.stringify(value));
@@ -143,6 +147,31 @@ function candidate(army, square, origins = null) {
 }
 
 async function run() {
+    reset();
+    const foodTower = piece(1, ['r']);
+    foodTower.contents[0].resourceStockpile = { food: 2 };
+    state.board[0][0] = foodTower;
+    state.selectedSquare = [0, 0];
+    api.reconcileProvinceFood();
+    state.provinceFood[0] = 2;
+    api.refreshResourceTotals();
+    api.renderBoard();
+    const towerSquare = getElement('board').children[0];
+    const meter = towerSquare.children.find(child => child.className === 'province-food-meter');
+    assert(meter && !meter.disabled);
+    assert.equal(meter.children.length, 6);
+    assert.equal(meter.children.filter(child => child.className.includes('filled')).length, 2);
+    assert(towerSquare.children.some(child => child.className === 'province-food-warning'));
+    api.showPieceTooltip(0, 0, towerSquare);
+    assert.match(getElement('piece-tooltip-units').innerHTML, /Food 2\/6 · \+1 for 1 Food/);
+    getElement('board').handlers.click({ target: { closest() { return meter; } } });
+    assert.equal(state.provinceFood[0], 3, 'Clicking the meter refills one food step');
+    assert.equal(state.resources[0].food, 1);
+    const refillButton = { disabled: false, dataset: { purchase: 'province-food', target: '0' } };
+    getElement('piece-tooltip').handlers.click({ target: { closest() { return refillButton; } } });
+    assert.equal(state.provinceFood[0], 4, 'The Tower unit-list button also refills food');
+    assert.equal(state.resources[0].food, 0);
+
     reset();
     ally(1, 2);
     const red = piece(1, ['n', 'q']);

@@ -6,6 +6,7 @@ const RESOURCE_PURCHASE_COSTS = {
     castle: { stone: 3, food: 1, wood: 2, gold: 1 },
     lucky: { gold: 1, horse: 1, metal: 1, food: 1, wood: 1 }
 };
+const SIEGE_COST = { food: 1, wood: 1 };
 const CASTLE_SIEGE_TIMERS = [
     { attacker: 3, tower: 6 },
     { attacker: 4, tower: 8 },
@@ -101,6 +102,19 @@ function getRecruitingCastle(province, player) {
     return null;
 }
 
+function getRecruitmentTarget(player, targetId) {
+    if (typeof targetId === 'string' && targetId.startsWith('castle:')) {
+        const target = findOwnedUnit(player, targetId.slice(7), true);
+        if (!target || getUnitType(target.unit) !== 'r') return null;
+        const province = getProvinceIndex(target.row, target.column, gameState.boardSize);
+        return { ...target, castle: target.piece, province };
+    }
+    if (targetId === null || targetId === '') return null;
+    const province = Number(targetId);
+    const target = getRecruitingCastle(province, player);
+    return target ? { ...target, province } : null;
+}
+
 function findOwnedUnit(player, unitId, needsCastle = false) {
     for (let row = 0; row < gameState.boardSize; row++) {
         for (let column = 0; column < gameState.boardSize; column++) {
@@ -147,27 +161,47 @@ function getNextRecruitmentIdentity(player, type) {
 }
 
 function canPurchaseResourceAction(player, action, targetId = null, options = {}) {
-    const ignoreTurn = Boolean(options.ignoreTurn);
-    if (player < 1 || player > 4 || gameState.eliminated[player - 1] ||
-        !gameState.activePlayers[player - 1] ||
-        (!ignoreTurn && (!isResourcePurchaseRound() ||
-            !['PLANNING', 'COMMITTED'].includes(gameState.phase) ||
-            (gameState.multiplayer && gameState.committed[player - 1])))) return false;
+    if (!Object.hasOwn(RESOURCE_PURCHASE_COSTS, action)) return false;
+    return getPurchaseConditions(player, action, targetId, options).every(condition => condition.eligible) &&
+        hasPlayerResources(player, RESOURCE_PURCHASE_COSTS[action]);
+}
+
+function getPurchaseConditions(player, action, targetId = null, options = {}) {
+    const conditions = [];
+    const add = (label, eligible) => conditions.push({ label, eligible: Boolean(eligible) });
+    const validPlayer = player >= 1 && player <= 4 && gameState.activePlayers[player - 1] &&
+        !gameState.eliminated[player - 1];
+    add('Active player', validPlayer);
+    if (!options.ignoreTurn) {
+        add('Purchase round', isResourcePurchaseRound());
+        add('Planning', ['PLANNING', 'COMMITTED'].includes(gameState.phase));
+        if (gameState.multiplayer) add('Plan unlocked', !gameState.committed[player - 1]);
+    }
+    if (!validPlayer) return conditions;
     if (action === 'pawn' || action === 'horse') {
         const type = action === 'pawn' ? 'p' : 'n';
         const maximum = action === 'pawn' ? 6 : 3;
-        if (getPlayerUnitCount(player, type) >= maximum ||
-            !getRecruitingCastle(Number(targetId), player)) return false;
+        const target = getRecruitmentTarget(player, targetId);
+        add('Unit limit', getPlayerUnitCount(player, type) < maximum);
+        add('Owned Castle', target);
+        if (target) {
+            add('Owned province', getProvinceOwners(gameState.board)[target.province] === player);
+            add('Adjacent to capital', isProvinceAdjacentToCapital(target.province, player));
+            add('Province not already used', !gameState.provinceRecruitmentUsed?.[target.province]);
+        }
     } else if (action === 'armour') {
-        const target = findOwnedUnit(player, targetId, true);
-        if (!target || isPrisoner(target.unit) ||
-            Math.floor(Number(target.unit.armour) || 0) !== 0) return false;
+        const target = targetId === null ? null : findOwnedUnit(player, targetId, true);
+        add('Unit in owned Castle', target && getUnitType(target.unit) !== 'r');
+        add('Unarmoured', target && Math.floor(Number(target.unit.armour) || 0) === 0);
     } else if (action === 'castle') {
-        if (!getCastleUpgradeTarget(player, targetId)) return false;
-    } else if (action !== 'lucky') {
-        return false;
+        const target = targetId === null ? null : findOwnedUnit(player, targetId, true);
+        add('Owned Castle', target && getUnitType(target.unit) === 'r');
+        if (target) {
+            add('Owned province', getProvinceOwners(gameState.board)[getProvinceIndex(target.row, target.column, gameState.boardSize)] === player);
+            add('Castle level below 2', Math.floor(Number(target.unit.castleUpgradeLevel) || 0) < 2);
+        }
     }
-    return hasPlayerResources(player, RESOURCE_PURCHASE_COSTS[action]);
+    return conditions;
 }
 
 function applyCastleUpgrade(target) {
@@ -191,8 +225,7 @@ function purchaseResourceAction(player, action, targetId = null, options = {}) {
     const cost = RESOURCE_PURCHASE_COSTS[action];
     if (!spendPlayerResources(player, cost)) return false;
     if (action === 'pawn' || action === 'horse') {
-        const province = Number(targetId);
-        const { castle } = getRecruitingCastle(province, player);
+        const { castle, province } = getRecruitmentTarget(player, targetId);
         const type = action === 'pawn' ? 'p' : 'n';
         const { name, sequence } = getNextRecruitmentIdentity(player, type);
         const unit = createUnit(player, type, `purchase_p${player}_${sequence}`, name);
@@ -222,49 +255,59 @@ function renderResourcePurchaseOptions(player) {
     } else if (gameState.multiplayer && gameState.committed[player - 1]) {
         options.push('<span class="resource-purchase-notice">Unlock your plan to purchase.</span>');
     }
-    const button = (action, targetId, label) =>
-        `<button type="button" class="resource-purchase-button" data-purchase="${action}"${targetId === null ? '' : ` data-target="${escapeHtml(String(targetId))}"`}${(action === 'lucky' || targetId !== null) && canPurchaseResourceAction(player, action, targetId) ? '' : ' disabled'}>${escapeHtml(label)} · ${formatResourceCost(RESOURCE_PURCHASE_COSTS[action])}</button>`;
-    const recruitmentAvailable = new Set();
-    for (let province = 0; province < 16; province++) {
-        if (!getRecruitingCastle(province, player)) continue;
-        const location = `Province ${province + 1}`;
+    const add = (action, target, label) => {
+        const content = `${escapeHtml(label)} · ${formatResourceCost(RESOURCE_PURCHASE_COSTS[action])}`;
+        options.push(renderPurchaseControl(player, action, target, label, 'resource-purchase-button', content));
+    };
+    const castles = [];
+    const armourUnits = [];
+    gameState.board.forEach((row, r) => row.forEach((square, c) =>
+        getSquarePieces(square).filter(piece => piece.player === player && isTowerPiece(piece))
+            .forEach(piece => getPieceContents(piece).filter(unit => !isPrisoner(unit)).forEach(unit => {
+                if (getUnitType(unit) === 'r') {
+                    castles.push({ unit, province: getProvinceIndex(r, c, gameState.boardSize) });
+                } else {
+                    armourUnits.push(unit);
+                }
+            }))));
+    for (const { unit, province } of castles) {
         for (const action of ['pawn', 'horse']) {
-            const capReached = getPlayerUnitCount(player, action === 'pawn' ? 'p' : 'n') >=
-                (action === 'pawn' ? 6 : 3);
-            if (capReached) continue;
-            recruitmentAvailable.add(action);
-            options.push(button(action, province, `${action === 'pawn' ? 'Pawn' : 'Horse'} · ${location}`));
+            add(action, `castle:${unit.id}`,
+                `${action === 'pawn' ? 'Pawn' : 'Horse'} · Province ${province + 1} · ${getUnitName(unit)}`);
         }
     }
-    for (const action of ['pawn', 'horse']) {
-        if (recruitmentAvailable.has(action)) continue;
-        const capReached = getPlayerUnitCount(player, action === 'pawn' ? 'p' : 'n') >=
-            (action === 'pawn' ? 6 : 3);
-        options.push(button(action, null,
-            `${action === 'pawn' ? 'Pawn' : 'Horse'} · ${capReached ? 'Unit limit reached' : 'No eligible province'}`));
+    if (!castles.length) {
+        add('pawn', null, 'Pawn · No owned Castle');
+        add('horse', null, 'Horse · No owned Castle');
     }
-    let armourAvailable = false;
-    let castleAvailable = false;
-    gameState.board.forEach(row => row.forEach(square =>
-        getSquarePieces(square).filter(piece => piece.player === player).forEach(piece => {
-            if (isTowerPiece(piece)) {
-                getPieceContents(piece).filter(unit => !isPrisoner(unit) &&
-                    getUnitLevel(unit, 'armour') === 0).forEach(unit => {
-                    armourAvailable = true;
-                    options.push(button('armour', unit.id, `Armour level 1 · ${getUnitName(unit)}`));
-                });
-            }
-            getPieceContents(piece).filter(unit => getUnitType(unit) === 'r').forEach(unit => {
-                if (!getCastleUpgradeTarget(player, unit.id)) return;
-                castleAvailable = true;
-                const level = Math.max(0, Math.floor(Number(unit.castleUpgradeLevel) || 0)) + 1;
-                options.push(button('castle', unit.id, `Castle level ${level} · ${getUnitName(unit)}`));
-            });
-        })));
-    if (!armourAvailable) options.push(button('armour', null, 'Armour level 1 · No eligible unit in a Castle'));
-    if (!castleAvailable) options.push(button('castle', null, 'Castle upgrade · No eligible Castle'));
-    options.push(button('lucky', null, 'Lucky Card'));
+    armourUnits.forEach(unit => add('armour', unit.id, `Armour level 1 · ${getUnitName(unit)}`));
+    if (!armourUnits.length) add('armour', null, 'Armour level 1 · No unit in a Castle');
+    castles.forEach(({ unit }) => {
+        const level = Math.min(2, Math.max(0, Math.floor(Number(unit.castleUpgradeLevel) || 0)) + 1);
+        add('castle', unit.id, `Castle level ${level} · ${getUnitName(unit)}`);
+    });
+    if (!castles.length) add('castle', null, 'Castle upgrade · No owned Castle');
+    add('lucky', null, 'Lucky Card');
     return options.join('');
+}
+
+function renderRequirements(player, cost, conditions = []) {
+    const stockpile = gameState.resources?.[player - 1] || {};
+    const resources = Object.entries(cost).map(([key, required]) => {
+        const available = Number(stockpile[key]) || 0;
+        const resource = RESOURCE_TYPES.find(entry => entry.key === key);
+        return `<span class="requirement-${available >= required ? 'met' : 'missing'}" aria-label="${resource.label}: ${available} of ${required}">${resource.icon} ${available}/${required}</span>`;
+    });
+    const checks = conditions.map(({ label, eligible }) =>
+        `<span class="requirement-${eligible ? 'met' : 'missing'}">${escapeHtml(label)}: ${eligible ? 'eligible' : 'ineligible'}</span>`);
+    return [...resources, ...checks].join(' <span aria-hidden="true">|</span> ');
+}
+
+function renderPurchaseControl(player, action, targetId, label, className = '', content = escapeHtml(label)) {
+    const requirements = renderRequirements(player, RESOURCE_PURCHASE_COSTS[action],
+        getPurchaseConditions(player, action, targetId));
+    const target = targetId === null ? '' : ` data-target="${escapeHtml(String(targetId))}"`;
+    return `<span class="requirement-trigger" tabindex="0" data-requirements="${escapeHtml(requirements)}" aria-label="${escapeHtml(label)} requirements" aria-describedby="purchase-requirements"><button type="button" class="${className}" data-purchase="${action}"${target} aria-label="${escapeHtml(label)}"${canPurchaseResourceAction(player, action, targetId) ? '' : ' disabled'}>${content}</button></span>`;
 }
 
 function formatResourceCost(cost) {

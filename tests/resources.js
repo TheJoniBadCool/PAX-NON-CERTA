@@ -7,6 +7,8 @@ function element() {
     const node = {
         children: [], className: '', title: '', innerText: '', html: '',
         style: { setProperty() {} },
+        offsetWidth: 240, offsetHeight: 120,
+        getBoundingClientRect() { return { left: 100, right: 120, top: 200, bottom: 220 }; },
         appendChild(child) { this.children.push(child); },
         listeners: {},
         addEventListener(type, handler) { this.listeners[type] = handler; },
@@ -33,6 +35,7 @@ boardEl.parentElement = element();
 const context = vm.createContext({
     console, document: {
         body: element(),
+        documentElement: { clientWidth: 360, clientHeight: 640 },
         createElement: element,
         getElementById(id) {
             if (!elements.has(id)) elements.set(id, element());
@@ -314,6 +317,8 @@ for (const size of [12, 16]) {
     assert(propagationStopped, 'Resource taps must not reach board movement or selection handlers');
     const popup = context.document.body.children.at(-1);
     assert.equal(popup.open, true, 'Tapping a resource opens its popup without selecting a piece');
+    assert.equal(popup.style.left, '112px', 'Popup stays inside the right screen edge');
+    assert.equal(popup.style.top, '76px', 'Popup opens just above the tapped resource');
     assert.equal(popup.children[0].innerText, marker.title);
     assert(popup.children[0].innerText.includes('100%') && popup.children[0].innerText.includes('0%'),
         'The popup includes every resource at a shared site');
@@ -323,8 +328,12 @@ for (const size of [12, 16]) {
     assert.equal(popup.removed, true, 'Closing a popup removes it from the document');
     const fractionalMarker = boardEl.children[size].children.find(child =>
         child.className.includes('province-resource'));
+    fractionalMarker.getBoundingClientRect = () => ({ left: 0, right: 20, top: 0, bottom: 20 });
     fractionalMarker.onclick({ stopPropagation() {} });
     const fractionalPopup = context.document.body.children.at(-1);
+    assert.equal(fractionalPopup.style.left, '20px');
+    assert.equal(fractionalPopup.style.top, '24px',
+        'Popup opens below the resource when there is no room above');
     assert(fractionalPopup.children[0].innerText.includes('12.5%'),
         'Resource popups preserve fractional production chances');
     fractionalPopup.close();
@@ -521,6 +530,7 @@ assert.equal(state.resources[1].gold, 2, 'Another resource with the same chance 
 assert.equal(state.provinceResources[0].productionChance, 50, 'Production does not reroll assigned chances');
 assert.equal(api.resolveResourceProduction(8), false, 'Older rounds must not produce twice');
 
+state.showResourcesToOthers = false;
 for (const multiplayer of [false, true]) {
     state.multiplayer = multiplayer;
     for (const phase of ['PLANNING', 'TRANSITION', 'ALLIANCE_REVIEW', 'RESOLVING', 'COMMITTED', 'GAME_OVER']) {
@@ -545,6 +555,33 @@ for (const multiplayer of [false, true]) {
                     assert.equal(options.html, '', 'Hidden purchase targets are removed from the DOM');
                     assert.equal(shop.open, false, 'The shop closes on a phase or player change');
                 }
+            }
+        }
+    }
+}
+for (const multiplayer of [false, true]) {
+    state.multiplayer = multiplayer;
+    for (const round of [3, 4, 5, 8]) {
+        state.round = round;
+        for (const phase of ['PLANNING', 'TRANSITION', 'RESOLVING', 'COMMITTED', 'GAME_OVER']) {
+            state.phase = phase;
+            for (const viewer of [0, 1, 2, 3]) {
+                state.turnIndex = viewer;
+                for (const committed of [false, true]) {
+                    state.committed[viewer] = committed;
+                    api.updatePlayerCards();
+                    const available = round % 4 === 0 && state.activePlayers[viewer] &&
+                        !state.eliminated[viewer] &&
+                        (phase === 'PLANNING' || (multiplayer && phase === 'COMMITTED')) &&
+                        (!multiplayer || !committed);
+                    assert.equal(elements.get('shopping-notice').innerText,
+                        available ? 'It is Shopping time!!' : '');
+                    for (let index = 0; index < 4; index++) {
+                        assert.equal(elements.get(`resource-purchases-p${index + 1}`).classList.contains('shopping-available'),
+                            available && index === viewer, 'Only the current available shop is highlighted');
+                    }
+                }
+                state.committed[viewer] = false;
             }
         }
     }

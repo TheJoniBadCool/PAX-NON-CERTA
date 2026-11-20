@@ -37,16 +37,16 @@ function registerSiegeStarts(allIntendedMoves) {
         }
         let siege = getSiegeAtSquare(move.to);
         const startsSiege = !siege;
-        if (startsSiege && !hasPlayerResources(move.player, { food: 2, wood: 2 })) {
+        if (startsSiege && !hasPlayerResources(move.player, SIEGE_COST)) {
             move.invalid = true;
-            logAction(`🚫 Player ${move.player}'s siege deployment was rejected: starting a siege costs 2 Food and 2 Wood.`);
+            logAction(`🚫 Player ${move.player}'s siege deployment was rejected: starting a siege costs 1 Food and 1 Wood.`);
             return;
         }
 
         if (!siege) {
-            if (!spendPlayerResources(move.player, { food: 2, wood: 2 })) {
+            if (!spendPlayerResources(move.player, SIEGE_COST)) {
                 move.invalid = true;
-                logAction(`🚫 Player ${move.player}'s siege deployment was rejected: 2 Food and 2 Wood are required.`);
+                logAction(`🚫 Player ${move.player}'s siege deployment was rejected: 1 Food and 1 Wood are required.`);
                 return;
             }
             const castleLevel = getCastleUpgradeLevel(target);
@@ -75,7 +75,7 @@ function registerSiegeStarts(allIntendedMoves) {
         if (typeof recordMissionAttack === 'function') recordMissionAttack(source, target);
         const location = isPubliclyVisiblePiece(source, [move.from])
             ? `at ${coordsToNotation(...move.to)}` : 'out of sight';
-        logAction(`🏹 <b>SIEGE</b>: Player ${move.player} began besieging the Tower ${location}. Assault ready in ${CASTLE_SIEGE_TIMERS[getCastleUpgradeLevel(target)].attacker} rounds${startsSiege ? ' (2 Food + 2 Wood spent)' : ''}.`);
+        logAction(`🏹 <b>SIEGE</b>: Player ${move.player} began besieging the Tower ${location}. Assault ready in ${CASTLE_SIEGE_TIMERS[getCastleUpgradeLevel(target)].attacker} rounds${startsSiege ? ' (1 Food + 1 Wood spent)' : ''}.`);
     });
 }
 

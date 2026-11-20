@@ -76,8 +76,9 @@ chess rules.
 ### Alliances and war
 
 - Every pair of selected players starts at war. Each player card publicly shows
-  its alliances with a handshake and wars with crossed swords, followed only by
-  the other players' colored balls. Unselected and eliminated players are omitted.
+  wars with crossed swords and alliances with a handshake, followed only by the
+  other players' colored balls. The handshake remains visible with no allies;
+  unselected and eliminated players are omitted.
 - During planning, the button next to another player's name opens a popup with
   **Declare War** and **Request Allegiance**. The current relationship's option
   is grayed out and disabled; round and commitment locks disable both options.
@@ -156,8 +157,8 @@ chess rules.
 
 ### Resource exchanges
 
-- During planning, **Exchange resources** sits beside **Declare War** and
-  **Request Allegiance** in the other player's diplomacy menu. Any active,
+- During planning, the **⇄ Exchange resources** icon sits to the left of the
+  other player's diplomacy button. Any active,
   non-eliminated players may trade, including enemies.
 - Choose non-negative whole-number amounts of any resource on each side.
   Gifts and requests for gifts are allowed: either side may be zero, but not both.
@@ -279,10 +280,29 @@ chess rules.
   snapshots/rejoins carry public assignments, chances, and the last production round but only the
   recipient's stockpile. The authoritative host retains all stockpiles.
 - New games reset assignments, stockpiles, and production history.
+- Each active player's exclusively owned province starts with six food steps;
+  acquiring or reacquiring ownership resets it to six. Empty, contested, rebel,
+  inactive, and eliminated-player provinces do not deplete. After each fourth
+  completed round's resource production, the meter loses one step exactly once,
+  on the global rounds 4, 8, 12, etc. A player may click their Tower's meter
+  while planning and unlocked to spend one Food per step, up to six. Meters are
+  visible on owned Towers, with a warning at two steps or fewer.
+- When a meter reaches zero, every owned Tower in the province becomes a rebel
+  Tower, retaining its stored resources. Non-Tower occupants, including allied
+  armies on the Tower square, enter their owners' normal routed retreat queues;
+  prisoners are released to their owners' release queues. A rebel Pawn appears
+  on a random empty passable square in the province, or in a rebel Tower if none
+  is available. Capital and siege state are reconciled, and objectives and
+  missions see the changed ownership. Rebel survivors join their conqueror
+  rather than becoming prisoners. Multiplayer refill requests are validated by
+  the host, and meter state is included in snapshots and reconnects.
 - Resource purchases are available during planning on rounds 4, 8, 12, etc.;
   multiple affordable purchases are allowed in one eligible round. The shopping-cart
-  dropdown in the current player's card heading lists purchase types, costs, and
-  eligible targets (including armour); unavailable options are disabled.
+  dropdown in the current player's card heading lists Lucky Cards, recruitment,
+  Castle upgrades, and non-Tower armour purchases. The latter three also have
+  controls in the Castle unit list. Disabled actions show colored stockpile/required counts and eligibility
+  conditions. Recruitment places the unit in the selected Castle, including when
+  multiple Castles share a province.
   The round-clock hand advances a quarter-turn per completed round independently
   of resource-production settings. Pawns cost
   2 Food, 1 Wood, and 1 Gold; Horses cost 2 Horse, 1 Metal, and 1 Gold.
@@ -293,15 +313,18 @@ chess rules.
   toward those limits.
 - Armour can be purchased for a unit in a Castle/Tower stack for 1 Food,
   2 Metal, 2 Wood, and 1 Gold. It is a one-time level 0-to-1 upgrade, available
-  only on purchase rounds; the previous free armour upgrade is removed.
+  only on purchase rounds; Towers cannot buy armour, and the previous free armour
+  upgrade is removed.
 - Any owned Castle may be upgraded twice, each level costing 3 Stone, 1 Food,
   2 Wood, and 1 Gold. Level 1 changes stationary Tower defence from ×3 to ×4,
   siege assault readiness from 3 to 4 rounds, and the garrison timer from 6 to
   8. Level 2 changes these to ×5, 6 rounds, and 12 rounds respectively.
 - Lucky Cards cost 1 each of Gold, Horse, Metal, Food, and Wood and currently
-  have no gameplay effect. Starting a new siege costs 2 Food and 2 Wood and is
+  have no gameplay effect. Starting a new siege costs 1 Food and 1 Wood and is
   allowed on any round, including rounds when Pawns are inactive. Additional
   attacker stacks joining an existing Castle siege do not pay the cost again.
+  Selecting an enemy Castle from its gate opens a preparation popup showing the
+  cost; unaffordable siege orders are disabled.
 
 ### Fog of war
 
@@ -352,8 +375,9 @@ chess rules.
   The badge disappears when all units recover and does not intercept clicks.
 - Pieces belonging to an eliminated player are rendered gray across the board,
   movement animations, and battle displays.
-- The left panel shows the current phase, current player, planning controls,
-  player statuses, and a private objective checklist above the board.
+- The dashboard shows the private objective checklist and planning controls above
+  the board, with all player status cards in a row below it. The current phase
+  and player are shown beneath the cards.
 - The center panel shows the board, planned-move arrows, movement animation,
   collision overlay, merge prompt, and piece tooltip.
 - A collision overlay shows the involved candidate stacks visually.
@@ -433,7 +457,7 @@ chess rules.
   valid target for enemy attacks. A whole stack may also Sally Out from a
   besieged Tower on an even-numbered round.
 - A new siege may start on any round, including even rounds when Pawns are
-  otherwise inactive, but requires 2 Food and 2 Wood. The cost is paid once per
+  otherwise inactive, but requires 1 Food and 1 Wood. The cost is paid once per
   Castle siege; later attacker stacks joining it are free.
 - This rule applies to both hotseat and multiplayer games. Other non-Pawn
   pieces and stacks retain their normal movement on every round.

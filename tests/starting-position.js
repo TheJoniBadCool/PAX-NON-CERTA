@@ -34,7 +34,7 @@ const context = vm.createContext({
     renderProvinceResource() {}
 });
 ['constants', 'models', 'game-state', 'planning-timer', 'setup-utils', 'board-utils',
-    'capital-rules', 'board-setup', 'starting-position']
+    'capital-rules', 'board-setup', 'province-food', 'starting-position']
     .forEach(name => vm.runInContext(fs.readFileSync(`js/${name}.js`, 'utf8'), context));
 context.gameState = vm.runInContext('new GameState()', context);
 const api = vm.runInContext(`({

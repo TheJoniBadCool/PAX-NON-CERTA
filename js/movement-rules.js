@@ -53,18 +53,14 @@ function getValidMovesForPiece(r, c) {
             : [];
     }
     if (!canMoveWholePiece(piece)) {
-        const stockpile = gameState.resources?.[piece.player - 1];
         if (!isPawnRestTurn() || piece.type === 'r' ||
             !getCombatContents(piece).some(unit => getUnitType(unit) === 'p')) return [];
         return getAdjacentMoves(r, c).filter(([tr, tc]) => {
             const targets = getPiecesAt(tr, tc);
-            const startsSiege = !getSiegeAtSquare([tr, tc]);
             return isPassableSquare(tr, tc) &&
                 isTowerGateMove([r, c], [tr, tc]) &&
                 targets.some(target => target.player !== piece.player &&
                     !arePlayersFriendly(target.player, piece.player) && isTowerPiece(target)) &&
-                (!startsSiege || ((Number(stockpile?.food) || 0) >= 2 &&
-                    (Number(stockpile?.wood) || 0) >= 2)) &&
                 canUnitsEnterSquare(getPlannedPieceContents(piece), [tr, tc], piece.player);
         });
     }
@@ -88,12 +84,6 @@ function getValidMovesForPiece(r, c) {
             if (!isTowerGateMove([r, c], [tr, tc])) continue;
             const targetPiece = getVisiblePiece(tr, tc, activePlayerId);
             if (!canUnitsEnterSquare(getPieceContents(piece), [tr, tc], activePlayerId)) continue;
-            if (targetPiece && targetPiece.player !== activePlayerId &&
-                !arePlayersFriendly(targetPiece.player, activePlayerId) && isTowerPiece(targetPiece) &&
-                getCombatContents(piece).some(unit => getUnitType(unit) === 'p') &&
-                !getSiegeAtSquare([tr, tc]) &&
-                ((Number(gameState.resources?.[piece.player - 1]?.food) || 0) < 2 ||
-                    (Number(gameState.resources?.[piece.player - 1]?.wood) || 0) < 2)) continue;
             if (targetPiece && targetPiece.player !== activePlayerId &&
                 isTowerPiece(targetPiece) &&
                 !getCombatContents(piece).some(unit => getUnitType(unit) === 'p')) {

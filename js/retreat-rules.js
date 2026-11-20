@@ -1,6 +1,6 @@
-function queueRetreat(player, contents, battleSquare, released = false) {
+function queueRetreat(player, contents, battleSquare, released = false, round = gameState.round) {
     if (!contents.length) return;
-    const reentryRound = gameState.round + 3;
+    const reentryRound = round + 3;
     gameState.retreating[player - 1].push({
         id: `retreat_${Date.now()}_${Math.random()}`,
         player,

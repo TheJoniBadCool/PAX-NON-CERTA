@@ -197,7 +197,7 @@ function getResourcePosition(resource, province, size, biomes) {
     throw new Error(`No non-mountain square for resource in province ${province + 1}`);
 }
 
-function showResourcePopup(text) {
+function showResourcePopup(text, anchor) {
     const popup = document.createElement('dialog');
     popup.className = 'resource-info-popup';
     popup.setAttribute('aria-label', 'Resource production');
@@ -219,6 +219,15 @@ function showResourcePopup(text) {
     popup.appendChild(close);
     document.body.appendChild(popup);
     popup.showModal();
+    const bounds = anchor.getBoundingClientRect();
+    const viewport = document.documentElement;
+    const left = Math.max(8, Math.min(bounds.right,
+        viewport.clientWidth - popup.offsetWidth - 8));
+    const above = bounds.top - popup.offsetHeight - 4;
+    const top = above >= 8 ? above : Math.max(8, Math.min(bounds.bottom + 4,
+        viewport.clientHeight - popup.offsetHeight - 8));
+    popup.style.left = `${left}px`;
+    popup.style.top = `${top}px`;
 }
 
 function renderProvinceResource(square, r, c, resources, size, biomes = gameState.biomes) {
@@ -240,7 +249,7 @@ function renderProvinceResource(square, r, c, resources, size, biomes = gameStat
             });
             marker.onclick = event => {
                 event.stopPropagation();
-                showResourcePopup(marker.title);
+                showResourcePopup(marker.title, marker);
             };
             square.appendChild(marker);
         } else marker.classList.add('province-resource-multiple');

@@ -46,7 +46,7 @@ const context = vm.createContext({
 });
 ['constants', 'models', 'game-state', 'planning-timer', 'setup-utils', 'board-utils', 'capital-rules', 'movement-rules',
     'planning-rules', 'battle-rules', 'retreat-rules', 'prisoner-rules', 'objective-rules', 'siege-rules',
-    'resource-purchases', 'allied-resolution', 'game']
+    'resource-purchases', 'province-food', 'allied-resolution', 'game']
     .forEach(name => vm.runInContext(fs.readFileSync(`js/${name}.js`, 'utf8'), context));
 const api = vm.runInContext(`({
     state: gameState, createUnit, getBattleCandidateData, casualtyChance,
@@ -55,7 +55,7 @@ const api = vm.runInContext(`({
     rejectPrisonerMoveConflicts, applySiegeRoundProgress, processCollisionGroup,
     processSallyBattle, getUnitDisplayClass, prisonerChain, isValidSallyOutPlan, updateObjectiveScores,
     showPieceTooltip, resolvePrisonerPlans, validatePrisonerPlans, resolveAllMoves, getAllPlannedMoves,
-    handleSquareAction, handleSquareClick, animatePlannedMovements,
+    handleSquareAction, handleSquareClick, animatePlannedMovements, refreshResourceTotals,
     queueHeldGroupPlan, detachHeldGroup, getPendingHeldIndices
 })`, context);
 const state = api.state;
@@ -357,6 +357,39 @@ async function run() {
     assert.equal(state.deadPieces[1][0].id, 'captive');
 
     reset();
+    state.round = 4;
+    const shopCapital = api.createUnit(1, 'r', 'shop-capital');
+    shopCapital.resourceStockpile = { horse: 10, food: 10, wood: 10, metal: 10, gold: 10, stone: 10 };
+    const shopTower = api.createUnit(1, 'r', 'shop-tower');
+    const shopPawn = api.createUnit(1, 'p', 'shop-pawn');
+    state.board[0][0] = piece(1, [shopCapital], 'shop-capital-piece');
+    state.board[0][4] = piece(1, [shopTower, shopPawn], 'shop-castle');
+    state.capitalTowerIds[0] = shopCapital.id;
+    api.refreshResourceTotals();
+    elements.get('board').children = Array.from({ length: 256 }, element);
+    state.selectedSquare = [0, 4];
+    const shopPopup = elements.get('piece-tooltip');
+    const recruitButton = element();
+    recruitButton.dataset = { recruitIndex: '0' };
+    shopPopup.queries = { '.castle-recruit-button': [recruitButton] };
+    api.showPieceTooltip(0, 4, element());
+    const unitMarkup = elements.get('piece-tooltip-units').innerHTML;
+    assert.match(unitMarkup, /class="held-piece-entry held-tower-entry"/);
+    assert.match(unitMarkup, /data-purchase="castle" data-target="shop-tower"/);
+    assert.match(unitMarkup, /class="castle-wall-icon"/);
+    assert.match(unitMarkup, /data-purchase="armour" data-target="shop-pawn"/);
+    assert.doesNotMatch(unitMarkup, /data-purchase="armour" data-target="shop-tower"/);
+    recruitButton.handlers.click.at(-1)({ stopPropagation() {} });
+    const recruitment = elements.get('castle-recruit-options');
+    assert(!recruitment.classList.contains('hidden'));
+    assert.match(recruitment.innerHTML, /data-purchase="horse" data-target="castle:shop-tower"/);
+    assert.match(recruitment.innerHTML, /data-purchase="pawn" data-target="castle:shop-tower"/);
+    const purchaseButton = { disabled: false, dataset: { purchase: 'pawn', target: 'castle:shop-tower' } };
+    shopPopup.handlers.click.at(-1)({ target: { closest() { return purchaseButton; } } });
+    assert.equal(state.board[0][4].contents.length, 3, 'The Castle panel applies recruitment');
+    assert.equal(state.provinceRecruitmentUsed[1], true);
+
+    reset();
     state.round = 2;
     state.board[8][8] = piece(1, [captive(), unit(1, 'n', 'moving-guard')]);
     api.managePrisoner(1, 'captive', 'execute');
@@ -489,6 +522,34 @@ async function run() {
     });
     assert(logs.at(-1).includes('MERGE') && logs.at(-1).includes('fog of war'),
         'Concealed friendly consolidation must not log its position or stack size');
+
+    reset();
+    state.round = 2;
+    state.board[8][8] = piece(1, [api.createUnit(1, 'p', 'siege-ui-pawn')], 'siege-ui-attacker');
+    const siegeTower = api.createUnit(2, 'r', 'siege-ui-tower');
+    siegeTower.gate = [0, -1];
+    state.board[8][9] = piece(2, [siegeTower], 'siege-ui-target');
+    elements.get('board').children = Array.from({ length: 256 }, element);
+    elements.get('piece-tooltip').classList.add('hidden');
+    state.selectedSquare = [8, 8];
+    state.validMoves = api.getValidMovesForPiece(8, 8);
+    api.handleSquareClick(8, 9);
+    const siegePopup = elements.get('siege-prepare-popup');
+    const siegeControl = elements.get('siege-prepare-control');
+    assert(!siegePopup.classList.contains('hidden'));
+    assert.match(siegeControl.innerHTML, /Food: 0 of 2/);
+    assert.match(siegeControl.innerHTML, /Wood: 0 of 2/);
+    assert.match(siegeControl.innerHTML, /id="btn-prepare-siege" disabled/);
+    elements.get('btn-prepare-siege').onclick();
+    assert.equal(state.plans[0].length, 0, 'An unaffordable siege cannot be queued');
+    state.resources[0].food = 2;
+    state.resources[0].wood = 2;
+    api.handleSquareClick(8, 9);
+    assert.doesNotMatch(siegeControl.innerHTML, /id="btn-prepare-siege" disabled/);
+    elements.get('btn-prepare-siege').onclick();
+    assert.equal(state.plans[0].length, 1, 'A funded siege can be queued even on an inactive-Pawn round');
+    assert.deepEqual(Array.from(state.plans[0][0].to), [8, 9]);
+    assert(siegePopup.classList.contains('hidden'));
 
     reset();
     const groupUnits = [unit(1, 'q', 'group-queen'), unit(1, 'n', 'group-horse'), captive()];

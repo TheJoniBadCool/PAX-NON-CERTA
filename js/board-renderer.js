@@ -10,11 +10,13 @@ function bindBoardInteractions() {
     }
 
     function getSquare(event) {
+        if (event.target.closest('[data-province-food]')) return null;
         const square = event.target.closest('.square');
         return square && square.parentElement === boardEl ? square : null;
     }
 
     boardEl.addEventListener('click', event => {
+        if (event.target.closest('[data-province-food]')) return;
         if (suppressClick) {
             event.preventDefault();
             event.stopPropagation();
@@ -208,6 +210,33 @@ function renderBoard() {
                 }
                 pieceContainer.appendChild(pieceWrapper);
                 if (isTowerPiece(piece)) {
+                    if (provinceOwner === piece.player &&
+                        gameState.provinceFoodOwners[getProvinceIndex(r, c, gameState.boardSize)] === provinceOwner) {
+                        const province = getProvinceIndex(r, c, gameState.boardSize);
+                        const level = gameState.provinceFood[province];
+                        const meter = document.createElement('button');
+                        meter.type = 'button';
+                        meter.className = 'province-food-meter';
+                        meter.dataset.provinceFood = String(province);
+                        meter.disabled = provinceOwner !== gameState.turnIndex + 1 ||
+                            !canRefillProvinceFood(provinceOwner, province);
+                        meter.title = `Province food: ${level}/6. Click to add 1 step for 1 Food. Decreases after rounds 4, 8, 12, etc.`;
+                        meter.setAttribute('aria-label', meter.title);
+                        for (let step = 6; step >= 1; step--) {
+                            const segment = document.createElement('span');
+                            segment.className = `province-food-segment${step <= level ? ' filled' : ''}`;
+                            meter.appendChild(segment);
+                        }
+                        square.appendChild(meter);
+                        if (level <= 2) {
+                            const warning = document.createElement('span');
+                            warning.className = 'province-food-warning';
+                            warning.innerText = '!';
+                            warning.title = 'Food shortage: this province will rebel when its food reaches zero.';
+                            warning.setAttribute('aria-label', warning.title);
+                            square.appendChild(warning);
+                        }
+                    }
                     const gate = getTowerGate(piece);
                     if (gate) {
                         const direction = gate[0] === -1 ? 'north' : gate[0] === 1 ? 'south' :

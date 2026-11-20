@@ -131,7 +131,7 @@ assert(badExit.invalid && badEntry.invalid && badAssault.invalid && !validExit.i
 gameState.board[5][6] = makePiece(2, 'p', 'attacker');
 gameState.board[10][10] = makePiece(2, 'r', 'attacker-supplies');
 gameState.board[10][10].contents[0].resourceStockpile = {
-    horse: 0, food: 2, wood: 2, metal: 0, gold: 0, stone: 0
+    horse: 0, food: 1, wood: 1, metal: 0, gold: 0, stone: 0
 };
 refreshResourceTotals();
 const siegeStart = {

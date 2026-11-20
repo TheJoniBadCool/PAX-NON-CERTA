@@ -39,6 +39,8 @@ function showPrivacyOverlay() {
     gameState.pendingTransfer = null;
     mergePrompt.classList.add('hidden');
     pieceTooltip.classList.add('hidden');
+    document.getElementById('siege-prepare-popup').classList.add('hidden');
+    document.getElementById('purchase-requirements').classList.add('hidden');
     const player = PLAYERS[gameState.turnIndex];
     privacyIcon.innerText = '🛡️';
     privacyIcon.style.background = player.color;
@@ -53,14 +55,14 @@ function updateRoundDisplay() {
     roundTagEl.innerText = `Round ${gameState.round}`;
     const completedRounds = gameState.round - 1;
     const interval = RESOURCE_PURCHASE_INTERVAL;
-    const cycleProgress = completedRounds % interval;
+    const cycleProgress = completedRounds % interval + 1;
     const clock = document.getElementById('round-clock');
     const productionInterval = getResourceProductionInterval();
     const roundsUntilProduction = productionInterval - completedRounds % productionInterval;
     const roundLabel = roundsUntilProduction === 1 ? 'round' : 'rounds';
-    const description = `Round clock: ${cycleProgress} of ${interval} rounds completed; purchases on rounds 4, 8, 12, etc.; resource production in ${roundsUntilProduction} ${roundLabel}`;
+    const description = `Round clock: round ${cycleProgress} of ${interval} in the purchase cycle; purchases on rounds 4, 8, 12, etc.; resource production in ${roundsUntilProduction} ${roundLabel}`;
     document.getElementById('round-clock-hand').style.transform =
-        `rotate(${completedRounds * 360 / interval}deg)`;
+        `rotate(${gameState.round * 360 / interval}deg)`;
     document.getElementById('round-clock-status').innerText = `${cycleProgress} / ${interval}`;
     clock.setAttribute('aria-label', description);
     clock.title = description;
@@ -72,8 +74,13 @@ function renderObjectives() {
     const visible = gameState.multiplayer || gameState.phase === 'PLANNING';
     panel.classList.toggle('hidden', !visible);
     const rows = document.getElementById('objectives-list');
+    const temporaryPanel = document.getElementById('temporary-objectives-panel');
+    const temporaryRows = document.getElementById('temporary-objectives-list');
     rows.innerHTML = '';
+    temporaryRows.innerHTML = '';
+    temporaryPanel.classList.add('hidden');
     document.getElementById('objectives-score').innerText = '';
+    document.getElementById('temporary-objectives-summary').innerText = '';
     if (!visible) return;
     const index = gameState.turnIndex;
     document.getElementById('objectives-title').innerText = `${PLAYERS[index].name} objectives`;
@@ -87,19 +94,21 @@ function renderObjectives() {
     `).join('');
     const batch = gameState.missionBatches?.[index];
     if (batch) {
-        rows.innerHTML += `<li class="mission-heading">Missions · through round ${batch.expiresRound} · permanent ${gameState.missionPoints[index] >= 0 ? '+' : ''}${gameState.missionPoints[index]} pts · −2 if none succeed</li>` +
-            batch.missions.map((mission, missionIndex) => {
-                const label = getMissionLabel(mission);
-                return `<li class="objective-item mission-item${mission.status === 'completed' ? ' objective-completed' : ''}">
-                    <span class="objective-reward">+${mission.points}</span>
-                    <span class="objective-label">${escapeHtml(label)} · ${escapeHtml(mission.status)}</span>
-                    <button type="button" class="mission-locate" data-mission-index="${missionIndex}" aria-label="Locate ${escapeHtml(label)}" title="Highlight target squares without changing visibility">🔍</button>
-                </li>`;
-            }).join('');
+        temporaryPanel.classList.remove('hidden');
+        document.getElementById('temporary-objectives-summary').innerText =
+            `Through round ${batch.expiresRound} · permanent mission points ${gameState.missionPoints[index] >= 0 ? '+' : ''}${gameState.missionPoints[index]} · −2 if none succeed`;
+        temporaryRows.innerHTML = batch.missions.map((mission, missionIndex) => {
+            const label = getMissionLabel(mission);
+            return `<li class="objective-item mission-item${mission.status === 'completed' ? ' objective-completed' : ''}">
+                <span class="objective-reward">+${mission.points}</span>
+                <span class="objective-label">${escapeHtml(label)} · ${escapeHtml(mission.status)}</span>
+                <button type="button" class="mission-locate" data-mission-index="${missionIndex}" aria-label="Locate ${escapeHtml(label)}" title="Highlight target squares without changing visibility">🔍</button>
+            </li>`;
+        }).join('');
     }
 }
 
-document.getElementById('objectives-list').addEventListener('click', event => {
+document.getElementById('temporary-objectives-list').addEventListener('click', event => {
     const button = event.target.closest('.mission-locate');
     if (!button) return;
     const batch = gameState.missionBatches?.[gameState.turnIndex];
@@ -118,12 +127,14 @@ function updatePlayerCards() {
             (gameState.multiplayer && gameState.committed[gameState.turnIndex]))) {
         tradeModal.classList.add('hidden');
     }
+    let shoppingAvailable = false;
     for (let i = 0; i < 4; i++) {
         const card = document.getElementById(`card-p${i + 1}`);
         const badge = document.getElementById(`badge-p${i + 1}`);
         const hordeBadge = document.getElementById(`horde-p${i + 1}`);
+        let hideBadge = false;
         card.querySelector('.player-name').innerText =
-            `${PLAYER_ICONS[i]} ${PLAYERS[i].name} (Player ${PLAYERS[i].id})`;
+            `${PLAYER_ICONS[i]} ${PLAYERS[i].name}`;
         hordeBadge.classList.toggle('hidden',
             !gameState.activePlayers[i] || !gameState.horde[i]);
 
@@ -136,19 +147,19 @@ function updatePlayerCards() {
             const info = Multiplayer.getBadge(i);
             card.className = `player-card player-p${i + 1}${i === gameState.turnIndex ? ' active-turn' : ''}`;
             badge.innerText = info.text;
+            hideBadge = !!info.hidden;
             badge.style.background = info.ready ? `${PLAYERS[i].color}33` : 'rgba(255,255,255,0.05)';
             badge.style.color = info.ready ? PLAYERS[i].color : 'var(--text-muted)';
         } else if (i === gameState.turnIndex && gameState.phase === 'PLANNING') {
             card.className = `player-card player-p${i + 1} active-turn`;
-            badge.innerText = 'Planning';
-            badge.style.background = `${PLAYERS[i].color}33`;
-            badge.style.color = PLAYERS[i].color;
+            badge.innerText = '';
+            hideBadge = true;
         } else {
             card.className = `player-card player-p${i + 1}`;
-            badge.innerText = 'Hidden';
-            badge.style.background = 'rgba(255,255,255,0.05)';
-            badge.style.color = 'var(--text-muted)';
+            badge.innerText = '';
+            hideBadge = true;
         }
+        badge.classList.toggle('hidden', hideBadge);
         const resources = document.getElementById(`resources-p${i + 1}`);
         const resourcePhaseVisible = gameState.multiplayer || gameState.phase === 'PLANNING';
         const currentPlayerCanManage = i === gameState.turnIndex && gameState.activePlayers[i] &&
@@ -162,12 +173,19 @@ function updatePlayerCards() {
         const purchases = document.getElementById(`resource-purchases-p${i + 1}`);
         const showShop = currentPlayerCanManage && !gameState.eliminated[i] &&
             ['PLANNING', 'COMMITTED'].includes(gameState.phase);
+        const highlightShop = showShop && isResourcePurchaseRound() &&
+            (!gameState.multiplayer || !gameState.committed[i]);
+        shoppingAvailable ||= highlightShop;
         purchases.classList.toggle('hidden', !showShop);
+        purchases.classList.toggle('shopping-available', highlightShop);
         if (!showShop) purchases.open = false;
         document.getElementById(`resource-purchase-options-p${i + 1}`).innerHTML =
             showShop ? renderResourcePurchaseOptions(i + 1) : '';
         renderPlayerDiplomacy(i);
     }
+    const shoppingNotice = document.getElementById('shopping-notice');
+    const shoppingMessage = shoppingAvailable ? 'It is Shopping time!!' : '';
+    if (shoppingNotice.innerText !== shoppingMessage) shoppingNotice.innerText = shoppingMessage;
 
     const p = PLAYERS[gameState.turnIndex];
     activePlayerNameEl.innerText = gameState.multiplayer
@@ -195,8 +213,8 @@ function allianceReplyButtons(sender) {
         diplomacyButton(sender, 'decline', '✕', `Decline alliance with ${PLAYERS[sender].name}`);
 }
 
-function resourceTradeButton(target, action, label, id = null, disabled = false) {
-    return `<button type="button" class="diplomacy-button" data-target="${target}" data-trade-action="${action}"${id === null ? '' : ` data-trade-id="${id}"`}${disabled ? ' disabled' : ''}>${label}</button>`;
+function resourceTradeButton(target, action, label, id = null, disabled = false, accessibleLabel = null) {
+    return `<button type="button" class="diplomacy-button" data-target="${target}" data-trade-action="${action}"${id === null ? '' : ` data-trade-id="${id}"`}${accessibleLabel === null ? '' : ` title="${escapeHtml(accessibleLabel)}" aria-label="${escapeHtml(accessibleLabel)}"`}${disabled ? ' disabled' : ''}>${label}</button>`;
 }
 
 function formatResourceTradeAmounts(amounts) {
@@ -237,10 +255,10 @@ function renderPlayerDiplomacy(index) {
     if (!gameState.activePlayers[index] || gameState.eliminated[index]) return;
     const opponents = [0, 1, 2, 3].filter(other => other !== index &&
         gameState.activePlayers[other] && !gameState.eliminated[other]);
-    panel.innerHTML = ['allied', 'war'].map(status => {
+    panel.innerHTML = ['war', 'allied'].map(status => {
         const others = opponents.filter(other => getDiplomacyPair(index, other).status === status);
-        if (!others.length) return '';
-        const label = status === 'allied' ? 'Allied with' : 'At war with';
+        if (!others.length && status === 'war') return '';
+        const label = status === 'allied' ? (others.length ? 'Allied with' : 'No allies') : 'At war with';
         return `<span class="diplomacy-group" role="group" aria-label="${label}">${diplomacyIcon(status)}${others.map(diplomacyBall).join('')}</span>`;
     }).filter(Boolean).join('<span class="diplomacy-separator" aria-hidden="true">|</span>');
     const me = gameState.turnIndex;
@@ -250,17 +268,17 @@ function renderPlayerDiplomacy(index) {
     const pair = getDiplomacyPair(me, index);
     const trade = getPendingResourceTrades().find(entry =>
         (entry.from === me && entry.to === index) || (entry.from === index && entry.to === me));
-    const tradeButton = resourceTradeButton(index, 'propose', '<span aria-hidden="true">⇄</span> Exchange resources',
+    const tradeButton = resourceTradeButton(index, 'propose', '<span aria-hidden="true">⇄</span>',
         null, Boolean(trade) || (gameState.multiplayer &&
-            (gameState.committed[me] || Multiplayer.isPendingCommit())));
+            (gameState.committed[me] || Multiplayer.isPendingCommit())),
+        `Exchange resources with ${PLAYERS[index].name}`);
     if (pair.requestedBy !== null) {
-        actions.innerHTML = `<span class="diplomacy-pending" title="Alliance request pending" aria-label="Alliance request pending">${diplomacyIcon('allied')}…</span>`;
+        actions.innerHTML = tradeButton + `<span class="diplomacy-pending" title="Alliance request pending" aria-label="Alliance request pending">${diplomacyIcon('allied')}…</span>`;
         if (gameState.multiplayer && pair.requestedBy === index) {
             card.classList.add('diplomacy-incoming');
-            actions.innerHTML = `<span class="diplomacy-request-alert" role="status">Alliance request!</span>` +
-                actions.innerHTML + allianceReplyButtons(index);
+            actions.innerHTML += `<span class="diplomacy-request-alert" role="status">Alliance request!</span>` +
+                allianceReplyButtons(index);
         }
-        actions.innerHTML += tradeButton;
     } else {
         const allied = pair.status === 'allied';
         const roundLocked = pair.changedRound === gameState.round;
@@ -273,7 +291,7 @@ function renderPlayerDiplomacy(index) {
             reason || (allied ? `Declare war on ${PLAYERS[index].name}` : 'Already at war'), locked || !allied);
         const request = diplomacyButton(index, 'request', `${diplomacyIcon('allied')} Request Allegiance`,
             reason || (allied ? 'Already allied' : `Request alliance with ${PLAYERS[index].name}`), locked || allied);
-        actions.innerHTML = `<details class="diplomacy-menu"><summary class="diplomacy-button" title="Diplomacy with ${escapeHtml(PLAYERS[index].name)}" aria-label="Diplomacy with ${escapeHtml(PLAYERS[index].name)}">${diplomacyIcon(pair.status)}</summary><div class="diplomacy-popup">${war}${request}${tradeButton}${reason ? `<span class="diplomacy-lock-reason">${reason}</span>` : ''}</div></details>`;
+        actions.innerHTML = tradeButton + `<details class="diplomacy-menu"><summary class="diplomacy-button" title="Diplomacy with ${escapeHtml(PLAYERS[index].name)}" aria-label="Diplomacy with ${escapeHtml(PLAYERS[index].name)}">${diplomacyIcon(pair.status)}</summary><div class="diplomacy-popup">${war}${request}${reason ? `<span class="diplomacy-lock-reason">${reason}</span>` : ''}</div></details>`;
     }
     if (trade) {
         actions.innerHTML += renderResourceTrade(trade, me);

@@ -8,6 +8,7 @@ function element() {
         children: [], className: '', title: '', innerText: '',
         style: { setProperty(name, value) { this[name] = value; } },
         appendChild(child) { this.children.push(child); },
+        addEventListener() {},
         setAttribute(name, value) { this[name] = value; },
         set innerHTML(value) { this.children = []; this.html = value; }
     };

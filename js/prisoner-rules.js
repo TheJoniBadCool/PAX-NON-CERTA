@@ -81,7 +81,15 @@ function beginCaptureChoices(player, contents, destination, recipient = null) {
     const pending = [];
     contents.forEach(unit => {
         const originalPlayer = unit.originalPlayer || unit.player;
-        if (originalPlayer === player) {
+        if (originalPlayer === REBEL_PLAYER_ID && player !== REBEL_PLAYER_ID) {
+            const { name, sequence } = getNextRecruitmentIdentity(player, getUnitType(unit));
+            const recruit = {
+                ...restorePrisoner(unit), player,
+                id: `recruited_p${player}_${sequence}`, name
+            };
+            addCapturedUnit(player, recruit, destination);
+            logAction(`P${player} recruited ${getUnitName(unit)}.`);
+        } else if (originalPlayer === player) {
             addCapturedUnit(player, restorePrisoner(unit), destination);
             logAction(`${getUnitName(unit)} was rescued by P${player} and can fight again.`);
         } else {
@@ -101,7 +109,7 @@ function decideCapture(player, captureId, unitId, fate) {
     if (gameState.phase !== 'RESOLVING' || !pending || pending.player !== player ||
         pending.id !== captureId || !['execute', 'keep'].includes(fate)) return false;
     const unit = pending.contents.find(entry => entry.id === unitId);
-    if (!unit) return false;
+    if (!unit || (unit.originalPlayer || unit.player) === REBEL_PLAYER_ID) return false;
     if (fate === 'execute') {
         recordDeadPieces(gameState, [unit]);
         logAction(`P${player} executed captured ${getUnitName(unit)}.`);

@@ -47,6 +47,7 @@ function applyStartingProvinces() {
     });
     gameState.phase = 'PLANNING';
     initializeCapitals();
+    reconcileProvinceFood();
 }
 
 let startingPositionPlayer = 0;
