@@ -959,35 +959,51 @@ const Multiplayer = (() => {
 
     function connectToHost() {
         clearTimeout(m.retryTimer);
-        if (m.peer && !m.peer.destroyed) m.peer.destroy();
+        m.retryTimer = null;
+        const previousPeer = m.peer;
+        m.peer = null;
+        m.conn = null;
+        if (previousPeer && !previousPeer.destroyed) previousPeer.destroy();
         setStatus('Connecting…');
         const peer = new PaxRelay();
         m.peer = peer;
         peer.on('open', () => {
+            if (m.peer !== peer || m.role !== 'client') return;
             const conn = peer.connect(m.code);
             m.conn = conn;
-            conn.on('open', () => conn.send({ type: 'join', name: m.name }));
-            conn.on('data', onClientMessage);
-            conn.on('close', onClientConnectionLost);
-            conn.on('error', onClientConnectionLost);
+            conn.on('open', () => {
+                if (m.peer === peer && m.conn === conn) conn.send({ type: 'join', name: m.name });
+            });
+            conn.on('data', message => {
+                if (m.peer === peer && m.conn === conn) onClientMessage(message);
+            });
+            conn.on('close', () => onClientConnectionLost(undefined, peer, conn));
+            conn.on('error', reason => onClientConnectionLost(reason, peer, conn));
         });
         peer.on('error', error => {
+            if (m.peer !== peer) return;
             if (error.type === 'peer-unavailable') {
-                onClientConnectionLost('Room not found or host offline.');
+                onClientConnectionLost('Room not found or host offline.', peer);
             } else {
-                onClientConnectionLost(error.message || `Network problem (${error.type}).`);
+                onClientConnectionLost(error.message || `Network problem (${error.type}).`, peer);
             }
         });
     }
 
-    function onClientConnectionLost(reason) {
+    function onClientConnectionLost(reason, peer = m.peer, conn = m.conn) {
         if (m.role !== 'client') return;
+        if (peer && m.peer !== peer) return;
+        if (conn && m.conn !== conn) return;
         clearPendingCommit();
         m.draftSignature = null;
         clearTimeout(m.retryTimer);
+        m.retryTimer = null;
+        m.conn = null;
         if (!m.joined) {
-            if (m.peer) m.peer.destroy();
+            const failedPeer = m.peer;
+            m.peer = null;
             m.role = null;
+            if (failedPeer) failedPeer.destroy();
             $('btn-mp-join').disabled = false;
             setStatus(typeof reason === 'string' ? reason : 'Could not connect to the room.', true);
             return;
@@ -999,11 +1015,15 @@ const Multiplayer = (() => {
     function onClientMessage(message) {
         if (!message || typeof message !== 'object') return;
         if (message.type === 'reject') {
+            clearTimeout(m.retryTimer);
+            m.retryTimer = null;
             m.joined = false;
             m.role = null;
             $('btn-mp-join').disabled = false;
             setStatus(message.reason, true);
         } else if (message.type === 'sync') {
+            clearTimeout(m.retryTimer);
+            m.retryTimer = null;
             m.joined = true;
             applySync(message);
         } else if (message.type === 'log') {

@@ -53,6 +53,8 @@ class FakeConnection {
 let relay;
 let savedTurn;
 let finishSave;
+let nextTimeoutId = 0;
+const scheduledTimeouts = [];
 class PaxRelay {
     constructor() {
         relay = this;
@@ -69,7 +71,10 @@ class PaxRelay {
         savedTurn = args;
         return new Promise(resolve => { finishSave = resolve; });
     }
-    destroy() { this.destroyed = true; }
+    destroy() {
+        this.destroyed = true;
+        if (this.connection) this.connection.close();
+    }
 }
 
 const state = {
@@ -107,7 +112,16 @@ const ctx = {
     crypto: { getRandomValues: bytes => bytes.fill(1) },
     window: { addEventListener() {} },
     MutationObserver: class { observe() {} },
-    setTimeout: () => 1, clearTimeout() {}, console: { error() {} },
+    setTimeout(callback, delay) {
+        const timeout = { id: ++nextTimeoutId, callback, delay, cleared: false };
+        scheduledTimeouts.push(timeout);
+        return timeout.id;
+    },
+    clearTimeout(id) {
+        const timeout = scheduledTimeouts.find(entry => entry.id === id);
+        if (timeout) timeout.cleared = true;
+    },
+    console: { error() {} },
     PLAYERS: [1, 2, 3, 4].map(id => ({
         name: `Player ${id}`, colorName: `Color ${id}`, color: 'red'
     })),
@@ -736,6 +750,14 @@ async function run() {
     relay.connection.emit('data', sync);
     assert(state.fogSight === 'large', 'A guest must restore the host-selected fog sight from a snapshot');
     assert(state.horde[1], 'Guests must restore horde status from a snapshot');
+    relay.handlers.error({ type: 'network', message: 'Temporary interruption' });
+    assert(relay.connection.open, 'A relay error can schedule reconnect while its connection is still open');
+    const retry = scheduledTimeouts.filter(timeout => timeout.delay === 3000).at(-1);
+    assert(retry && !retry.cleared, 'A joined guest schedules a retry after connection loss');
+    retry.callback();
+    await Promise.resolve();
+    assert(!scheduledTimeouts.some(timeout => timeout.delay === 3000 && !timeout.cleared),
+        'Replacing a disconnected relay must not schedule a competing retry');
     relay.connection.emit('data', sharedSync);
     assert(ctx.getPiecesAt(0, 0).length === 2 && state.pendingSpoils.id === 'shared-spoils' &&
         state.pendingSpoils.choices[1] === 2, 'Rejoining guests recover shared cells and in-progress votes');
