@@ -555,6 +555,10 @@
         .mission-locate { cursor: pointer; }
 
         .province-resource {
+            padding: 0;
+            border: 0;
+            color: inherit;
+            font-family: inherit;
             position: absolute;
             bottom: 1px;
             left: 1px;
@@ -570,6 +574,19 @@
             max-width: 100%;
             font-size: min(24cqw, 12px);
             overflow-wrap: anywhere;
+        }
+
+        .resource-info-popup {
+            max-width: min(28rem, calc(100vw - 3rem));
+            padding: 1rem;
+            border: 1px solid var(--text-main);
+            border-radius: 8px;
+            background: #0f172a;
+            color: var(--text-main);
+        }
+
+        .resource-info-popup::backdrop {
+            background: rgba(0, 0, 0, .45);
         }
 
         .resources-row {

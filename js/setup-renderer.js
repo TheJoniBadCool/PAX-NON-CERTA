@@ -47,7 +47,7 @@
                         renderProvinceResource(square, r, c, starting.provinceResources,
                             gameState.boardSize, starting.biomes);
                         const marker = square.querySelector('.province-resource');
-                        if (marker) marker.addEventListener('click', event => {
+                        if (marker) marker.onclick = event => {
                             if (document.getElementById('custom-edit-tool').value !== 'piece') return;
                             event.stopPropagation();
                             const province = getProvinceIndex(r, c, gameState.boardSize);
@@ -63,7 +63,7 @@
                             document.getElementById('custom-resource-type').value = resource.type;
                             document.getElementById('custom-resource-chance').value = resource.productionChance;
                             customSetupStatusEl.innerText = `${getProvinceResourceTooltip(resource)}. Click the square to apply edits.`;
-                        });
+                        };
                     }
                     square.addEventListener('click', () => editCustomSquare(r, c));
                     square.addEventListener('contextmenu', event => event.preventDefault());

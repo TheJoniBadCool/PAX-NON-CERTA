@@ -197,6 +197,30 @@ function getResourcePosition(resource, province, size, biomes) {
     throw new Error(`No non-mountain square for resource in province ${province + 1}`);
 }
 
+function showResourcePopup(text) {
+    const popup = document.createElement('dialog');
+    popup.className = 'resource-info-popup';
+    popup.setAttribute('aria-label', 'Resource production');
+    const description = document.createElement('p');
+    description.innerText = text;
+    const close = document.createElement('button');
+    close.type = 'button';
+    close.className = 'btn btn-secondary';
+    close.innerText = 'Close';
+    close.addEventListener('click', () => popup.close());
+    popup.addEventListener('close', () => popup.remove());
+    popup.addEventListener('click', event => {
+        if (event.target !== popup) return;
+        const bounds = popup.getBoundingClientRect();
+        if (event.clientX < bounds.left || event.clientX > bounds.right ||
+            event.clientY < bounds.top || event.clientY > bounds.bottom) popup.close();
+    });
+    popup.appendChild(description);
+    popup.appendChild(close);
+    document.body.appendChild(popup);
+    popup.showModal();
+}
+
 function renderProvinceResource(square, r, c, resources, size, biomes = gameState.biomes) {
     const province = getProvinceIndex(r, c, size);
     let marker;
@@ -206,9 +230,18 @@ function renderProvinceResource(square, r, c, resources, size, biomes = gameStat
         const [row, column] = getResourcePosition(resource, province, size, biomes);
         if (r !== row || c !== column) continue;
         if (!marker) {
-            marker = document.createElement('span');
+            marker = document.createElement('button');
+            marker.type = 'button';
             marker.className = 'province-resource';
-            marker.setAttribute('role', 'img');
+            marker.addEventListener('pointerdown', event => event.stopPropagation());
+            marker.addEventListener('contextmenu', event => {
+                event.preventDefault();
+                event.stopPropagation();
+            });
+            marker.onclick = event => {
+                event.stopPropagation();
+                showResourcePopup(marker.title);
+            };
             square.appendChild(marker);
         } else marker.classList.add('province-resource-multiple');
         marker.innerText += RESOURCE_TYPES.find(type => type.key === resource.type).icon;

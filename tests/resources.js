@@ -8,7 +8,11 @@ function element() {
         children: [], className: '', title: '', innerText: '', html: '',
         style: { setProperty() {} },
         appendChild(child) { this.children.push(child); },
-        addEventListener() {},
+        listeners: {},
+        addEventListener(type, handler) { this.listeners[type] = handler; },
+        showModal() { this.open = true; },
+        close() { this.open = false; this.listeners.close?.(); },
+        remove() { this.removed = true; },
         setAttribute(name, value) { this[name] = value; },
         querySelector() { return element(); },
         set innerHTML(value) { this.children = []; this.html = value; }
@@ -28,6 +32,7 @@ const customSetupBoardEl = element();
 boardEl.parentElement = element();
 const context = vm.createContext({
     console, document: {
+        body: element(),
         createElement: element,
         getElementById(id) {
             if (!elements.has(id)) elements.set(id, element());
@@ -300,6 +305,29 @@ for (const size of [12, 16]) {
         child.className.includes('province-resource'));
     assert(marker.innerText.includes('🌾') && marker.innerText.includes('🪙'),
         'Several resource types may share a mountain square');
+    let propagationStopped = false;
+    const beforeInspection = JSON.stringify(state);
+    marker.listeners.pointerdown({ stopPropagation() { propagationStopped = true; } });
+    assert(propagationStopped, 'Resource touches must not start board long-press selection');
+    propagationStopped = false;
+    marker.onclick({ stopPropagation() { propagationStopped = true; } });
+    assert(propagationStopped, 'Resource taps must not reach board movement or selection handlers');
+    const popup = context.document.body.children.at(-1);
+    assert.equal(popup.open, true, 'Tapping a resource opens its popup without selecting a piece');
+    assert.equal(popup.children[0].innerText, marker.title);
+    assert(popup.children[0].innerText.includes('100%') && popup.children[0].innerText.includes('0%'),
+        'The popup includes every resource at a shared site');
+    assert.equal(JSON.stringify(state), beforeInspection, 'Inspecting resources leaves game state unchanged');
+    popup.children[1].listeners.click();
+    assert.equal(popup.open, false);
+    assert.equal(popup.removed, true, 'Closing a popup removes it from the document');
+    const fractionalMarker = boardEl.children[size].children.find(child =>
+        child.className.includes('province-resource'));
+    fractionalMarker.onclick({ stopPropagation() {} });
+    const fractionalPopup = context.document.body.children.at(-1);
+    assert(fractionalPopup.children[0].innerText.includes('12.5%'),
+        'Resource popups preserve fractional production chances');
+    fractionalPopup.close();
     api.resolveResourceProduction(4, () => 0.125);
     assert.equal(state.resources[0].food, 1);
     assert.equal(state.resources[0].wood, 1, 'Several sites in one province produce independently');
