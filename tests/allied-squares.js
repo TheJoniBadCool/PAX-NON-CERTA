@@ -163,7 +163,13 @@ async function run() {
     assert.equal(meter.children.filter(child => child.className.includes('filled')).length, 2);
     assert(towerSquare.children.some(child => child.className === 'province-food-warning'));
     api.showPieceTooltip(0, 0, towerSquare);
-    assert.match(getElement('piece-tooltip-units').innerHTML, /Food 2\/6 · \+1 for 1 Food/);
+    const foodControl = getElement('province-food-control');
+    assert(!foodControl.classList.contains('hidden'));
+    assert.match(foodControl.innerHTML, /aria-label="Province food 2\/6\. Add 1 step for 1 Food\."/);
+    assert.match(foodControl.innerHTML, /class="grain-bag"/);
+    assert.match(foodControl.innerHTML, /class="grain-arrow"/);
+    assert.match(foodControl.innerHTML, /class="province-food-count"[^>]*>2\/6<\/span>/);
+    assert.doesNotMatch(getElement('piece-tooltip-units').innerHTML, /province-food-refill/);
     getElement('board').handlers.click({ target: { closest() { return meter; } } });
     assert.equal(state.provinceFood[0], 3, 'Clicking the meter refills one food step');
     assert.equal(state.resources[0].food, 1);
@@ -171,6 +177,18 @@ async function run() {
     getElement('piece-tooltip').handlers.click({ target: { closest() { return refillButton; } } });
     assert.equal(state.provinceFood[0], 4, 'The Tower unit-list button also refills food');
     assert.equal(state.resources[0].food, 0);
+    assert.match(foodControl.innerHTML, /data-purchase="province-food"[^>]* disabled>/,
+        'The refill button is disabled when the player has no Food');
+    assert.match(foodControl.innerHTML, /class="province-food-count"[^>]*>4\/6<\/span>/,
+        'The visible food count updates after refilling');
+    const mobile = piece(1);
+    state.board[1][1] = mobile;
+    state.selectedSquare = [1, 1];
+    api.showPieceTooltip(1, 1, towerSquare);
+    assert(foodControl.classList.contains('hidden'), 'Non-Tower unit lists do not show the refill control');
+    const html = fs.readFileSync('PaxNonCerta.html', 'utf8');
+    assert(html.indexOf('id="province-food-control"') < html.indexOf('id="piece-tooltip-units"'),
+        'The refill control appears before the unit buttons');
 
     reset();
     ally(1, 2);

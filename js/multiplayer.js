@@ -269,6 +269,7 @@ const Multiplayer = (() => {
         m.code = randomCode();
         const peer = new PaxRelay(m.code);
         m.peer = peer;
+        peer.on('privateMessage', onPrivateMessage);
         peer.on('open', () => {
             m.myIndex = 0;
             m.count = 2;
@@ -296,7 +297,33 @@ const Multiplayer = (() => {
     }
 
     function rosterFromSlots() {
-        return m.slots.map(slot => slot ? { name: slot.name, connected: slot.connected } : null);
+        return m.slots.map((slot, index) => slot ? {
+            name: slot.name, connected: slot.connected,
+            userId: index === 0 ? m.peer.userId : slot.token
+        } : null);
+    }
+
+    function onPrivateMessage(row) {
+        if (row.game_id > m.gameId) return false;
+        if (!m.started || row.game_id !== m.gameId) return true;
+        const index = m.roster.findIndex(entry => entry && entry.userId === row.sender_id);
+        if (index < 0 || index === m.myIndex || typeof row.body !== 'string' ||
+            !row.body.trim() || row.body.length > 1000) return true;
+        if (typeof PrivateChat !== 'undefined') PrivateChat.receive(index, row.body);
+        return true;
+    }
+
+    async function sendPrivateMessage(index, body) {
+        const target = m.roster[index];
+        if (!m.started || !m.peer || m.peer.destroyed || !target || !target.userId ||
+            index === m.myIndex || !target.connected ||
+            (m.role === 'client' && (!m.conn || !m.conn.open))) {
+            throw new Error('Player is not connected.');
+        }
+        await m.peer.rpc('pax_send_private', {
+            p_code: m.code, p_connection_id: m.role === 'client' ? m.conn.id : null,
+            p_recipient: target.userId, p_game: m.gameId, p_body: body
+        });
     }
 
     function onHostConnection(conn) {
@@ -317,7 +344,7 @@ const Multiplayer = (() => {
         }
         const index = conn._slot;
         if (index === undefined || !m.slots[index] || m.slots[index].conn !== conn) return;
-        if (['draft', 'commit', 'unlock', 'diplomacy', 'resource-trade', 'armour', 'purchase'].includes(message.type) &&
+        if (['draft', 'commit', 'unlock', 'diplomacy', 'resource-trade', 'armour', 'purchase', 'lucky-card'].includes(message.type) &&
             PlanningTimer.expired()) {
             expirePlanning();
             syncTo(index);
@@ -362,6 +389,21 @@ const Multiplayer = (() => {
         } else if (message.type === 'armour') {
             if (message.gameId !== m.gameId || message.round !== gameState.round) return;
             handleArmourRequest(index, message.unitId);
+        } else if (message.type === 'lucky-card') {
+            if (message.gameId !== m.gameId || message.round !== gameState.round) return;
+            const error = useLuckyCard(index + 1, message.cardId, message.target);
+            if (error) {
+                send(conn, { type: 'notice', text: error });
+                syncTo(index);
+                return;
+            }
+            if (isPlayerImmobilized(gameState.turnIndex + 1)) {
+                mergePrompt.classList.add('hidden');
+                pieceTooltip.classList.add('hidden');
+            }
+            updatePlayerCards();
+            renderBoard();
+            syncNow();
         } else if (message.type === 'purchase') {
             if (message.gameId !== m.gameId || message.round !== gameState.round) return;
             const accepted = message.action === 'province-food'
@@ -453,6 +495,7 @@ const Multiplayer = (() => {
                 });
                 continue;
             }
+            if (isPlayerImmobilized(index + 1) && !entry.siegeCancel) return null;
             const plannedContents = getPlannedPieceContents(piece, plan);
             const plannedPiece = { ...piece, contents: plannedContents };
             const stationarySiegeAction = !entry.isUnmerge && (entry.sallyOut || entry.siegeCancel) &&
@@ -544,6 +587,7 @@ const Multiplayer = (() => {
         m.started = true;
         m.gameId++;
         gameState.multiplayer = true;
+        if (typeof PrivateChat !== 'undefined') PrivateChat.reset();
         gameState.committed = [false, false, false, false];
         startNewGame([0, 1, 2, 3].map(i => i < m.count),
             custom ? m.setupBoard : null, m.boardSize, m.mapSeed, custom ? m.setupMap : null,
@@ -763,6 +807,7 @@ const Multiplayer = (() => {
         PlanningTimer.stop();
         m.started = false;
         gameState.multiplayer = false;
+        if (typeof PrivateChat !== 'undefined') PrivateChat.reset();
         $('btn-edit-names').classList.add('hidden');
         gameState.committed = [false, false, false, false];
         m.roster = rosterFromSlots();
@@ -830,6 +875,8 @@ const Multiplayer = (() => {
                 lastProvinceFoodRound: gameState.lastProvinceFoodRound,
                 resources: gameState.resources.map((resources, i) =>
                     gameState.showResourcesToOthers || i === index ? resources : null),
+                luckyCards: gameState.luckyCards.map((cards, i) => i === index ? cards : []),
+                immobilizedUntilRound: gameState.immobilizedUntilRound,
                 lastResourceProductionRound: gameState.lastResourceProductionRound,
                 objectives: gameState.objectives.map((objectives, i) => i === index ? objectives : []),
                 missionBatches: (gameState.missionBatches || [null, null, null, null])
@@ -974,6 +1021,7 @@ const Multiplayer = (() => {
         setStatus('Connecting…');
         const peer = new PaxRelay();
         m.peer = peer;
+        peer.on('privateMessage', onPrivateMessage);
         peer.on('open', () => {
             if (m.peer !== peer || m.role !== 'client') return;
             const conn = peer.connect(m.code);
@@ -1061,6 +1109,7 @@ const Multiplayer = (() => {
             const wasStarted = m.started;
             m.started = false;
             gameState.multiplayer = false;
+            if (wasStarted && typeof PrivateChat !== 'undefined') PrivateChat.reset();
             $('btn-edit-names').classList.add('hidden');
             if (wasStarted) {
                 clashOverlay.classList.add('hidden');
@@ -1081,6 +1130,8 @@ const Multiplayer = (() => {
             btnGameOverRestart.classList.add('hidden');
         }
         gameState.multiplayer = true;
+        if (isNewGame && typeof PrivateChat !== 'undefined') PrivateChat.reset();
+        if (m.peer && typeof m.peer.scheduleReconcile === 'function') m.peer.scheduleReconcile();
         if (isNewRound) {
             gameState.plans = [[], [], [], []];
             gameState.lockedPieceIds = new Set();
@@ -1120,6 +1171,8 @@ const Multiplayer = (() => {
             provinceFoodOwners: game.provinceFoodOwners || Array(16).fill(null),
             lastProvinceFoodRound: game.lastProvinceFoodRound ?? null,
             resources: game.resources,
+            luckyCards: game.luckyCards || [[], [], [], []],
+            immobilizedUntilRound: game.immobilizedUntilRound || [0, 0, 0, 0],
             lastResourceProductionRound: game.lastResourceProductionRound,
             objectives: game.objectives,
             missionBatches: game.missionBatches || [null, null, null, null],
@@ -1150,6 +1203,11 @@ const Multiplayer = (() => {
             ? isNewRound || message.committed[message.you]
             : !gameState.plans[message.you].length)) {
             gameState.plans[message.you] = message.myPlan;
+        }
+        if (isPlayerImmobilized(message.you + 1)) {
+            cancelImmobilizedPlans(message.you + 1);
+            mergePrompt.classList.add('hidden');
+            pieceTooltip.classList.add('hidden');
         }
         cancelReleasedPrisonerPlans(new Set(gameState.retreating.flat()
             .filter(entry => entry.released).flatMap(entry => entry.contents.map(unit => unit.id))
@@ -1283,6 +1341,15 @@ const Multiplayer = (() => {
             return;
         }
         m.conn.send({ type: 'purchase', action, targetId, gameId: m.gameId, round: gameState.round });
+    }
+
+    function requestLuckyCard(cardId, target) {
+        if (!m.conn || !m.conn.open) {
+            toast('Not connected to the room. Lucky Card was not sent.');
+            return;
+        }
+        m.conn.send({ type: 'lucky-card', cardId, target, gameId: m.gameId, round: gameState.round })
+            .catch(error => toast(`Could not send Lucky Card: ${error.message}`));
     }
 
     function requestCaptureDecision(captureId, unitId, fate) {
@@ -1456,6 +1523,7 @@ const Multiplayer = (() => {
         expirePlanning,
         requestArmourUpgrade,
         requestPurchase,
+        requestLuckyCard,
         requestCaptureDecision,
         requestDiplomacy,
         requestResourceTrade,
@@ -1478,6 +1546,8 @@ const Multiplayer = (() => {
         getBadge,
         refreshControls,
         getMyIndex: () => m.myIndex,
+        getPrivateChatState: () => ({ started: m.started, myIndex: m.myIndex, roster: m.roster }),
+        sendPrivateMessage,
         renameMyPlayer
     };
 })();

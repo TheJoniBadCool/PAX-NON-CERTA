@@ -15,6 +15,16 @@ function bindBoardInteractions() {
         return square && square.parentElement === boardEl ? square : null;
     }
 
+    function openPopup(event, square) {
+        const marker = event.target.closest('.province-resource');
+        if (marker && typeof marker.showResourcePopup === 'function') {
+            marker.showResourcePopup();
+            return;
+        }
+        const index = Array.prototype.indexOf.call(boardEl.children, square);
+        handleSquarePopup(Math.floor(index / gameState.boardSize), index % gameState.boardSize);
+    }
+
     boardEl.addEventListener('click', event => {
         if (event.target.closest('[data-province-food]')) return;
         if (suppressClick) {
@@ -33,8 +43,7 @@ function bindBoardInteractions() {
         if (!square || suppressClick) return;
         if (press) suppressClick = true;
         cancelPress();
-        const index = Array.prototype.indexOf.call(boardEl.children, square);
-        handleSquarePopup(Math.floor(index / gameState.boardSize), index % gameState.boardSize);
+        openPopup(event, square);
     });
     boardEl.addEventListener('pointerdown', event => {
         const alreadyPressing = press !== null;
@@ -44,11 +53,10 @@ function bindBoardInteractions() {
             !['touch', 'pen'].includes(event.pointerType)) return;
         const square = getSquare(event);
         if (!square) return;
-        const index = Array.prototype.indexOf.call(boardEl.children, square);
         press = { id: event.pointerId, x: event.clientX, y: event.clientY };
         pressTimer = setTimeout(() => {
             suppressClick = true;
-            handleSquarePopup(Math.floor(index / gameState.boardSize), index % gameState.boardSize);
+            openPopup(event, square);
         }, 500);
     });
     window.addEventListener('pointermove', event => {
@@ -64,6 +72,7 @@ function bindBoardInteractions() {
 }
 
 function renderBoard() {
+    if (closeBoardResourcePopup) closeBoardResourcePopup();
     boardEl.innerHTML = '';
     boardEl.style.gridTemplateColumns = `repeat(${gameState.boardSize}, minmax(0, 1fr))`;
     boardEl.style.gridTemplateRows = `repeat(${gameState.boardSize}, minmax(0, 1fr))`;
@@ -94,7 +103,7 @@ function renderBoard() {
             square.className = sqClass;
             square.title = `${biome[0].toUpperCase()}${biome.slice(1)} · ${coordsToNotation(r, c)}`;
             if (!visibility[r][c]) square.title += ' · Fog of war';
-            renderProvinceResource(square, r, c, gameState.provinceResources, gameState.boardSize);
+            renderProvinceResource(square, r, c, gameState.provinceResources, gameState.boardSize, gameState.biomes, true);
 
             if (gameState.selectedSquare && gameState.selectedSquare[0] === r && gameState.selectedSquare[1] === c) {
                 square.classList.add('sq-selected');

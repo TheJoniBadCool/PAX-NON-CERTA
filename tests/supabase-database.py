@@ -31,6 +31,7 @@ def main():
                     db.execute("insert into auth.users values (%s)", (user,))
                 migration = Path("supabase/multiplayer.sql").read_text()
                 db.execute(migration)
+                db.execute(Path("supabase/private-messaging.sql").read_text())
                 db.execute("set role authenticated")
 
                 def acting_as(user):
@@ -61,6 +62,23 @@ def main():
                     raise AssertionError("Another guest must not send through this connection")
                 except psycopg.errors.RaiseException:
                     pass
+                db.execute(
+                    "select public.pax_send_private('ABCDE', %s, %s, 1, %s)",
+                    (other_connection, GUEST, "guest-to-guest secret"),
+                )
+                assert db.execute("select count(*) from public.pax_private_messages").fetchone()[0] == 0
+                try:
+                    db.execute("select public.pax_send_private('ABCDE', %s, %s, 1, %s)",
+                               (other_connection, GUEST, "x" * 1001))
+                    raise AssertionError("Oversized private messages must be rejected")
+                except psycopg.errors.RaiseException:
+                    pass
+                try:
+                    db.execute("select public.pax_send_private('ABCDE', %s, %s, 1, 'spoof')",
+                               (connection, GUEST))
+                    raise AssertionError("Another guest must not use a sender's connection")
+                except psycopg.errors.RaiseException:
+                    pass
                 try:
                     db.execute(
                         "select public.pax_send(%s, %s::jsonb)",
@@ -76,6 +94,8 @@ def main():
                     pass
 
                 acting_as(HOST)
+                assert db.execute("select count(*) from public.pax_private_messages").fetchone()[0] == 0
+                db.execute("select public.pax_ack_private_messages(array[1]::bigint[])")
                 assert db.execute("select count(*) from public.pax_turns").fetchone()[0] == 2
                 message_id, payload = db.execute("select id, payload from public.pax_messages").fetchone()
                 assert payload["plan"][0]["pieceId"] == "secret"
@@ -84,6 +104,14 @@ def main():
                 db.execute("select public.pax_send(%s, %s::jsonb)", (connection, '{"type":"sync"}'))
 
                 acting_as(GUEST)
+                private_id, sender, body = db.execute(
+                    "select id, sender_id, body from public.pax_private_messages"
+                ).fetchone()
+                assert str(sender) == OTHER and body == "guest-to-guest secret"
+                db.execute("select public.pax_ack_private_messages(%s::bigint[])", ([private_id],))
+                assert db.execute("select count(*) from public.pax_private_messages").fetchone()[0] == 0
+                db.execute("select public.pax_send_private('ABCDE', %s, %s, 1, 'hello host')",
+                           (connection, HOST))
                 assert db.execute("select payload from public.pax_messages").fetchone()[0]["type"] == "sync"
                 db.execute(
                     "select public.pax_send(%s, %s::jsonb)",
@@ -93,9 +121,12 @@ def main():
                 assert not locked and plan is None
 
                 acting_as(HOST)
+                assert db.execute("select body from public.pax_private_messages").fetchone()[0] == "hello host"
+                db.execute("select public.pax_send_private('ABCDE', null, %s, 1, 'hello guest')", (GUEST,))
                 db.execute("select public.pax_close_room('ABCDE')")
                 assert db.execute("select count(*) from public.pax_turns").fetchone()[0] == 0
                 assert db.execute("select count(*) from public.pax_messages").fetchone()[0] == 0
+                assert db.execute("select count(*) from public.pax_private_messages").fetchone()[0] == 0
             print("Supabase database tests passed")
         finally:
             server.cleanup()

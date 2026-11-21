@@ -304,6 +304,28 @@ function generateProvinceResources(board, mode, random, balance = 'off', resourc
     return resources;
 }
 
+function positionProvinceResources(resources, biomes, random) {
+    const size = biomes.length;
+    resources.forEach((resource, province) => {
+        if (!resource) return;
+        const minRow = Math.floor(Math.floor(province / 4) * size / 4);
+        const maxRow = Math.floor((Math.floor(province / 4) + 1) * size / 4);
+        const minColumn = Math.floor((province % 4) * size / 4);
+        const maxColumn = Math.floor((province % 4 + 1) * size / 4);
+        const candidates = [];
+        for (let row = minRow; row < maxRow; row++) {
+            for (let column = minColumn; column < maxColumn; column++) {
+                if (biomes[row][column] !== 'mountain') candidates.push([row, column]);
+            }
+        }
+        if (!candidates.length) {
+            throw new Error(`No non-mountain square for resource in province ${province + 1}`);
+        }
+        [resource.row, resource.column] = candidates[Math.floor(random() * candidates.length)];
+    });
+    return resources;
+}
+
 function createStartingBoard(activePlayers, boardSize, seed, customBoard = null,
     progressionMode = gameState.progressionMode, resourceMode = gameState.resourceMode,
     resourceBalance = gameState.resourceBalance, resourceCapitals = gameState.resourceCapitals,
@@ -344,7 +366,9 @@ function createStartingBoard(activePlayers, boardSize, seed, customBoard = null,
     const biomes = customMap ? cloneSetupBoard(customMap.biomes) : generateBiomes(board, random);
     return { board, biomes, resourceMode, resourceBalance, resourceCapitals,
         provinceResources: customMap ? cloneSetupBoard(customMap.provinceResources)
-            : generateProvinceResources(board, resourceMode, random, resourceBalance, resourceCapitals) };
+            : positionProvinceResources(
+                generateProvinceResources(board, resourceMode, random, resourceBalance, resourceCapitals),
+                biomes, random) };
 }
 
 function initBoard(customBoard = null, boardSize = gameState.boardSize, seed = null, customMap = null) {
@@ -362,6 +386,9 @@ function initBoard(customBoard = null, boardSize = gameState.boardSize, seed = n
     gameState.provinceResources = starting.provinceResources;
     gameState.resourceCapitals = starting.resourceCapitals;
     gameState.resources = createResourceStockpiles();
+    gameState.luckyCards = [[], [], [], []];
+    gameState.nextLuckyCardId = 1;
+    gameState.immobilizedUntilRound = [0, 0, 0, 0];
     gameState.provinceRecruitmentUsed = Array(16).fill(false);
     gameState.lastResourceProductionRound = null;
     gameState.eliminated = gameState.activePlayers.map(isSelected => !isSelected);

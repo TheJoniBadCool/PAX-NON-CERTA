@@ -197,16 +197,76 @@ function getResourcePosition(resource, province, size, biomes) {
     throw new Error(`No non-mountain square for resource in province ${province + 1}`);
 }
 
-function showResourcePopup(text, anchor) {
-    const popup = document.createElement('dialog');
-    popup.className = 'resource-info-popup';
+let closeBoardResourcePopup = null;
+
+function showResourcePopup(sites, anchor, interactive = false) {
+    if (closeBoardResourcePopup) closeBoardResourcePopup();
+    const popup = document.createElement(interactive ? 'div' : 'dialog');
+    popup.className = interactive ? 'piece-tooltip resource-info-popup board-resource-popup' : 'resource-info-popup';
     popup.setAttribute('aria-label', 'Resource production');
-    const description = document.createElement('p');
-    description.innerText = text;
+    const list = document.createElement('div');
+    list.className = 'resource-info-list';
+    sites.forEach(({ resource, province, index }) => {
+        const item = document.createElement('div');
+        item.className = 'resource-info-site';
+        const type = RESOURCE_TYPES.find(entry => entry.key === resource.type);
+        const probability = document.createElement('span');
+        probability.innerText = `${type.icon} ${resource.productionChance}%`;
+        item.appendChild(probability);
+        if (interactive) {
+            const control = document.createElement('div');
+            control.className = 'resource-upgrade-control';
+            const level = resource.productionUpgraded ? 2 : 1;
+            const icon = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10 12 3l9 7M5 9v12h14V9M12 18v-7m-3 3 3-3 3 3"/></svg>';
+            control.innerHTML = `${renderPurchaseControl(gameState.turnIndex + 1, 'resource',
+                `${province}:${index}`, `Upgrade ${type.label} production`, 'resource-upgrade-button', icon)}<span class="resource-upgrade-level">${level}/2</span>`;
+            if (typeof canEditPlans === 'function' && !canEditPlans()) {
+                control.querySelector('button').disabled = true;
+            }
+            item.appendChild(control);
+        }
+        list.appendChild(item);
+    });
     const close = document.createElement('button');
     close.type = 'button';
-    close.className = 'btn btn-secondary';
-    close.innerText = 'Close';
+    close.className = interactive ? 'piece-tooltip-close' : 'btn btn-secondary';
+    close.innerText = interactive ? '×' : 'Close';
+    close.setAttribute('aria-label', 'Close resource details');
+    popup.appendChild(list);
+    popup.appendChild(close);
+    if (interactive) {
+        pieceTooltip.classList.add('hidden');
+        siegePopup.classList.add('hidden');
+        hideRequirements();
+        const dismiss = () => {
+            window.removeEventListener('click', outsideClick, true);
+            window.removeEventListener('keydown', escape);
+            hideRequirements();
+            popup.remove();
+            closeBoardResourcePopup = null;
+        };
+        const outsideClick = event => {
+            if (!popup.contains(event.target) && event.target !== anchor) dismiss();
+        };
+        const escape = event => {
+            if (event.key === 'Escape') dismiss();
+        };
+        closeBoardResourcePopup = dismiss;
+        close.addEventListener('click', dismiss);
+        popup.addEventListener('click', event => {
+            if (!event.target.closest('[data-purchase]')) return;
+            handlePurchaseClick(event);
+            if (closeBoardResourcePopup) closeBoardResourcePopup();
+        });
+        boardEl.parentElement.appendChild(popup);
+        window.addEventListener('click', outsideClick, true);
+        window.addEventListener('keydown', escape);
+        const square = anchor.parentElement;
+        popup.style.left = `${Math.max(8, Math.min(square.offsetLeft + square.offsetWidth, boardEl.clientWidth - popup.offsetWidth - 8))}px`;
+        const above = square.offsetTop - popup.offsetHeight - 4;
+        popup.style.top = `${above >= 8 ? above : Math.min(square.offsetTop + square.offsetHeight + 4, boardEl.clientHeight - popup.offsetHeight - 8)}px`;
+        return;
+    }
     close.addEventListener('click', () => popup.close());
     popup.addEventListener('close', () => popup.remove());
     popup.addEventListener('click', event => {
@@ -215,8 +275,6 @@ function showResourcePopup(text, anchor) {
         if (event.clientX < bounds.left || event.clientX > bounds.right ||
             event.clientY < bounds.top || event.clientY > bounds.bottom) popup.close();
     });
-    popup.appendChild(description);
-    popup.appendChild(close);
     document.body.appendChild(popup);
     popup.showModal();
     const bounds = anchor.getBoundingClientRect();
@@ -230,10 +288,11 @@ function showResourcePopup(text, anchor) {
     popup.style.top = `${top}px`;
 }
 
-function renderProvinceResource(square, r, c, resources, size, biomes = gameState.biomes) {
+function renderProvinceResource(square, r, c, resources, size, biomes = gameState.biomes, interactive = false) {
     const province = getProvinceIndex(r, c, size);
     let marker;
-    for (const resource of getProvinceResources(resources, province)) {
+    const sites = [];
+    for (const [index, resource] of getProvinceResources(resources, province).entries()) {
         const title = getProvinceResourceTooltip(resource);
         square.title += ` · ${title}`;
         const [row, column] = getResourcePosition(resource, province, size, biomes);
@@ -242,17 +301,21 @@ function renderProvinceResource(square, r, c, resources, size, biomes = gameStat
             marker = document.createElement('button');
             marker.type = 'button';
             marker.className = 'province-resource';
-            marker.addEventListener('pointerdown', event => event.stopPropagation());
-            marker.addEventListener('contextmenu', event => {
-                event.preventDefault();
-                event.stopPropagation();
-            });
+            if (!interactive) {
+                marker.addEventListener('pointerdown', event => event.stopPropagation());
+                marker.addEventListener('contextmenu', event => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                });
+            }
+            marker.showResourcePopup = () => showResourcePopup(sites, marker, interactive);
             marker.onclick = event => {
                 event.stopPropagation();
-                showResourcePopup(marker.title, marker);
+                if (!interactive || event.detail === 0) marker.showResourcePopup();
             };
             square.appendChild(marker);
         } else marker.classList.add('province-resource-multiple');
+        sites.push({ resource, province, index });
         marker.innerText += RESOURCE_TYPES.find(type => type.key === resource.type).icon;
         marker.title += `${marker.title ? '; ' : ''}${title}`;
         marker.setAttribute('aria-label', marker.title);
@@ -436,7 +499,7 @@ function resolveResourceProduction(completedRound, random = Math.random) {
                     if (!holder) {
                         throw new Error(`P${recipient} has no capital Tower, King, or Queen to receive raid resources.`);
                     }
-                    getUnitResourceStore(holder, true)[resource.type]++;
+                    getUnitResourceStore(holder, true)[resource.type] += resource.productionUpgraded ? 2 : 1;
                 } else {
                     const towers = getProvinceTowers(gameState.board, province, owner);
                     let nearest = null;
@@ -450,7 +513,7 @@ function resolveResourceProduction(completedRound, random = Math.random) {
                             nearestDistance = distance;
                         }
                     });
-                    if (nearest) getUnitResourceStore(nearest.unit, true)[resource.type]++;
+                    if (nearest) getUnitResourceStore(nearest.unit, true)[resource.type] += resource.productionUpgraded ? 2 : 1;
                 }
             }
         }

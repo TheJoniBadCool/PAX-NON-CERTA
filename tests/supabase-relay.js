@@ -13,6 +13,7 @@ function mockBackend() {
     const rooms = new Map();
     const connections = new Map();
     let messages = [];
+    let privateMessages = [];
     let nextId = 1;
     let failAck = false;
 
@@ -26,14 +27,15 @@ function mockBackend() {
             },
             removeChannel() {},
             from(table) {
-                assert(table === 'pax_messages', 'Only mailbox reads are expected');
+                assert(table === 'pax_messages' || table === 'pax_private_messages', 'Only mailbox reads are expected');
                 const filters = {};
                 return {
                     select() { return this; },
                     eq(key, value) { filters[key] = value; return this; },
                     order() { return this; },
                     async limit(max) {
-                        return { data: messages.filter(row => row.recipient_id === userId &&
+                        const rows = table === 'pax_messages' ? messages : privateMessages;
+                        return { data: rows.filter(row => row.recipient_id === userId &&
                             Object.keys(filters).every(key => row[key] === filters[key])).slice(0, max), error: null };
                     }
                 };
@@ -63,6 +65,13 @@ function mockBackend() {
                 } else if (name === 'pax_ack_messages') {
                     if (failAck) error = { message: 'Acknowledgement failed' };
                     else messages = messages.filter(row =>
+                        row.recipient_id !== userId || !args.p_ids.includes(row.id));
+                } else if (name === 'pax_send_private') {
+                    privateMessages.push({ id: nextId++, room_code: args.p_code, sender_id: userId,
+                        recipient_id: args.p_recipient, game_id: args.p_game, body: args.p_body });
+                } else if (name === 'pax_ack_private_messages') {
+                    if (failAck) error = { message: 'Acknowledgement failed' };
+                    else privateMessages = privateMessages.filter(row =>
                         row.recipient_id !== userId || !args.p_ids.includes(row.id));
                 } else if (name === 'pax_close_connection') {
                     const conn = connections.get(args.p_connection_id);
@@ -117,6 +126,31 @@ async function runRelayTests() {
     backend.setFailAck(false);
     await guest.reconcile();
     assert(replies.length === 1, 'Retrying an acknowledgement must not redeliver the message');
+
+    const second = new PaxRelay(null, backend.provider('second'));
+    await new Promise(resolve => second.on('open', resolve));
+    const secondConn = second.connect('ABCDE');
+    await new Promise(resolve => secondConn.on('open', resolve));
+    const privateReceived = [];
+    let ready = false;
+    second.on('privateMessage', message => {
+        if (!ready) return false;
+        privateReceived.push(message);
+        return true;
+    });
+    await guest.rpc('pax_send_private', { p_code: 'ABCDE', p_recipient: 'second', p_game: 1, p_body: 'secret' });
+    await host.reconcile();
+    assert(received.length === 2, 'Guest private messages must not reach host connections');
+    await second.reconcile();
+    assert(privateReceived.length === 0, 'Private messages must wait until the game is ready');
+    ready = true;
+    backend.setFailAck(true);
+    try { await second.reconcile(); } catch (error) {}
+    backend.setFailAck(false);
+    await second.reconcile();
+    assert(privateReceived.length === 1 && privateReceived[0].sender_id === 'guest' &&
+        privateReceived[0].body === 'secret', 'Private delivery must be addressed and not duplicated on ack retry');
+    second.destroy();
 
     let sendError = false;
     guestConn.on('error', () => { sendError = true; });

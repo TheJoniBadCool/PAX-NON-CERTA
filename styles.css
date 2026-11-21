@@ -263,6 +263,50 @@
 
         .player-card:has(details[open]) { z-index: 21; }
 
+        .private-chat-button {
+            flex: 0 0 auto;
+        }
+        .private-chat-button svg { display: block; width: 1.25rem; height: 1.25rem; margin: auto; }
+        .private-chat-button.private-chat-unread svg path { stroke: #fbbf24; }
+        .private-chat-button.private-chat-unread {
+            background: #fbbf24;
+            color: #0f172a;
+            border-color: #fbbf24;
+            box-shadow: 0 0 8px #fbbf24;
+        }
+        .private-chat {
+            position: fixed;
+            z-index: 90;
+            right: 1rem;
+            bottom: 1rem;
+            width: min(340px, calc(100vw - 2rem));
+            max-height: min(500px, calc(100vh - 2rem));
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            padding: 0.75rem;
+            background: #0f172a;
+            color: var(--text-main);
+            border: 1px solid #64748b;
+            border-radius: 8px;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+        }
+        .private-chat-header { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; }
+        .private-chat-header h2 { font-size: 1rem; overflow-wrap: anywhere; }
+        .private-chat-header button { cursor: pointer; font-size: 1.4rem; }
+        .private-chat-messages {
+            min-height: 100px;
+            max-height: 260px;
+            overflow-y: auto;
+            overflow-wrap: anywhere;
+            white-space: pre-wrap;
+        }
+        .private-chat-message { padding: 0.25rem 0; }
+        .private-chat-message.mine { color: #bfdbfe; }
+        #private-chat-form { display: grid; gap: 0.35rem; }
+        #private-chat-input { width: 100%; resize: vertical; }
+        #private-chat-error { color: #f87171; overflow-wrap: anywhere; }
+
         .player-p1 { border-color: var(--p1-red); }
         .player-p2 { border-color: var(--p2-blue); }
         .player-p3 { border-color: var(--p3-green); }
@@ -297,8 +341,11 @@
             width: 100%;
         }
         .player-card-heading .player-name { min-width: 0; }
+        .player-actions { display: flex; flex: 0 0 auto; align-items: center; gap: 0.3rem; margin-left: auto; max-width: 100%; }
+        .player-actions:has(.private-chat-button.hidden) { display: contents; }
         .diplomacy-actions { display: flex; align-items: center; flex-wrap: wrap; justify-content: flex-end; gap: 0.3rem; min-width: 0; margin-left: auto; }
         .diplomacy-actions:empty { display: none; }
+        .player-actions:not(:has(.private-chat-button.hidden)) .diplomacy-actions { margin-left: 0; }
         .diplomacy-menu { position: relative; }
         .diplomacy-menu summary { list-style: none; text-align: center; }
         .diplomacy-menu summary::-webkit-details-marker { display: none; }
@@ -359,7 +406,8 @@
             border: 1px solid rgba(255,255,255,0.5);
             flex-shrink: 0;
         }
-        .diplomacy-button {
+        .diplomacy-button,
+        .private-chat-button {
             min-width: 1.8rem;
             min-height: 1.8rem;
             padding: 0.15rem;
@@ -371,15 +419,31 @@
             font-size: 1rem;
         }
         .diplomacy-button:hover:not(:disabled),
-        .diplomacy-button:focus-visible { border-color: #f59e0b; }
+        .diplomacy-button:focus-visible,
+        .private-chat-button:hover,
+        .private-chat-button:focus-visible { border-color: #f59e0b; }
         .diplomacy-button:disabled { opacity: 0.45; cursor: not-allowed; }
         .diplomacy-pending { border-bottom: 1px dashed currentColor; }
         .alliance-review-requests { display: flex; flex-direction: column; gap: 0.75rem; }
         .alliance-review-row { gap: 0.75rem; }
         .resource-trade-request { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; font-size: 0.8rem; }
-        .resource-trade-table { width: 100%; margin-top: 1rem; text-align: left; }
-        .resource-trade-table th, .resource-trade-table td { padding: 0.3rem; }
-        .resource-trade-table input { width: 100%; min-width: 0; box-sizing: border-box; }
+        .modal-overlay.resource-trade-overlay { background: transparent; backdrop-filter: none; }
+        .modal-card.resource-trade-card {
+            width: max-content;
+            max-width: 100%;
+            max-height: calc(100dvh - 2rem);
+            overflow-y: auto;
+            padding: 1rem;
+            gap: 0.75rem;
+        }
+        .resource-trade-card h2 { font-size: 1.15rem; }
+        .resource-trade-table { border-spacing: 0; text-align: left; font-size: 0.9rem; }
+        .resource-trade-table th, .resource-trade-table td { padding: 0.2rem 0.3rem; }
+        .resource-trade-amount { display: flex; align-items: center; white-space: nowrap; gap: 0.15rem; }
+        .resource-trade-table input { width: 4.2rem; min-width: 0; }
+        .resource-trade-amount.insufficient { color: #f87171; }
+        .resource-trade-amount.insufficient input { color: #b91c1c; border-color: #ef4444; }
+        #resource-trade-error:empty { display: none; }
         #resource-trade-error, #alliance-review-error { color: #fbbf24; }
 
         .status-badge {
@@ -637,10 +701,10 @@
             z-index: 5;
             display: flex;
             flex-direction: column;
-            gap: 1px;
-            width: max(5px, 13%);
+            gap: min(1px, 2cqw);
+            width: max(6px, 13%);
             height: 65%;
-            padding: 2px;
+            padding: 1px;
             border: 1px solid #fbbf24;
             border-radius: 3px;
             background: #1e293b;
@@ -663,16 +727,50 @@
             pointer-events: none;
         }
 
+        .province-food-control {
+            flex-shrink: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            align-self: stretch;
+            padding-right: 0.4rem;
+            margin-right: 0.2rem;
+            border-right: 1px solid var(--text-muted);
+        }
+
         .province-food-refill {
-            padding: 6px 10px;
+            width: 36px;
+            height: 36px;
+            padding: 3px;
             border: 1px solid #fbbf24;
-            border-radius: 4px;
+            border-radius: 5px;
             background: #422006;
-            color: #fed7aa;
+            color: #fbbf24;
             cursor: pointer;
         }
 
-        .province-food-refill:disabled { opacity: .6; cursor: default; }
+        .province-food-refill svg {
+            display: block;
+            width: 100%;
+            height: 100%;
+            stroke: currentColor;
+            stroke-width: 1.8;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+
+        .province-food-refill .grain-bag { fill: #a77c5e; }
+        .province-food-refill .grain-detail,
+        .province-food-refill .grain-arrow { fill: none; }
+        .province-food-refill .grain-arrow { stroke: #fef08a; stroke-width: 2.5; }
+
+        .province-food-refill:disabled { filter: grayscale(1); opacity: .4; cursor: default; }
+        .province-food-count {
+            color: var(--text-main);
+            font-size: 0.7rem;
+            line-height: 1.2;
+        }
 
         .resource-info-popup {
             position: fixed;
@@ -680,9 +778,9 @@
             box-sizing: border-box;
             max-width: min(28rem, calc(100vw - 3rem));
             max-height: calc(100dvh - 16px);
-            overflow-y: auto;
-            padding: 1rem;
-            border: 1px solid var(--text-main);
+            overflow: visible;
+            padding: 0.5rem;
+            border: 1px solid #f59e0b;
             border-radius: 8px;
             background: #0f172a;
             color: var(--text-main);
@@ -691,6 +789,38 @@
         .resource-info-popup::backdrop {
             background: rgba(0, 0, 0, .45);
         }
+
+        .board-resource-popup {
+            position: absolute;
+            max-width: calc(100% - 16px);
+            max-height: none;
+            padding-right: 1.5rem;
+        }
+
+        .resource-info-list { display: flex; flex-wrap: wrap; gap: .5rem; }
+        .resource-info-site { display: flex; align-items: center; gap: .5rem; }
+        .resource-upgrade-control { display: flex; flex-direction: column; align-items: center; }
+        .resource-upgrade-button {
+            width: 32px;
+            height: 32px;
+            padding: 3px;
+            border: 1px solid #fbbf24;
+            border-radius: 5px;
+            background: #422006;
+            color: #fbbf24;
+            cursor: pointer;
+        }
+        .resource-upgrade-button svg {
+            display: block;
+            width: 100%;
+            height: 100%;
+            fill: none;
+            stroke: currentColor;
+            stroke-width: 1.8;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+        .resource-upgrade-level { font-size: .7rem; }
 
         .resources-row {
             display: flex;
@@ -712,7 +842,31 @@
             flex-shrink: 0;
         }
 
-        .diplomacy-actions:not(:empty) + .resource-purchases { margin-left: 0; }
+        .player-actions:has(.diplomacy-actions:not(:empty)) + .resource-purchases { margin-left: 0; }
+
+        .lucky-cards { position: static; flex-shrink: 0; margin-left: auto; }
+        .player-actions:has(.diplomacy-actions:not(:empty)) + .lucky-cards,
+        .lucky-cards + .resource-purchases { margin-left: 0; }
+        .lucky-cards > summary svg { width: 22px; height: 22px; }
+        .lucky-card-hand { display: flex; flex-wrap: wrap; gap: 6px; align-items: flex-start; }
+        .lucky-card-options .lucky-card-hand > .requirement-trigger { width: auto; }
+        .lucky-card-button {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 44px;
+            height: 52px;
+            border: 1px solid var(--text-muted);
+            border-radius: 6px;
+            background: var(--bg-card);
+            color: var(--text-main);
+            cursor: pointer;
+        }
+        .lucky-card-button svg { width: 32px; height: 32px; }
+        .lucky-card-button:disabled { opacity: .45; cursor: not-allowed; }
+        .lucky-card-entry:has(.lucky-card-targets:not(.hidden)) { flex-basis: 100%; }
+        .lucky-card-targets { display: flex; flex-wrap: wrap; gap: 6px; padding: 6px 0; }
+        .lucky-card-targets > span { flex-basis: 100%; font-size: .8rem; }
 
         .resource-purchases.shopping-available > summary {
             border-color: #fbbf24;
@@ -1819,7 +1973,8 @@
             color: var(--text-muted);
         }
 
-        .dead-row {
+        .dead-row,
+        .prisoners-row {
             display: flex;
             align-items: flex-start;
             gap: 0.2rem;
@@ -1836,7 +1991,8 @@
             line-height: 1.2;
         }
 
-        .dead-units {
+        .dead-units,
+        .prisoners-units {
             display: flex;
             flex-wrap: wrap;
             gap: 0.1rem;
@@ -1849,6 +2005,22 @@
         }
 
         .dead-unit .piece-svg {
+            width: 17px;
+            height: 17px;
+        }
+
+        .prisoners-flag {
+            display: inline-flex;
+            align-items: center;
+            height: 17px;
+            color: var(--text-muted);
+        }
+
+        .prisoner-unit {
+            display: inline-flex;
+        }
+
+        .prisoner-unit .piece-svg {
             width: 17px;
             height: 17px;
         }

@@ -249,12 +249,13 @@ chess rules.
   among sites using the map seed. Changing balance invalidates previews.
   Resource icons are public even in fog and forests; tooltips show their chance.
   Resource types and chances are fixed to provinces, not castles, persist through
-  conquest, and are reproduced by the map seed. There are no production numbers.
-- All resource icons use the first non-mountain square in their province, both
-  on the board and in map previews; resources are never displayed on mountains.
+  conquest, and are reproduced by the map seed. There are no shared production-number rolls.
+- Generated resources are placed on a randomly selected non-mountain square in
+  their province, reproducible by the map seed and shared by the board and preview.
+  Older unpositioned resources use the first non-mountain square as a fallback.
 - At the selected production interval (every 1, 2, or 4 completed rounds), after combat, sieges,
   re-entry, and eliminations, each eligible resource site rolls independently against
-  its fixed chance to produce one resource for its current active,
+  its fixed chance to produce one resource (two if upgraded) for its current active,
   non-eliminated owner. Every resource can succeed or fail.
   Without raiders, rebel, empty, contested, inactive, and eliminated provinces produce nothing. The public log announces
   production checks without revealing private results. Duplicate production is prevented.
@@ -268,7 +269,7 @@ chess rules.
 - Eligible raiders can also collect from rebel, empty, contested, inactive, and
   eliminated-player provinces. Rebels, inactive players, and eliminated players
   cannot raid. If several eligible raiding players share a site, each successful
-  check awards exactly one resource to a uniformly random raiding player.
+  check awards the site's output to a uniformly random raiding player.
 - Raiding stops when the eligible army leaves or loses its last free Pawn/Horse.
   No resources are transferred between scheduled checks, and existing stockpiles
   are never stolen. Each custom site is checked separately: raiding one square
@@ -299,8 +300,9 @@ chess rules.
 - Resource purchases are available during planning on rounds 4, 8, 12, etc.;
   multiple affordable purchases are allowed in one eligible round. The shopping-cart
   dropdown in the current player's card heading lists Lucky Cards, recruitment,
-  Castle upgrades, and non-Tower armour purchases. The latter three also have
-  controls in the Castle unit list. Disabled actions show colored stockpile/required counts and eligibility
+  Castle upgrades, non-Tower armour purchases, and owned resource-site upgrades.
+  Castle purchases also have controls in the Castle unit list; resource sites
+  have separate controls in their right-click or long-press popup (also available by keyboard). Disabled actions show colored stockpile/required counts and eligibility
   conditions. Recruitment places the unit in the selected Castle, including when
   multiple Castles share a province.
   The round-clock hand advances a quarter-turn per completed round independently
@@ -319,8 +321,34 @@ chess rules.
   2 Wood, and 1 Gold. Level 1 changes stationary Tower defence from ×3 to ×4,
   siege assault readiness from 3 to 4 rounds, and the garrison timer from 6 to
   8. Level 2 changes these to ×5, 6 rounds, and 12 rounds respectively.
-- Lucky Cards cost 1 each of Gold, Horse, Metal, Food, and Wood and currently
-  have no gameplay effect. Starting a new siege costs 1 Food and 1 Wood and is
+- A site in an exclusively owned province may be upgraded once for 2 Stone,
+  2 Wood, 2 Food, and 1 Gold on a purchase round. Its popup shows its probability
+  and output out of two, with a disabled upgrade control when ineligible.
+  Each successful production check then yields two resources to the normal
+  owner or chosen raider. Upgrades belong to individual sites, persist through
+  conquest, and synchronize in multiplayer snapshots.
+- Lucky Cards cost 1 each of Gold, Horse, Metal, Food, and Wood during normal
+  purchase windows. Each purchase draws independently with equal chances from
+  Resource burglar and Stop Sign; duplicates are allowed. Cards never expire.
+  The question-mark card button immediately left of the cart opens the private
+  hand as icons with description tooltips; its first card-plus icon buys another.
+  Select a card, then its resource/player target to consume it immediately.
+  Cards may currently be used only during the owner's unlocked planning turn,
+  on any round, with no per-turn limit. Reset Plans does not undo their effects.
+- Resource burglar takes every other player's entire stock of the chosen resource,
+  including allies and stores in retreating units, into the user's normal resource
+  holder. Other resource types stay untouched. A capital Tower, King, or Queen
+  is required to receive the resources; invalid targets never consume cards.
+- Stop Sign targets another active, non-eliminated player. It blocks movement,
+  splits/transfers, retreat re-entry, siege deployment, assaults, and Sally Out
+  through the current round and the next. Queued movement/attack orders are
+  cancelled immediately, even for committed players. Defence, passive siege
+  timers, prisoner decisions, purchases, resources, and card use remain available.
+  Reapplying refreshes the duration rather than adding rounds. Re-entry waits
+  without losing units. Effects are public; hands remain private, including on
+  reconnect. The host validates and serializes card use; new games reset hands
+  and immobilization.
+- Starting a new siege costs 1 Food and 1 Wood and is
   allowed on any round, including rounds when Pawns are inactive. Additional
   attacker stacks joining an existing Castle siege do not pay the cost again.
   Selecting an enemy Castle from its gate opens a preparation popup showing the

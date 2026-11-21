@@ -58,6 +58,7 @@ const scheduledTimeouts = [];
 class PaxRelay {
     constructor() {
         relay = this;
+        this.userId = 'host-id';
         this.handlers = {};
         Promise.resolve().then(() => this.handlers.open());
     }
@@ -67,6 +68,10 @@ class PaxRelay {
         return this.connection;
     }
     rpc(name, args) {
+        if (name === 'pax_send_private') {
+            this.privateSent = args;
+            return Promise.resolve();
+        }
         assert(name === 'pax_host_turn', 'Host must persist its plan');
         savedTurn = args;
         return new Promise(resolve => { finishSave = resolve; });
@@ -91,6 +96,9 @@ state.resourceMode = '8';
 state.capitalTowerIds = [null, null, null, null];
 state.horde = [false, false, false, false];
 state.deadPieces = [[], [], [], []];
+state.luckyCards = [[], [], [], []];
+state.nextLuckyCardId = 1;
+state.immobilizedUntilRound = [0, 0, 0, 0];
 state.resourceBalance = 'off';
 state.resourceProductionInterval = 1;
 state.provinceResources = [{ type: 'gold', productionChance: 75 }];
@@ -157,6 +165,9 @@ const ctx = {
         state.diplomacy = ctx.createDiplomacyState();
         state.resourceTrades = [];
         state.nextResourceTradeId = 1;
+        state.luckyCards = [[], [], [], []];
+        state.nextLuckyCardId = 1;
+        state.immobilizedUntilRound = [0, 0, 0, 0];
     },
     updatePlayerCards() {}, renderBoard() {}, logAction() {}, showPlayerSelection() {},
     showCustomSetup(players, board, map) {
@@ -213,7 +224,7 @@ Object.assign(ctx, new Function('ctx', `with (ctx) {
 Object.assign(ctx, new Function('ctx', `with (ctx) {
     ${readSource('js/game-state.js')}
     ${readSource('js/diplomacy-rules.js')}
-    return { createDiplomacyState, getDiplomacyPair, getPendingAllianceRequests, applyDiplomacyAction,
+    return { isPlayerImmobilized, createDiplomacyState, getDiplomacyPair, getPendingAllianceRequests, applyDiplomacyAction,
         getPendingResourceTrades, hasPendingPlayerRequests, applyResourceTradeAction };
 }`)(ctx));
 state.diplomacy = ctx.createDiplomacyState();
@@ -249,10 +260,13 @@ Object.assign(ctx, new Function('ctx', `with (ctx) {
     ${readSource('js/board-utils.js')}
     ${readSource('js/resource-purchases.js')}
     function getUnitType(unit) { return unit.type; }
-    return { getResourceSpending, getResourceHolderForPlayer, getUnitResourceStore, refreshResourceTotals };
+    return { getResourceSpending, getResourceHolderForPlayer, getUnitResourceStore, refreshResourceTotals,
+        purchaseResourceAction, useLuckyCard, cancelImmobilizedPlans };
 }`)(ctx));
 
 async function run() {
+    const privateReceived = [];
+    ctx.PrivateChat = { reset() {}, receive(index, body) { privateReceived.push({ index, body }); } };
     const multiplayer = new Function('ctx', `with (ctx) { ${source}\n return Multiplayer; }`)(ctx);
     ctx.Multiplayer = multiplayer;
     document.getElementById('mp-name').value = 'Host';
@@ -372,6 +386,19 @@ async function run() {
     guest.emit('data', { type: 'join', name: 'Guest' });
     document.getElementById('btn-mp-start').handlers.click();
     assert(state.multiplayer && state.round === 1, 'Host should start a multiplayer game');
+    assert(multiplayer.getPrivateChatState().roster[0].userId === 'host-id' &&
+        multiplayer.getPrivateChatState().roster[1].userId === 'guest-id',
+        'The roster exposes authenticated identities for private delivery');
+    await multiplayer.sendPrivateMessage(1, 'hello');
+    assert(relay.privateSent.p_recipient === 'guest-id' && relay.privateSent.p_game === 1 &&
+        relay.privateSent.p_connection_id === null, 'Host private messages address only the selected guest');
+    relay.handlers.privateMessage({ sender_id: 'guest-id', game_id: 1, body: 'secret' });
+    relay.handlers.privateMessage({ sender_id: 'stranger', game_id: 1, body: 'ignore' });
+    relay.handlers.privateMessage({ sender_id: 'guest-id', game_id: 2, body: 'future' });
+    assert(privateReceived.length === 1 && privateReceived[0].index === 1 &&
+        privateReceived[0].body === 'secret', 'Private messages require a known sender and current game');
+    assert(relay.handlers.privateMessage({ sender_id: 'guest-id', game_id: 2, body: 'future' }) === false,
+        'Future-game messages wait for the corresponding snapshot');
     assert(starts === 1 && state.board[0][0].id === 'guest-piece' &&
         state.board[0][0].contents[0].experience === 2,
         'Starting must use the confirmed custom board, not discarded edits');
@@ -431,6 +458,60 @@ async function run() {
         'The host applies a guest food refill to the authenticated player and province');
     assert(guest.sent.filter(message => message.type === 'sync' && message.game).pop().game.provinceFood[0] === 5,
         'A food refill is synchronized to guests');
+    const savedResources = state.resources;
+    state.round = 4;
+    state.board[1][0] = { id: 'guest-upgrade-tower', player: 2, type: 'r', contents: [{
+        id: 'guest-upgrade-tower-unit', player: 2, type: 'r',
+        resourceStockpile: { stone: 2, wood: 2, food: 2, gold: 1 }
+    }] };
+    ctx.refreshResourceTotals();
+    guest.emit('data', { type: 'purchase', action: 'resource', targetId: '16:0', gameId: 1, round: 4 });
+    assert(!state.provinceResources[0][0].productionUpgraded, 'The host rejects invalid site targets');
+    guest.emit('data', { type: 'purchase', action: 'resource', targetId: '0:0', gameId: 1, round: 4 });
+    assert(state.provinceResources[0][0].productionUpgraded && state.resources[1].stone === 0 &&
+        state.resources[1].wood === 0 && state.resources[1].food === 0 && state.resources[1].gold === 0,
+        'The host applies and charges an authenticated guest site upgrade');
+    assert(guest.sent.filter(message => message.type === 'sync' && message.game).pop()
+        .game.provinceResources[0][0].productionUpgraded, 'Guest snapshots include the site upgrade');
+    guest.emit('data', { type: 'purchase', action: 'resource', targetId: '0:0', gameId: 1, round: 4 });
+    assert(guest.sent.some(message => message.type === 'notice' && message.text.includes('Purchase rejected')),
+        'The host rejects a repeated upgrade');
+    const savedPlans = state.plans;
+    state.plans = [[{ from: [1, 1], to: [1, 2] }, { prisonerAction: 'release' }], [], [], []];
+    state.luckyCards = [[{ id: 'host-secret-card', type: 'steal' }],
+        [{ id: 'guest-stop-card', type: 'immobilize' }], [], []];
+    multiplayer.syncAlliedState();
+    const cardsSync = guest.sent.filter(message => message.type === 'sync' && message.game).pop();
+    assert(cardsSync.game.luckyCards[0].length === 0 &&
+        cardsSync.game.luckyCards[1][0].id === 'guest-stop-card' &&
+        !JSON.stringify(cardsSync).includes('host-secret-card'), 'Snapshots disclose only the recipient hand');
+    const cardMessage = { type: 'lucky-card', gameId: 1, round: 4, cardId: 'guest-stop-card', target: 1 };
+    guest.emit('data', { ...cardMessage, gameId: 99 });
+    guest.emit('data', { ...cardMessage, round: 99 });
+    guest.emit('data', { ...cardMessage, target: '1' });
+    guest.emit('data', { ...cardMessage, cardId: 'host-secret-card', target: 'gold' });
+    assert(state.luckyCards[1].length === 1 && state.immobilizedUntilRound[0] === 0,
+        'Stale, malformed, and other-player card requests do not consume cards or apply effects');
+    state.committed[1] = true;
+    guest.emit('data', cardMessage);
+    assert(state.luckyCards[1].length === 1, 'Committed card use is rejected');
+    state.committed[1] = false;
+    guest.emit('data', cardMessage);
+    assert(state.luckyCards[1].length === 0 && state.immobilizedUntilRound[0] === 5 &&
+        state.plans[0].length === 1 && state.plans[0][0].prisonerAction,
+        'Authenticated guest card use consumes the card and cancels target movement');
+    const usedCardSync = guest.sent.filter(message => message.type === 'sync' && message.game).pop();
+    assert(usedCardSync.game.immobilizedUntilRound[0] === 5 &&
+        usedCardSync.game.luckyCards[1].length === 0, 'Card use and public effects synchronize');
+    guest.emit('data', cardMessage);
+    assert(state.immobilizedUntilRound[0] === 5, 'Replayed requests cannot reuse cards');
+    state.plans = savedPlans;
+    state.luckyCards = [[], [], [], []];
+    state.immobilizedUntilRound = [0, 0, 0, 0];
+    delete state.provinceResources[0][0].productionUpgraded;
+    state.board[1][0] = null;
+    state.resources = savedResources;
+    state.round = 1;
     document.getElementById('mp-show-resources-to-others').checked = false;
     state.showResourcesToOthers = false;
     multiplayer.syncAlliedState();
@@ -503,6 +584,13 @@ async function run() {
         from: [0, 0], to: [0, 0], pieceId: 'guest-piece', unitId: 'guest-prisoner', prisonerAction: 'release'
     };
     const commitPlan = plan => guest.emit('data', { type: 'commit', gameId: 1, round: 2, plan });
+    state.immobilizedUntilRound[1] = 3;
+    commitPlan([decision, ...guestPlan]);
+    assert(!state.committed[1], 'The host rejects immobilized movement even when the remaining units could move');
+    commitPlan([decision]);
+    assert(state.committed[1], 'Immobilized players can still submit prisoner decisions');
+    guest.emit('data', { type: 'unlock', gameId: 1, round: 2 });
+    state.immobilizedUntilRound[1] = 0;
     commitPlan(guestPlan);
     assert(!state.committed[1], 'Even-round movement with a prisoner must be rejected');
     commitPlan([{ ...decision, unitId: 'unit' }]);
@@ -779,6 +867,19 @@ async function run() {
     relay.connection.emit('data', sharedSync);
     assert(ctx.getPiecesAt(0, 0).length === 2 && state.pendingSpoils.id === 'shared-spoils' &&
         state.pendingSpoils.choices[1] === 2, 'Rejoining guests recover shared cells and in-progress votes');
+    const luckyReconnectSync = JSON.parse(JSON.stringify(sharedSync));
+    luckyReconnectSync.game.luckyCards = [[], [{ id: 'rejoined-card', type: 'steal' }], [], []];
+    luckyReconnectSync.game.immobilizedUntilRound = [0, 2, 0, 0];
+    state.plans[1] = [...guestPlan];
+    relay.connection.emit('data', luckyReconnectSync);
+    assert(state.luckyCards[1][0].id === 'rejoined-card' && state.immobilizedUntilRound[1] === 2 &&
+        state.plans[1].length === 0, 'Rejoining restores private cards and immobilization without resurrecting movement');
+    multiplayer.requestLuckyCard('rejoined-card', 'gold');
+    const sentCard = relay.connection.sent.at(-1);
+    assert(sentCard.type === 'lucky-card' && sentCard.cardId === 'rejoined-card' &&
+        sentCard.target === 'gold' && sentCard.gameId === 1 && sentCard.round === 1,
+        'Guest card requests carry the card identity, target, game, and round');
+    relay.connection.emit('data', sharedSync);
     multiplayer.requestAlliedSpoils('shared-spoils', 'choose', 2);
     const guestSpoils = relay.connection.sent.at(-1);
     assert(guestSpoils.type === 'allied-spoils' && guestSpoils.gameId === 1 && guestSpoils.round === 1 &&

@@ -50,6 +50,7 @@
         const btnMergeCancel = document.getElementById('btn-merge-cancel');
         const pieceTooltip = document.getElementById('piece-tooltip');
         const pieceTooltipUnits = document.getElementById('piece-tooltip-units');
+        const provinceFoodControl = document.getElementById('province-food-control');
         const pieceTooltipCount = document.getElementById('piece-tooltip-count');
         const btnChooseDestination = document.getElementById('btn-choose-destination');
         const recruitOptions = document.getElementById('castle-recruit-options');
@@ -125,8 +126,46 @@
             if (gameState.multiplayer) Multiplayer.syncAlliedState();
             if (refresh) refresh();
         }
-        document.querySelectorAll('.resource-purchases').forEach(panel =>
-            panel.addEventListener('click', event => handlePurchaseClick(event)));
+        window.addEventListener('click', event => {
+            const panel = event.target.closest('.resource-purchases, .lucky-cards');
+            if (!panel) return;
+            handlePurchaseClick(event);
+            const select = event.target.closest('[data-lucky-select]');
+            if (select && !select.disabled) {
+                const targets = panel.querySelector(`[data-lucky-targets="${select.dataset.luckySelect}"]`);
+                targets.classList.toggle('hidden');
+                select.setAttribute('aria-expanded', String(!targets.classList.contains('hidden')));
+            }
+            const use = event.target.closest('[data-lucky-use]');
+            if (!use || !canEditPlans()) return;
+            const player = gameState.turnIndex + 1;
+            const card = gameState.luckyCards[player - 1].find(entry => entry.id === use.dataset.luckyUse);
+            if (!card) return;
+            const target = card.type === 'immobilize' ? Number(use.dataset.luckyTarget) : use.dataset.luckyTarget;
+            if (gameState.multiplayer && !Multiplayer.isHost()) {
+                Multiplayer.requestLuckyCard(card.id, target);
+                return;
+            }
+            const error = useLuckyCard(player, card.id, target);
+            hintTextEl.innerText = error || 'Lucky Card used.';
+            if (!error) {
+                mergePrompt.classList.add('hidden');
+                pieceTooltip.classList.add('hidden');
+                updatePlayerCards();
+                renderBoard();
+                if (gameState.multiplayer) Multiplayer.syncAlliedState();
+            }
+        });
+        window.addEventListener('click', event => {
+            document.querySelectorAll('.lucky-cards[open]').forEach(panel => {
+                if (!panel.contains(event.target)) panel.open = false;
+            });
+        });
+        window.addEventListener('keydown', event => {
+            if (event.key === 'Escape') {
+                document.querySelectorAll('.lucky-cards[open]').forEach(panel => { panel.open = false; });
+            }
+        });
         boardEl.addEventListener('click', event => {
             const button = event.target.closest('[data-province-food]');
             if (!button || button.disabled || !canEditPlans()) return;
@@ -769,6 +808,7 @@
                 !getReadySiegeAssault(piece, [r, c], attackerSiege.towerSquare);
             btnCancelSiege.hidden = !attackerSiege;
             btnSallyOut.hidden = !(siege && contents.some(unit => !isPrisoner(unit) && getUnitType(unit) !== 'r'));
+            btnSallyOut.disabled = isPlayerImmobilized(piece.player);
             pieceTooltipUnits.innerHTML = contents
                 .map((unit, index) => `<span class="held-piece-entry${getUnitType(unit) === 'r' && !isPrisoner(unit) ? ' held-tower-entry' : ''}"><span class="held-piece-top">
                     ${getUnitType(unit) === 'r' && !isPrisoner(unit) ? `<button type="button" class="castle-recruit-button" data-recruit-index="${index}" aria-label="Recruit units">+</button>` : ''}
@@ -786,9 +826,14 @@
                 </span>`)
                 .join('');
             const province = getProvinceIndex(r, c, gameState.boardSize);
-            if (isTowerPiece(piece) && gameState.provinceFoodOwners[province] === piece.player) {
+            const showFoodControl = isTowerPiece(piece) && gameState.provinceFoodOwners[province] === piece.player;
+            provinceFoodControl.classList.toggle('hidden', !showFoodControl);
+            provinceFoodControl.innerHTML = '';
+            if (showFoodControl) {
                 const level = gameState.provinceFood[province];
-                pieceTooltipUnits.innerHTML += `<button type="button" class="province-food-refill" data-purchase="province-food" data-target="${province}"${canRefillProvinceFood(piece.player, province) ? '' : ' disabled'}>Food ${level}/6 · +1 for 1 Food</button>`;
+                const label = `Province food ${level}/6. Add 1 step for 1 Food.`;
+                provinceFoodControl.title = label;
+                provinceFoodControl.innerHTML = `<button type="button" class="province-food-refill" data-purchase="province-food" data-target="${province}" aria-label="${label}" title="${label}"${canRefillProvinceFood(piece.player, province) ? '' : ' disabled'}><svg viewBox="0 0 32 32" aria-hidden="true"><path class="grain-bag" d="M11 3c2 1 3 1 5 0s3 1 5 0l-2 6c5 2 8 6 8 12v5c0 2-1 3-3 3H8c-2 0-3-1-3-3v-5c0-6 3-10 8-12z"/><path class="grain-detail" d="M12 9h8M16 13v11m0-7c-2 0-3-1-3-3m3 6c-2 0-3-1-3-3m3 1c2 0 3-1 3-3m-3 6c2 0 3-1 3-3"/><path class="grain-arrow" d="M25 14V5m-4 4 4-4 4 4"/></svg></button><span class="province-food-count" aria-hidden="true">${level}/6</span>`;
             }
             pieceTooltip.querySelectorAll('.held-piece-button').forEach((button, index) => {
                 const reason = getHeldSelectionUnavailableReason(piece, contents[index], [r, c]);
@@ -1029,11 +1074,14 @@
                 : !canMoveWholePiece(clickedPiece)
                 ? "Stacks containing Pawns or prisoners cannot move on even rounds. Right-click or long-press to move a non-pawn, non-prisoner unit separately."
                 : `Selected ${PLAYERS[clickedPiece.player - 1].name} ${getPieceLabel(clickedPiece.type)} at ${coordsToNotation(r, c)}. Click or tap an adjacent target to act; right-click or long-press for the unit list.`;
+            if (isPlayerImmobilized(clickedPiece.player)) {
+                hintTextEl.innerText = `Stop Sign: your pieces are immobilized through round ${gameState.immobilizedUntilRound[clickedPiece.player - 1]}.`;
+            }
             renderBoard();
         }
 
         function handleSquareAction(r, c) {
-            if (!canEditPlans()) return;
+            if (!canEditPlans() || isPlayerImmobilized(gameState.turnIndex + 1)) return;
             pieceTooltip.classList.add('hidden');
 
             const activePlayerId = gameState.turnIndex + 1;
@@ -1201,6 +1249,7 @@
 
         btnSallyOut.addEventListener('click', () => {
             if (!canEditPlans() || !gameState.selectedSquare) return;
+            if (isPlayerImmobilized(gameState.turnIndex + 1)) return;
             const tower = getPieceAt(...gameState.selectedSquare, gameState.turnIndex + 1);
             const siege = tower ? getSiegeAtSquare(gameState.selectedSquare) : null;
             if (!tower || !siege || tower.player !== gameState.turnIndex + 1 ||
@@ -1404,6 +1453,7 @@
         document.getElementById('btn-cancel-resource-trade').addEventListener('click', () => {
             document.getElementById('resource-trade-modal').classList.add('hidden');
         });
+        document.getElementById('resource-trade-form').addEventListener('input', updateResourceTradeAvailability);
         document.getElementById('resource-trade-form').addEventListener('submit', async event => {
             event.preventDefault();
             const form = event.currentTarget;
@@ -1452,6 +1502,10 @@
                 if (gameState.eliminated[p]) continue;
                 for (const m of gameState.plans[p]) {
                     if (m.prisonerAction) continue;
+                    if (isPlayerImmobilized(p + 1) && !m.siegeCancel) {
+                        logAction(`P${p + 1}'s order cancelled by Stop Sign.`);
+                        continue;
+                    }
                     if ((m.siegeAssault || m.sallyOut || m.siegeCancel) &&
                         !gameState.sieges.some(siege => siege.id === m.siegeId)) {
                         logAction(`P${p + 1}'s siege action cancelled: the siege is no longer active.`);

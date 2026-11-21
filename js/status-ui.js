@@ -16,6 +16,7 @@ function renderRetreatTable() {
             `<span class="retreat-flag" aria-hidden="true">⚑</span><span class="retreat-entries">${text}</span>`;
     });
     renderDeadPieces();
+    renderPrisoners();
 }
 
 function renderDeadPieces() {
@@ -28,6 +29,29 @@ function renderDeadPieces() {
             : '<span class="retreat-empty">—</span>';
         document.getElementById(`dead-p${player.id}`).innerHTML =
             `<span class="dead-flag" aria-hidden="true">💀</span><span class="dead-units">${text}</span>`;
+    });
+}
+
+function renderPrisoners() {
+    const held = PLAYERS.map(() => new Map());
+    const addUnits = units => units.forEach(unit => {
+        if (isPrisoner(unit) && held[unit.prisonerOf - 1]) {
+            held[unit.prisonerOf - 1].set(unit.id, unit);
+        }
+    });
+    gameState.board.forEach(row => row.forEach(square => {
+        getSquarePieces(square).forEach(piece => addUnits(getPieceContents(piece)));
+    }));
+    gameState.retreating.forEach(entries => entries.forEach(entry => addUnits(entry.contents)));
+    if (gameState.captureRecipient) addUnits(getPieceContents(gameState.captureRecipient));
+    held.forEach((units, index) => {
+        const text = units.size
+            ? [...units.values()].map(unit =>
+                `<span class="prisoner-unit ${getUnitDisplayClass(unit, index + 1)}" title="${escapeHtml(getUnitName(unit))}" role="img" aria-label="${escapeHtml(getUnitName(unit))}">${PIECE_SVGS[getUnitType(unit)]}</span>`
+            ).join('')
+            : '<span class="retreat-empty">—</span>';
+        document.getElementById(`prisoners-p${index + 1}`).innerHTML =
+            `<span class="prisoners-flag" aria-hidden="true">${PRISONER_CHAIN_SVG}</span><span class="prisoners-units">${text}</span>`;
     });
 }
 
@@ -120,6 +144,42 @@ document.getElementById('temporary-objectives-list').addEventListener('click', e
     button.title = targets.length ? 'Target highlighted without changing visibility' : 'Target is not currently on the board';
 });
 
+function renderLuckyCards(player, visible) {
+    let panel = document.getElementById(`lucky-cards-p${player}`);
+    if (!panel && visible) {
+        panel = document.createElement('details');
+        panel.id = `lucky-cards-p${player}`;
+        panel.className = 'lucky-cards diplomacy-menu';
+        panel.innerHTML = `<summary class="diplomacy-button" title="Your Lucky Cards" aria-label="Your Lucky Cards">${renderLuckyCardBack()}</summary><div class="diplomacy-popup resource-purchase-options lucky-card-options" aria-label="Your Lucky Cards"></div>`;
+        document.getElementById(`resource-purchases-p${player}`).before(panel);
+    }
+    if (!panel) return;
+    panel.classList.toggle('hidden', !visible);
+    if (!visible) {
+        panel.open = false;
+        panel.querySelector('.lucky-card-options').innerHTML = '';
+        return;
+    }
+    const enabled = canUseLuckyCards(player);
+    const hand = gameState.luckyCards[player - 1];
+    panel.querySelector('summary').setAttribute('aria-label', `Your Lucky Cards: ${hand.length}`);
+    const buy = renderPurchaseControl(player, 'lucky', null, 'Buy a random Lucky Card',
+        'lucky-card-button', renderLuckyCardBack(true));
+    const cards = hand.map(card => {
+        const type = LUCKY_CARD_TYPES[card.type];
+        const tooltip = `${type.label}: ${type.description} Single use.`;
+        const targets = card.type === 'steal'
+            ? RESOURCE_TYPES.map(resource =>
+                `<button type="button" class="resource-purchase-button" data-lucky-use="${card.id}" data-lucky-target="${resource.key}">${resource.icon} ${resource.label}</button>`).join('')
+            : PLAYERS.filter(other => other.id !== player && gameState.activePlayers[other.id - 1] &&
+                !gameState.eliminated[other.id - 1]).map(other =>
+                `<button type="button" class="resource-purchase-button" data-lucky-use="${card.id}" data-lucky-target="${other.id}">${escapeHtml(other.name)}</button>`).join('');
+        return `<div class="lucky-card-entry"><button type="button" class="lucky-card-button" data-lucky-select="${card.id}" aria-expanded="false" aria-label="${escapeHtml(tooltip)}" title="${escapeHtml(tooltip)}"${enabled ? '' : ' disabled'}>${type.icon}</button><div class="lucky-card-targets hidden" data-lucky-targets="${card.id}"><span>${escapeHtml(type.description)}</span>${targets}</div></div>`;
+    }).join('');
+    panel.querySelector('.lucky-card-options').innerHTML =
+        `<div class="lucky-card-hand">${buy}${cards}</div><span class="resource-purchase-notice">Keep cards indefinitely. Use once during unlocked planning; effects cannot be undone.</span>`;
+}
+
 function updatePlayerCards() {
     const tradeModal = document.getElementById('resource-trade-modal');
     if (!tradeModal.classList.contains('hidden') &&
@@ -127,6 +187,7 @@ function updatePlayerCards() {
             (gameState.multiplayer && gameState.committed[gameState.turnIndex]))) {
         tradeModal.classList.add('hidden');
     }
+    if (!tradeModal.classList.contains('hidden')) updateResourceTradeAvailability();
     let shoppingAvailable = false;
     for (let i = 0; i < 4; i++) {
         const card = document.getElementById(`card-p${i + 1}`);
@@ -181,8 +242,13 @@ function updatePlayerCards() {
         if (!showShop) purchases.open = false;
         document.getElementById(`resource-purchase-options-p${i + 1}`).innerHTML =
             showShop ? renderResourcePurchaseOptions(i + 1) : '';
+        renderLuckyCards(i + 1, showShop);
+        const stopLabel = isPlayerImmobilized(i + 1)
+            ? `Stop Sign: immobilized through round ${gameState.immobilizedUntilRound[i]}.` : '';
+        card.setAttribute('title', stopLabel);
         renderPlayerDiplomacy(i);
     }
+    if (typeof PrivateChat !== 'undefined') PrivateChat.renderButtons();
     const shoppingNotice = document.getElementById('shopping-notice');
     const shoppingMessage = shoppingAvailable ? 'It is Shopping time!!' : '';
     if (shoppingNotice.innerText !== shoppingMessage) shoppingNotice.innerText = shoppingMessage;
@@ -240,9 +306,30 @@ function showResourceTradeProposal(target) {
     document.getElementById('resource-trade-title').innerText = `Resource exchange with ${PLAYERS[target].name}`;
     document.getElementById('resource-trade-error').innerText = '';
     document.getElementById('resource-trade-amounts').innerHTML = RESOURCE_TYPES.map(({ key, label, icon }) =>
-        `<tr><th scope="row">${icon} ${escapeHtml(label)}</th><td><input type="number" name="give-${key}" aria-label="You give ${escapeHtml(label)}" min="0" step="1" value="0" required></td><td><input type="number" name="receive-${key}" aria-label="You request ${escapeHtml(label)}" min="0" step="1" value="0" required></td></tr>`
+        `<tr><th scope="row">${icon} ${escapeHtml(label)}</th>${['give', 'receive'].map(side =>
+            `<td><span class="resource-trade-amount"><input class="resource-trade-input" type="number" name="${side}-${key}" data-side="${side}" data-resource="${key}" aria-label="${side === 'give' ? 'You give' : 'They give'} ${escapeHtml(label)}" min="0" step="1" value="0" required><span class="resource-trade-available"></span></span></td>`
+        ).join('')}</tr>`
     ).join('');
+    updateResourceTradeAvailability();
     document.getElementById('resource-trade-modal').classList.remove('hidden');
+}
+
+function updateResourceTradeAvailability() {
+    const target = Number(document.getElementById('resource-trade-target').value);
+    document.querySelectorAll('#resource-trade-amounts .resource-trade-input').forEach(input => {
+        const own = input.dataset.side === 'give';
+        const stock = own || gameState.showResourcesToOthers
+            ? gameState.resources[own ? gameState.turnIndex : target]?.[input.dataset.resource]
+            : null;
+        const known = Number.isSafeInteger(stock) && stock >= 0;
+        const insufficient = known && input.valueAsNumber > stock;
+        const available = input.parentElement.querySelector('.resource-trade-available');
+        available.textContent = `/${known ? stock : '?'}`;
+        available.title = known ? `${stock} available` : 'Available amount is private';
+        input.parentElement.classList.toggle('insufficient', insufficient);
+        input.setAttribute('aria-invalid', String(insufficient));
+        input.title = insufficient ? `Only ${stock} available` : available.title;
+    });
 }
 
 function renderPlayerDiplomacy(index) {

@@ -9,6 +9,7 @@ function getPendingHeldIndices(piece, currentPlans) {
 }
 
 function getHeldSelectionUnavailableReason(piece, unit, square) {
+    if (isPlayerImmobilized(piece.player)) return 'This player is immobilized by a Stop Sign Lucky Card.';
     if (unit.type === 'r') return 'Towers cannot be unmerged or transferred.';
     if (getSiegeAtSquare(square)) return 'Defending pieces cannot leave a Tower under siege.';
     const plans = gameState.plans[gameState.turnIndex];

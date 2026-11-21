@@ -9,12 +9,16 @@ function element() {
         style: { setProperty() {} },
         offsetWidth: 240, offsetHeight: 120,
         getBoundingClientRect() { return { left: 100, right: 120, top: 200, bottom: 220 }; },
-        appendChild(child) { this.children.push(child); },
+        appendChild(child) {
+            this.children.push(child);
+            Object.defineProperty(child, 'parentElement', { value: this, writable: true, configurable: true });
+        },
         listeners: {},
         addEventListener(type, handler) { this.listeners[type] = handler; },
         showModal() { this.open = true; },
         close() { this.open = false; this.listeners.close?.(); },
         remove() { this.removed = true; },
+        contains(target) { return target === this || this.children.some(child => child.contains(target)); },
         setAttribute(name, value) { this[name] = value; },
         querySelector() { return element(); },
         set innerHTML(value) { this.children = []; this.html = value; }
@@ -32,6 +36,9 @@ const elements = new Map();
 const boardEl = element();
 const customSetupBoardEl = element();
 boardEl.parentElement = element();
+const windowListeners = {};
+let pendingPress;
+let handledPurchase = 0;
 const context = vm.createContext({
     console, document: {
         body: element(),
@@ -42,6 +49,14 @@ const context = vm.createContext({
             return elements.get(id);
         }
     }, boardEl, customSetupBoardEl, customMapPreview: null, logAction() {},
+    window: {
+        addEventListener(type, handler) { (windowListeners[type] ||= new Set()).add(handler); },
+        removeEventListener(type, handler) { windowListeners[type]?.delete(handler); }
+    },
+    setTimeout(callback) { pendingPress = callback; return 1; },
+    clearTimeout() { pendingPress = null; },
+    pieceTooltip: element(), siegePopup: element(), hideRequirements() {},
+    canEditPlans: () => true, handlePurchaseClick() { handledPurchase++; },
     placeCustomPiece() {}, randomLevel: () => 0,
     renderPlanArrows() {}, renderRetreatTable() {},
     activePlayerNameEl: element(), roundTagEl: element(),
@@ -56,12 +71,13 @@ const context = vm.createContext({
     'board-setup', 'board-renderer', 'setup-renderer', 'status-ui', 'prisoner-rules'].forEach(name =>
     vm.runInContext(fs.readFileSync(`js/${name}.js`, 'utf8'), context));
 const api = vm.runInContext(`const gameState = new GameState();
-    ({ state: gameState, createStartingBoard, initBoard, generateProvinceResources,
+    ({ state: gameState, createStartingBoard, initBoard, generateProvinceResources, positionProvinceResources,
        createSeededRandom, resolveResourceProduction, getProvinceIndex, createUnit,
        renderBoard, renderMapPreview, renderCustomSetupBoard, updatePlayerCards,
        isValidCustomMap, getUnitResourceStore, refreshResourceTotals,
        transferStoredUnitResources, transferCapturedUnitResources,
        cloneBoardWithoutResourceStores, beginCaptureChoices, decideCapture,
+       bindBoardInteractions,
        types: RESOURCE_TYPES, modes: RESOURCE_MODES })`, context);
 const { state } = api;
 const plain = value => JSON.parse(JSON.stringify(value));
@@ -136,6 +152,14 @@ for (const size of [12, 16]) {
         api.renderMapPreview(preview, starting, size);
         assert.equal(preview.children.flatMap(square => square.children)
             .filter(child => child.className === 'province-resource').length, Number(mode));
+        if (size === 12 && mode === '8') {
+            const previewMarker = preview.children.flatMap(square => square.children)
+                .find(child => child.className === 'province-resource');
+            previewMarker.onclick({ detail: 1, stopPropagation() {} });
+            const previewPopup = context.document.body.children.at(-1);
+            assert(previewPopup.open, 'Map previews retain click-to-inspect modal behavior');
+            previewPopup.children[1].listeners.click();
+        }
         state.customSetupBoard = starting.board;
         context.customMapPreview = { starting };
         api.renderCustomSetupBoard();
@@ -163,35 +187,48 @@ for (const size of [12, 16]) {
         'Invalidated previews remove terrain and resources from the placement grid');
         starting.provinceResources.forEach((resource, province) => {
             if (!resource) return;
-            const minRow = Math.floor(Math.floor(province / 4) * size / 4);
-            const minColumn = Math.floor((province % 4) * size / 4);
-            state.biomes[minRow][minColumn] = 'mountain';
-            state.biomes[minRow][minColumn + 1] = 'plains';
-        });
-        api.renderBoard();
-        const resourcePreview = element();
-        api.renderMapPreview(resourcePreview, { ...starting, biomes: state.biomes }, size);
-        for (const grid of [boardEl, resourcePreview]) {
-            const resourceSquares = grid.children.filter(square => square.children.some(child =>
-                child.className === 'province-resource'));
-            assert.equal(resourceSquares.length, Number(mode),
-                'Moving resources away from mountains must preserve their count');
-            assert(resourceSquares.every(square => !square.className.includes('biome-mountain')),
-                'No resource may be displayed on mountains');
-            starting.provinceResources.forEach((resource, province) => {
-                if (!resource) return;
-                const minRow = Math.floor(Math.floor(province / 4) * size / 4);
-                const minColumn = Math.floor((province % 4) * size / 4);
-                const type = api.types.find(type => type.key === resource.type);
-                assert(grid.children[minRow * size + minColumn + 1].children.some(child =>
+            assert.equal(api.getProvinceIndex(resource.row, resource.column, size), province,
+                'Each generated resource stays in its own province');
+            assert.notEqual(starting.biomes[resource.row][resource.column], 'mountain',
+                'Generated resource sites avoid mountains');
+            const type = api.types.find(type => type.key === resource.type);
+            for (const grid of [boardEl, preview]) {
+                assert(grid.children[resource.row * size + resource.column].children.some(child =>
                     child.className === 'province-resource' && child.innerText === type.icon),
-                'Each resource moves to the first non-mountain square in its own province');
-            });
-        }
+                'The board and preview display the stored resource position');
+            }
+        });
         const alternate = api.createStartingBoard(allPlayers, size, 'resources-alternate', null, 'zero', mode);
         assert.notDeepEqual(plain(starting.provinceResources), plain(alternate.provinceResources),
             'Different seeds shuffle resource assignments');
+        if (mode === '16') {
+            assert(starting.provinceResources.some((resource, province) => {
+                const other = alternate.provinceResources[province];
+                return resource.row !== other.row || resource.column !== other.column;
+            }), 'Different seeds can produce different resource positions');
+        }
     }
+}
+
+{
+    const biomes = Array.from({ length: 12 }, () => Array(12).fill('plains'));
+    biomes[0][0] = 'mountain';
+    const resources = () => [{ type: 'food', productionChance: 50 }, ...Array(15).fill(null)];
+    const first = api.positionProvinceResources(resources(), biomes, () => 0)[0];
+    const last = api.positionProvinceResources(resources(), biomes, () => 0.999)[0];
+    assert.deepEqual([first.row, first.column], [0, 1], 'The first eligible square can be selected');
+    assert.deepEqual([last.row, last.column], [2, 2], 'The last eligible square can be selected');
+    const positions = new Set();
+    for (let index = 0; index < 8; index++) {
+        const resource = api.positionProvinceResources(resources(), biomes, () => (index + 0.5) / 8)[0];
+        positions.add(`${resource.row},${resource.column}`);
+    }
+    assert.equal(positions.size, 8, 'Every eligible square has an equal-sized selection interval');
+    for (let row = 0; row < 3; row++) {
+        for (let column = 0; column < 3; column++) biomes[row][column] = 'mountain';
+    }
+    assert.throws(() => api.positionProvinceResources(resources(), biomes, () => 0),
+        /No non-mountain square for resource in province 1/);
 }
 
 for (const size of [12, 16]) {
@@ -308,35 +345,72 @@ for (const size of [12, 16]) {
         child.className.includes('province-resource'));
     assert(marker.innerText.includes('🌾') && marker.innerText.includes('🪙'),
         'Several resource types may share a mountain square');
+    const square = boardEl.children[0];
+    square.closest = selector => selector === '.square' ? square : null;
+    marker.closest = selector => selector === '.province-resource' ? marker :
+        selector === '.square' ? square : null;
+    api.bindBoardInteractions();
     let propagationStopped = false;
     const beforeInspection = JSON.stringify(state);
-    marker.listeners.pointerdown({ stopPropagation() { propagationStopped = true; } });
-    assert(propagationStopped, 'Resource touches must not start board long-press selection');
-    propagationStopped = false;
-    marker.onclick({ stopPropagation() { propagationStopped = true; } });
-    assert(propagationStopped, 'Resource taps must not reach board movement or selection handlers');
-    const popup = context.document.body.children.at(-1);
-    assert.equal(popup.open, true, 'Tapping a resource opens its popup without selecting a piece');
-    assert.equal(popup.style.left, '112px', 'Popup stays inside the right screen edge');
-    assert.equal(popup.style.top, '76px', 'Popup opens just above the tapped resource');
-    assert.equal(popup.children[0].innerText, marker.title);
-    assert(popup.children[0].innerText.includes('100%') && popup.children[0].innerText.includes('0%'),
+    marker.onclick({ detail: 1, stopPropagation() { propagationStopped = true; } });
+    assert(propagationStopped, 'Resource taps do not issue board orders');
+    assert(!boardEl.parentElement.children.some(child =>
+        !child.removed && child.className.includes('board-resource-popup')),
+        'An ordinary click does not open the board popup');
+    boardEl.listeners.contextmenu({ target: marker, preventDefault() {} });
+    const popup = boardEl.parentElement.children.at(-1);
+    assert(popup.className.includes('piece-tooltip') && popup.className.includes('board-resource-popup'),
+        'Right-click opens a non-modal popup matching the unit list');
+    const sites = popup.children[0].children;
+    assert.deepEqual(sites.map(site => site.children[0].innerText), ['🌾 100%', '🪙 0%']);
+    assert(sites.every(site => /data-purchase="resource"/.test(site.children[1].html)),
+        'Each site has its own upgrade control');
+    assert(sites.every(site => /resource-upgrade-button/.test(site.children[1].html) &&
+        /<svg/.test(site.children[1].html)), 'Each site uses an upgrade icon button');
+    assert(sites.every(site => site.children[1].html.includes('1/2')),
+        'Unupgraded sites display their current output');
+    assert(sites[0].children[0].innerText.includes('100%') && sites[1].children[0].innerText.includes('0%'),
         'The popup includes every resource at a shared site');
     assert.equal(JSON.stringify(state), beforeInspection, 'Inspecting resources leaves game state unchanged');
     popup.children[1].listeners.click();
-    assert.equal(popup.open, false);
     assert.equal(popup.removed, true, 'Closing a popup removes it from the document');
+    boardEl.listeners.pointerdown({ target: marker, isPrimary: true, button: 0,
+        pointerType: 'touch', pointerId: 1, clientX: 0, clientY: 0 });
+    assert(pendingPress, 'Touching a resource starts the board long-press timer');
+    pendingPress();
+    const touchPopup = boardEl.parentElement.children.at(-1);
+    assert(touchPopup.className.includes('board-resource-popup'), 'A long press opens the resource popup');
+    marker.onclick({ detail: 1, stopPropagation() {} });
+    assert(!touchPopup.removed, 'The release click does not close the long-press popup');
+    boardEl.listeners.contextmenu({ target: marker, preventDefault() {} });
+    assert.equal(boardEl.parentElement.children.at(-1), touchPopup,
+        'The synthetic context menu after a hold does not open a second popup');
+    for (const listener of windowListeners.keydown) listener({ key: 'Escape' });
+    assert(touchPopup.removed, 'Escape closes the board resource popup');
+    boardEl.listeners.pointerdown({ target: marker, isPrimary: true, button: 0,
+        pointerType: 'touch', pointerId: 2, clientX: 0, clientY: 0 });
+    for (const listener of windowListeners.pointermove) listener({ pointerId: 2, clientX: 20, clientY: 0 });
+    assert.equal(pendingPress, null, 'Moving a touch cancels the long press');
     const fractionalMarker = boardEl.children[size].children.find(child =>
         child.className.includes('province-resource'));
-    fractionalMarker.getBoundingClientRect = () => ({ left: 0, right: 20, top: 0, bottom: 20 });
-    fractionalMarker.onclick({ stopPropagation() {} });
-    const fractionalPopup = context.document.body.children.at(-1);
-    assert.equal(fractionalPopup.style.left, '20px');
-    assert.equal(fractionalPopup.style.top, '24px',
-        'Popup opens below the resource when there is no room above');
-    assert(fractionalPopup.children[0].innerText.includes('12.5%'),
-        'Resource popups preserve fractional production chances');
-    fractionalPopup.close();
+    fractionalMarker.onclick({ detail: 0, stopPropagation() {} });
+    const fractionalPopup = boardEl.parentElement.children.at(-1);
+    assert(fractionalPopup.children[0].children[0].children[0].innerText.includes('12.5%'),
+        'Keyboard activation opens the popup and preserves fractional production chances');
+    const purchasesBeforeClick = handledPurchase;
+    fractionalPopup.listeners.click({ target: { closest: () => ({}) } });
+    assert.equal(handledPurchase, purchasesBeforeClick + 1, 'The popup forwards upgrade clicks to the purchase flow');
+    assert(fractionalPopup.removed, 'An upgrade click closes the resource popup');
+    fractionalMarker.onclick({ detail: 0, stopPropagation() {} });
+    const outsidePopup = boardEl.parentElement.children.at(-1);
+    for (const listener of windowListeners.click) listener({ target: element() });
+    assert(outsidePopup.removed, 'Clicking outside dismisses the non-modal popup');
+    let unitPopupOpened = false;
+    context.handleSquarePopup = () => { unitPopupOpened = true; };
+    boardEl.listeners.pointerdown({ target: square, isPrimary: true, button: 0,
+        pointerType: 'mouse', pointerId: 3, clientX: 0, clientY: 0 });
+    boardEl.listeners.contextmenu({ target: square, preventDefault() {} });
+    assert(unitPopupOpened, 'Right-clicking the rest of the square still opens the unit list');
     api.resolveResourceProduction(4, () => 0.125);
     assert.equal(state.resources[0].food, 1);
     assert.equal(state.resources[0].wood, 1, 'Several sites in one province produce independently');
@@ -724,17 +798,26 @@ for (const size of [12, 16]) {
     state.board[0][1] = state.board[0][0];
     state.board[0][0] = null;
     produce();
-    assert.equal(state.resources[1].food, 1, 'Raiding uses the displayed generated resource position');
+    assert.equal(state.resources[1].food, 1, 'Raiding uses the displayed legacy resource position');
+
+    setupRaid();
+    state.provinceResources[0] = api.positionProvinceResources(
+        [{ type: 'food', productionChance: 100 }, ...Array(15).fill(null)],
+        state.biomes, () => 0.999)[0];
+    const { row, column } = state.provinceResources[0];
+    state.board[row][column] = army(2, ['p']);
+    produce();
+    assert.equal(state.resources[1].food, 1, 'Raiding uses the generated resource square');
 
     setupRaid();
     state.provinceResources[0] = [
-        { type: 'food', productionChance: 100, row: 0, column: 1 },
+        { type: 'food', productionChance: 100, row: 0, column: 1, productionUpgraded: true },
         { type: 'wood', productionChance: 100, row: 0, column: 1 },
         { type: 'gold', productionChance: 100, row: 1, column: 0 }
     ];
     state.board[0][1] = army(2, ['n']);
     produce();
-    assert.equal(state.resources[1].food, 1);
+    assert.equal(state.resources[1].food, 2, 'An upgraded site pays two resources to a raider');
     assert.equal(state.resources[1].wood, 1, 'All custom resource types on the occupied square are raided');
     assert.equal(state.resources[0].gold, 1, 'Other sites in the same province keep paying the owner');
     for (const chance of [0, 12.5, 50, 100]) {
@@ -760,19 +843,19 @@ state.board[0][0] = castle(1, 'capital-but-not-nearest');
 state.board[1][0] = castle(1, 'nearest-first');
 state.board[1][2] = castle(1, 'nearest-second');
 state.capitalTowerIds[0] = 'capital-but-not-nearest-tower';
-state.provinceResources[0] = { type: 'wood', productionChance: 100, row: 1, column: 1 };
+state.provinceResources[0] = { type: 'wood', productionChance: 100, row: 1, column: 1, productionUpgraded: true };
 api.resolveResourceProduction(1, () => 0);
 assert.equal(state.board[0][0].contents[0].resourceStockpile?.wood || 0, 0,
     'Ordinary production does not default to the capital');
-assert.equal(state.board[1][0].contents[0].resourceStockpile.wood, 1,
+assert.equal(state.board[1][0].contents[0].resourceStockpile.wood, 2,
     'Equidistant nearest Towers break ties by first game order');
 assert.equal(state.board[1][2].contents[0].resourceStockpile?.wood || 0, 0);
-assert.equal(state.resources[0].wood, 1, 'Displayed player total sums Tower stores');
+assert.equal(state.resources[0].wood, 2, 'Displayed player total sums Tower stores');
 state.board[1][0].player = 2;
 state.board[1][0].contents.forEach(unit => { unit.player = 2; });
 api.refreshResourceTotals();
 assert.equal(state.resources[0].wood, 0);
-assert.equal(state.resources[1].wood, 1, 'Resources stored on a Tower follow it when captured');
+assert.equal(state.resources[1].wood, 2, 'Resources stored on a Tower follow it when captured');
 
 state.reset();
 state.boardSize = 16;

@@ -1,4 +1,5 @@
 function getReadySiegeAssault(piece, from, to) {
+    if (isPlayerImmobilized(piece.player)) return null;
     const siege = getSiegeForAttacker(piece.id);
     const attacker = getSiegeAttacker(piece.id);
     const tower = getPieceAt(...to);
@@ -13,6 +14,7 @@ function getReadySiegeAssault(piece, from, to) {
 }
 
 function isValidSallyOutPlan(piece, from, to, player, siegeId) {
+    if (isPlayerImmobilized(player)) return false;
     const siege = gameState.sieges.find(entry => entry.id === siegeId);
     const tower = siege && getPieceAt(...siege.towerSquare);
     return Boolean(siege && tower && tower.id === piece.id &&
@@ -24,6 +26,10 @@ function isValidSallyOutPlan(piece, from, to, player, siegeId) {
 
 function registerSiegeStarts(allIntendedMoves) {
     allIntendedMoves.forEach(move => {
+        if (isPlayerImmobilized(move.player) && !move.siegeCancel) {
+            move.invalid = true;
+            return;
+        }
         if (move.invalid || move.isUnmerge || move.siegeAssault) return;
         const source = getPieceByIdAt(...move.from, move.pieceId);
         const target = getPieceAt(...move.to);

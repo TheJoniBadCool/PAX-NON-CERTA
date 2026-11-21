@@ -15,7 +15,7 @@ const api = vm.runInContext(`const gameState = new GameState();
     ({ state: gameState, createUnit, createResourceStockpiles, isResourcePurchaseRound,
        canPurchaseResourceAction, purchaseResourceAction, getPlayerUnitCount,
        getCastleUpgradeLevel, getBattleCandidateData, refreshResourceTotals,
-       getPieceContents, getValidMovesForPiece, registerSiegeStarts,
+       getPieceContents, getValidMovesForPiece, registerSiegeStarts, resolveResourceProduction,
        renderResourcePurchaseOptions, renderRequirements, renderPurchaseControl, getPurchaseConditions,
        costs: RESOURCE_PURCHASE_COSTS })`, context);
 const { state } = api;
@@ -257,7 +257,7 @@ assert(api.getValidMovesForPiece(5, 8).some(([row, column]) => row === 4 && colu
     'An unaffordable siege target remains accessible to show its disabled action');
 const html = fs.readFileSync('PaxNonCerta.html', 'utf8');
 for (let player = 1; player <= 4; player++) {
-    assert.match(html, new RegExp(`id="diplomacy-actions-p${player}"[^<]*</span><details id="resource-purchases-p${player}"`),
+    assert.match(html, new RegExp(`id="diplomacy-actions-p${player}"[^<]*</span></span><details id="resource-purchases-p${player}"`),
         'Each shopping-cart dropdown sits next to the diplomacy control');
     assert.match(html, new RegExp(`id="resource-purchases-p${player}"[^>]*>[\\s\\S]*?<summary[^>]*aria-label="Resource shop"`));
     assert.equal((html.match(new RegExp(`id="resource-purchases-p${player}"`, 'g')) || []).length, 1,
@@ -266,4 +266,72 @@ for (let player = 1; player <= 4; player++) {
 const styles = fs.readFileSync('styles.css', 'utf8');
 assert.match(styles, /\.resource-purchase-options\s*\{[^}]*top:\s*auto;[^}]*bottom:\s*100%;/,
     'The purchase panel opens above the player card');
+
+state.reset();
+state.boardSize = 16;
+state.board = Array.from({ length: 16 }, () => Array(16).fill(null));
+state.biomes = Array.from({ length: 16 }, () => Array(16).fill('plains'));
+state.activePlayers = [true, true, false, false];
+state.phase = 'PLANNING';
+state.round = 4;
+const owner = castle(1, 'site-owner', 0, 0);
+const opponent = castle(2, 'site-opponent', 0, 4);
+owner.tower.resourceStockpile = { stone: 2, wood: 2, food: 2, gold: 1 };
+api.refreshResourceTotals();
+state.provinceResources[0] = [
+    { type: 'food', productionChance: 50, row: 0, column: 1 },
+    { type: 'wood', productionChance: 100, row: 0, column: 1 }
+];
+state.provinceResources[1] = { type: 'gold', productionChance: 100 };
+assert.match(api.renderResourcePurchaseOptions(1), /data-purchase="resource" data-target="0:0"/);
+assert.doesNotMatch(api.renderResourcePurchaseOptions(1), /data-purchase="resource" data-target="1:0"/);
+assert.match(api.renderPurchaseControl(1, 'resource', '0:0', 'Upgrade Food'),
+    /Increase production from 1 to 2 per successful check/);
+for (const target of [null, '', '0', '00:0', '0:-1', '0:2', '16:0', '0:1.0', '0:9007199254740992']) {
+    assert.equal(api.purchaseResourceAction(1, 'resource', target), false, `Invalid site target ${target}`);
+}
+assert.equal(api.purchaseResourceAction(2, 'resource', '0:0'), false, 'Only the province owner can upgrade');
+state.board[1][0] = { id: 'contesting-tower', player: 2, type: 'r',
+    contents: [api.createUnit(2, 'r', 'contesting-tower-unit')] };
+assert.equal(api.purchaseResourceAction(1, 'resource', '0:0'), false, 'Contested provinces cannot upgrade');
+state.board[1][0] = null;
+state.eliminated[0] = true;
+assert.equal(api.purchaseResourceAction(1, 'resource', '0:0'), false, 'Eliminated players cannot upgrade');
+state.eliminated[0] = false;
+state.round = 3;
+assert.equal(api.purchaseResourceAction(1, 'resource', '0:0'), false, 'Upgrades require a purchase round');
+state.round = 4;
+state.multiplayer = true;
+state.committed[0] = true;
+assert.equal(api.purchaseResourceAction(1, 'resource', '0:0'), false, 'Committed plans cannot purchase');
+state.committed[0] = false;
+state.multiplayer = false;
+owner.tower.resourceStockpile.stone = 1;
+api.refreshResourceTotals();
+assert.equal(api.purchaseResourceAction(1, 'resource', '0:0'), false, 'All costs must be affordable');
+assert.equal(state.provinceResources[0][0].productionUpgraded, undefined);
+owner.tower.resourceStockpile.stone = 2;
+api.refreshResourceTotals();
+assert(api.purchaseResourceAction(1, 'resource', '0:0'));
+assert.equal(state.provinceResources[0][0].productionUpgraded, true);
+assert.equal(state.provinceResources[0][1].productionUpgraded, undefined, 'Shared-square sites upgrade independently');
+for (const key of ['stone', 'wood', 'food', 'gold']) assert.equal(state.resources[0][key], 0);
+assert.equal(api.purchaseResourceAction(1, 'resource', '0:0'), false, 'A site can only be upgraded once');
+assert.match(api.renderPurchaseControl(1, 'resource', '0:0', 'Upgrade Food'), / disabled>/);
+const restored = JSON.parse(JSON.stringify(state.provinceResources));
+assert.equal(restored[0][0].productionUpgraded, true, 'Upgrade persists in serialized game state');
+api.resolveResourceProduction(1, () => 0.5);
+assert.equal(state.resources[0].food, 0, 'An upgraded site still fails at its probability threshold');
+api.resolveResourceProduction(2, () => 0.49);
+assert.equal(state.resources[0].food, 2, 'A successful upgraded site awards two resources');
+owner.piece.player = 2;
+owner.tower.player = 2;
+api.refreshResourceTotals();
+assert.equal(state.provinceResources[0][0].productionUpgraded, true, 'Conquest does not remove a site upgrade');
+assert.equal(api.purchaseResourceAction(2, 'resource', '0:0'), false, 'The new owner cannot upgrade it again');
+assert(api.purchaseResourceAction(2, 'resource', '0:1'), 'The new owner can upgrade a different site');
+const foodBeforeConquestProduction = state.resources[1].food;
+api.resolveResourceProduction(3, () => 0);
+assert.equal(state.resources[1].food, foodBeforeConquestProduction + 2,
+    'After conquest the new owner receives the upgraded output');
 console.log('Resource purchases, castle upgrades, and paid siege checks passed.');

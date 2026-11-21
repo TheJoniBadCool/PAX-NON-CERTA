@@ -298,7 +298,7 @@ element('btn-finish-plan').handlers.click();
 assert.equal(resolutions, 2, 'Without requests, Hotseat goes directly to resolution');
 const html = fs.readFileSync('PaxNonCerta.html', 'utf8');
 for (const id of [1, 2, 3, 4]) {
-    assert.match(html, new RegExp(`class="player-card-heading"><span class="player-name">[^<]*</span><span id="diplomacy-actions-p${id}"`),
+    assert.match(html, new RegExp(`class="player-card-heading"><span class="player-name">[^<]*</span><span class="player-actions">[^]*?<span id="diplomacy-actions-p${id}"`),
         'Each diplomacy action sits beside the player name');
 }
 const tradeClick = (panel, target, action, id = state.resourceTrades[0]?.id) =>

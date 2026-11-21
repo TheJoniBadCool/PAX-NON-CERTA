@@ -19,14 +19,16 @@ function pieceContainsPawn(piece) {
 }
 
 function canMoveWholePiece(piece, plans = gameState.plans[piece.player - 1]) {
-    if (piece.player === REBEL_PLAYER_ID || isEliminatedPiece(piece)) return false;
+    if (piece.player === REBEL_PLAYER_ID || isEliminatedPiece(piece) ||
+        isPlayerImmobilized(piece.player)) return false;
     const contents = getPlannedPieceContents(piece, plans);
     return contents.length > 0 && (!isPawnRestTurn() ||
         !contents.some(unit => getUnitType(unit) === 'p' || isPrisoner(unit)));
 }
 
 function canMoveHeldUnit(unit, plans = gameState.plans.flat()) {
-    return !plans.some(plan => plan.prisonerAction && plan.unitId === unit.id) &&
+    return !isPlayerImmobilized(unit.prisonerOf || unit.player) &&
+        !plans.some(plan => plan.prisonerAction && plan.unitId === unit.id) &&
         (!isPawnRestTurn() || (getUnitType(unit) !== 'p' && !isPrisoner(unit)));
 }
 
@@ -43,7 +45,8 @@ function canUnitsEnterSquare(contents, square, player) {
 // Universal 1-Square Movement Rule in all 8 directions
 function getValidMovesForPiece(r, c) {
     const piece = getPieceAt(r, c, gameState.turnIndex + 1);
-    if (!piece || isEliminatedPiece(piece) || gameState.lockedPieceIds.has(piece.id)) return [];
+    if (!piece || isEliminatedPiece(piece) || isPlayerImmobilized(piece.player) ||
+        gameState.lockedPieceIds.has(piece.id)) return [];
     if (getSiegeAtSquare([r, c])) return [];
 
     const attackerSiege = getSiegeForAttacker(piece.id);

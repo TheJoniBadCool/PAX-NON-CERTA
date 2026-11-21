@@ -23,6 +23,7 @@ function hasEnemyAdjacent(row, col, player) {
 
 function processRetreatsAtRoundStart() {
     for (let playerIndex = 0; playerIndex < 4; playerIndex++) {
+        if (isPlayerImmobilized(playerIndex + 1)) continue;
         const pending = gameState.retreating[playerIndex];
         const ready = pending.filter(entry => entry.reentryRound <= gameState.round);
         gameState.retreating[playerIndex] = pending.filter(entry => entry.reentryRound > gameState.round);

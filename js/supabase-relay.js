@@ -54,6 +54,7 @@ class PaxRelay {
         this.handlers = {};
         this.connections = new Map();
         this.seenMessages = new Set();
+        this.seenPrivateMessages = new Set();
         this.reconciling = false;
         this.reconcileAgain = false;
         this.timer = null;
@@ -98,6 +99,10 @@ class PaxRelay {
         this.channel = this.client.channel(`pax-${this.code}-${this.userId}`)
             .on('postgres_changes', {
                 event: 'INSERT', schema: 'public', table: 'pax_messages',
+                filter: `recipient_id=eq.${this.userId}`
+            }, () => this.scheduleReconcile())
+            .on('postgres_changes', {
+                event: 'INSERT', schema: 'public', table: 'pax_private_messages',
                 filter: `recipient_id=eq.${this.userId}`
             }, () => this.scheduleReconcile())
             .on('postgres_changes', {
@@ -222,6 +227,23 @@ class PaxRelay {
             acknowledged.forEach(id => this.seenMessages.delete(id));
         }
         if (data.length === 500 && acknowledged.length) this.reconcileAgain = true;
+        const privateResult = await this.client.from('pax_private_messages')
+            .select('id,room_code,sender_id,game_id,body')
+            .eq('recipient_id', this.userId).eq('room_code', this.code).order('id').limit(500);
+        if (privateResult.error) throw privateResult.error;
+        const privateAcknowledged = [];
+        for (const row of privateResult.data) {
+            if (!this.seenPrivateMessages.has(row.id)) {
+                if (!this.handlers.privateMessage || this.handlers.privateMessage(row) === false) continue;
+                this.seenPrivateMessages.add(row.id);
+            }
+            privateAcknowledged.push(row.id);
+        }
+        if (privateAcknowledged.length) {
+            await this.rpc('pax_ack_private_messages', { p_ids: privateAcknowledged });
+            privateAcknowledged.forEach(id => this.seenPrivateMessages.delete(id));
+        }
+        if (privateResult.data.length === 500 && privateAcknowledged.length === 500) this.reconcileAgain = true;
     }
 
     fail(error) {

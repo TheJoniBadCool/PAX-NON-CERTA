@@ -143,6 +143,7 @@
                 </div>
 
                 <div id="piece-tooltip" class="piece-tooltip hidden">
+                    <div id="province-food-control" class="province-food-control hidden"></div>
                     <button id="btn-storm-castle" class="btn btn-amber" type="button" hidden>Storm Castle</button>
                     <button id="btn-cancel-siege" class="btn btn-secondary" hidden>🏹 Cancel Siege</button>
                     <button id="btn-sally-out" class="btn btn-amber" hidden>⚔️ Sally Out</button>
@@ -162,39 +163,43 @@
             <div id="purchase-requirements" class="purchase-requirements hidden" role="tooltip"></div>
                 <div class="player-cards">
                     <div id="card-p1" class="player-card player-p1 active-turn">
-                        <div class="player-card-heading"><span class="player-name">🔴 Player 1 (Red)</span><span id="diplomacy-actions-p1" class="diplomacy-actions"></span><details id="resource-purchases-p1" class="resource-purchases diplomacy-menu hidden"><summary class="diplomacy-button" title="Resource shop" aria-label="Resource shop"><span aria-hidden="true">🛒</span></summary><div id="resource-purchase-options-p1" class="diplomacy-popup resource-purchase-options" aria-label="Available purchases"></div></details></div>
+                        <div class="player-card-heading"><span class="player-name">🔴 Player 1 (Red)</span><span class="player-actions"><button type="button" id="private-chat-p1" class="private-chat-button hidden" aria-label="Open private chat"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="4" width="20" height="16" rx="2" fill="currentColor"/><path d="M3 6l9 7 9-7" fill="none" stroke="var(--bg-card)" stroke-width="2"/></svg></button><span id="diplomacy-actions-p1" class="diplomacy-actions"></span></span><details id="resource-purchases-p1" class="resource-purchases diplomacy-menu hidden"><summary class="diplomacy-button" title="Resource shop" aria-label="Resource shop"><span aria-hidden="true">🛒</span></summary><div id="resource-purchase-options-p1" class="diplomacy-popup resource-purchase-options" aria-label="Available purchases"></div></details></div>
                         <div id="diplomacy-p1" class="diplomacy-panel"></div>
                         <span id="badge-p1" class="status-badge hidden"></span>
                         <span id="horde-p1" class="horde-badge hidden" role="status">🐪 Horde</span>
                         <div id="retreat-p1" class="retreat-row" aria-label="Red retreating units"></div>
                         <div id="dead-p1" class="dead-row" aria-label="Red dead pieces"></div>
+                        <div id="prisoners-p1" class="prisoners-row" aria-label="Prisoners held by Red"></div>
                         <div id="resources-p1" class="resources-row hidden" aria-label="Red resources"></div>
                     </div>
                     <div id="card-p2" class="player-card player-p2">
-                        <div class="player-card-heading"><span class="player-name">🔵 Player 2 (Blue)</span><span id="diplomacy-actions-p2" class="diplomacy-actions"></span><details id="resource-purchases-p2" class="resource-purchases diplomacy-menu hidden"><summary class="diplomacy-button" title="Resource shop" aria-label="Resource shop"><span aria-hidden="true">🛒</span></summary><div id="resource-purchase-options-p2" class="diplomacy-popup resource-purchase-options" aria-label="Available purchases"></div></details></div>
+                        <div class="player-card-heading"><span class="player-name">🔵 Player 2 (Blue)</span><span class="player-actions"><button type="button" id="private-chat-p2" class="private-chat-button hidden" aria-label="Open private chat"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="4" width="20" height="16" rx="2" fill="currentColor"/><path d="M3 6l9 7 9-7" fill="none" stroke="var(--bg-card)" stroke-width="2"/></svg></button><span id="diplomacy-actions-p2" class="diplomacy-actions"></span></span><details id="resource-purchases-p2" class="resource-purchases diplomacy-menu hidden"><summary class="diplomacy-button" title="Resource shop" aria-label="Resource shop"><span aria-hidden="true">🛒</span></summary><div id="resource-purchase-options-p2" class="diplomacy-popup resource-purchase-options" aria-label="Available purchases"></div></details></div>
                         <div id="diplomacy-p2" class="diplomacy-panel"></div>
                         <span id="badge-p2" class="status-badge hidden"></span>
                         <span id="horde-p2" class="horde-badge hidden" role="status">🐪 Horde</span>
                         <div id="retreat-p2" class="retreat-row" aria-label="Blue retreating units"></div>
                         <div id="dead-p2" class="dead-row" aria-label="Blue dead pieces"></div>
+                        <div id="prisoners-p2" class="prisoners-row" aria-label="Prisoners held by Blue"></div>
                         <div id="resources-p2" class="resources-row hidden" aria-label="Blue resources"></div>
                     </div>
                     <div id="card-p3" class="player-card player-p3">
-                        <div class="player-card-heading"><span class="player-name">🟢 Player 3 (Green)</span><span id="diplomacy-actions-p3" class="diplomacy-actions"></span><details id="resource-purchases-p3" class="resource-purchases diplomacy-menu hidden"><summary class="diplomacy-button" title="Resource shop" aria-label="Resource shop"><span aria-hidden="true">🛒</span></summary><div id="resource-purchase-options-p3" class="diplomacy-popup resource-purchase-options" aria-label="Available purchases"></div></details></div>
+                        <div class="player-card-heading"><span class="player-name">🟢 Player 3 (Green)</span><span class="player-actions"><button type="button" id="private-chat-p3" class="private-chat-button hidden" aria-label="Open private chat"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="4" width="20" height="16" rx="2" fill="currentColor"/><path d="M3 6l9 7 9-7" fill="none" stroke="var(--bg-card)" stroke-width="2"/></svg></button><span id="diplomacy-actions-p3" class="diplomacy-actions"></span></span><details id="resource-purchases-p3" class="resource-purchases diplomacy-menu hidden"><summary class="diplomacy-button" title="Resource shop" aria-label="Resource shop"><span aria-hidden="true">🛒</span></summary><div id="resource-purchase-options-p3" class="diplomacy-popup resource-purchase-options" aria-label="Available purchases"></div></details></div>
                         <div id="diplomacy-p3" class="diplomacy-panel"></div>
                         <span id="badge-p3" class="status-badge hidden"></span>
                         <span id="horde-p3" class="horde-badge hidden" role="status">🐪 Horde</span>
                         <div id="retreat-p3" class="retreat-row" aria-label="Green retreating units"></div>
                         <div id="dead-p3" class="dead-row" aria-label="Green dead pieces"></div>
+                        <div id="prisoners-p3" class="prisoners-row" aria-label="Prisoners held by Green"></div>
                         <div id="resources-p3" class="resources-row hidden" aria-label="Green resources"></div>
                     </div>
                     <div id="card-p4" class="player-card player-p4">
-                        <div class="player-card-heading"><span class="player-name">🟡 Player 4 (Yellow)</span><span id="diplomacy-actions-p4" class="diplomacy-actions"></span><details id="resource-purchases-p4" class="resource-purchases diplomacy-menu hidden"><summary class="diplomacy-button" title="Resource shop" aria-label="Resource shop"><span aria-hidden="true">🛒</span></summary><div id="resource-purchase-options-p4" class="diplomacy-popup resource-purchase-options" aria-label="Available purchases"></div></details></div>
+                        <div class="player-card-heading"><span class="player-name">🟡 Player 4 (Yellow)</span><span class="player-actions"><button type="button" id="private-chat-p4" class="private-chat-button hidden" aria-label="Open private chat"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="4" width="20" height="16" rx="2" fill="currentColor"/><path d="M3 6l9 7 9-7" fill="none" stroke="var(--bg-card)" stroke-width="2"/></svg></button><span id="diplomacy-actions-p4" class="diplomacy-actions"></span></span><details id="resource-purchases-p4" class="resource-purchases diplomacy-menu hidden"><summary class="diplomacy-button" title="Resource shop" aria-label="Resource shop"><span aria-hidden="true">🛒</span></summary><div id="resource-purchase-options-p4" class="diplomacy-popup resource-purchase-options" aria-label="Available purchases"></div></details></div>
                         <div id="diplomacy-p4" class="diplomacy-panel"></div>
                         <span id="badge-p4" class="status-badge hidden"></span>
                         <span id="horde-p4" class="horde-badge hidden" role="status">🐪 Horde</span>
                         <div id="retreat-p4" class="retreat-row" aria-label="Yellow retreating units"></div>
                         <div id="dead-p4" class="dead-row" aria-label="Yellow dead pieces"></div>
+                        <div id="prisoners-p4" class="prisoners-row" aria-label="Prisoners held by Yellow"></div>
                         <div id="resources-p4" class="resources-row hidden" aria-label="Yellow resources"></div>
                     </div>
                 </div>
@@ -241,6 +246,20 @@
         </div>
     </div>
 
+    <section id="private-chat" class="private-chat hidden" role="dialog" aria-labelledby="private-chat-title">
+        <div class="private-chat-header">
+            <h2 id="private-chat-title">Private chat</h2>
+            <button type="button" id="private-chat-close" aria-label="Close private chat">×</button>
+        </div>
+        <div id="private-chat-messages" class="private-chat-messages" aria-live="polite"></div>
+        <form id="private-chat-form">
+            <label for="private-chat-input">Message</label>
+            <textarea id="private-chat-input" maxlength="1000" rows="2" required></textarea>
+            <div id="private-chat-error" role="alert"></div>
+            <button type="submit" id="private-chat-send" class="btn btn-primary">Send</button>
+        </form>
+    </section>
+
     <div id="allied-spoils-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="allied-spoils-title">
         <div class="modal-card">
             <h2 id="allied-spoils-title">Allied victory</h2>
@@ -258,13 +277,12 @@
         </div>
     </div>
 
-    <div id="resource-trade-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="resource-trade-title">
-        <form id="resource-trade-form" class="modal-card">
+    <div id="resource-trade-modal" class="modal-overlay resource-trade-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="resource-trade-title">
+        <form id="resource-trade-form" class="modal-card resource-trade-card">
             <h2 id="resource-trade-title">Resource exchange</h2>
-            <p>Choose what you give and request. Either side may be zero. Both players must hold the full amounts when proposed and accepted; resources are not reserved.</p>
             <input id="resource-trade-target" type="hidden">
             <table class="resource-trade-table">
-                <thead><tr><th scope="col">Resource</th><th scope="col">You give</th><th scope="col">You request</th></tr></thead>
+                <thead><tr><th scope="col">Resource</th><th scope="col">You give</th><th scope="col">They give</th></tr></thead>
                 <tbody id="resource-trade-amounts"></tbody>
             </table>
             <p id="resource-trade-error" role="alert"></p>
@@ -700,6 +718,7 @@
     <script src="js/starting-position.js"></script>
     <script src="js/setup-actions.js"></script>
     <script src="js/rules-guide.js"></script>
+    <script src="js/private-chat.js"></script>
     <script src="js/game.js"></script>
     <script src="js/multiplayer.js"></script>
     <!--

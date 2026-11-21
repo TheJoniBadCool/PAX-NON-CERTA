@@ -11,6 +11,7 @@ function element() {
         innerText: '',
         style: {},
         addEventListener() {},
+        setAttribute() {},
         classList: {
             add(value) { classes.add(value); },
             remove(value) { classes.delete(value); },

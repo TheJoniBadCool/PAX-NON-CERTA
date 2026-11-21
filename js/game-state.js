@@ -63,7 +63,14 @@ class GameState {
         this.lastProvinceFoodRound = null;
         this.resources = createResourceStockpiles();
         this.lastResourceProductionRound = null;
+        this.luckyCards = [[], [], [], []];
+        this.nextLuckyCardId = 1;
+        this.immobilizedUntilRound = [0, 0, 0, 0];
     }
+}
+
+function isPlayerImmobilized(player) {
+    return (gameState.immobilizedUntilRound?.[player - 1] || 0) >= gameState.round;
 }
 
 function createDiplomacyState() {

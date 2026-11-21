@@ -4,6 +4,7 @@ const RESOURCE_PURCHASE_COSTS = {
     horse: { horse: 2, metal: 1, gold: 1 },
     armour: { food: 1, metal: 2, wood: 2, gold: 1 },
     castle: { stone: 3, food: 1, wood: 2, gold: 1 },
+    resource: { stone: 2, wood: 2, food: 2, gold: 1 },
     lucky: { gold: 1, horse: 1, metal: 1, food: 1, wood: 1 }
 };
 const SIEGE_COST = { food: 1, wood: 1 };
@@ -12,6 +13,80 @@ const CASTLE_SIEGE_TIMERS = [
     { attacker: 4, tower: 8 },
     { attacker: 6, tower: 12 }
 ];
+const LUCKY_CARD_TYPES = {
+    steal: {
+        label: 'Resource burglar',
+        icon: '<svg viewBox="0 0 32 32" aria-hidden="true"><path d="M3 9Q16 3 29 9L27 23Q21 27 16 21Q11 27 5 23Z" fill="currentColor"/><path d="M7 13L13 14L12 18L7 17ZM19 14L25 13L25 17L20 18Z" fill="var(--bg-card)"/></svg>',
+        description: 'Choose a resource type. Steal all of it from every other player, including allies.'
+    },
+    immobilize: {
+        label: 'Stop Sign',
+        icon: '<svg viewBox="0 0 32 32" aria-hidden="true"><path d="M10 2H22L30 10V22L22 30H10L2 22V10Z" fill="#dc2626" stroke="white"/><text x="16" y="19" text-anchor="middle" fill="white" font-size="9" font-weight="bold">STOP</text></svg>',
+        description: 'Choose another player. Block movement, splits, transfers, retreat re-entry, and siege attacks this round and next. Defence is unaffected.'
+    }
+};
+
+function renderLuckyCardBack(withPlus = false) {
+    return `<svg viewBox="0 0 32 32" aria-hidden="true"><rect x="6" y="2" width="21" height="28" rx="3" fill="none" stroke="currentColor" stroke-width="2"/><text x="16" y="23" text-anchor="middle" fill="currentColor" font-size="23">?</text>${withPlus ? '<path d="M25 21v10m-5-5h10" stroke="currentColor" stroke-width="3"/>' : ''}</svg>`;
+}
+
+function canUseLuckyCards(player) {
+    return Number.isInteger(player) && player >= 1 && player <= 4 &&
+        gameState.activePlayers[player - 1] && !gameState.eliminated[player - 1] &&
+        (gameState.multiplayer
+            ? ['PLANNING', 'COMMITTED'].includes(gameState.phase) && !gameState.committed[player - 1]
+            : gameState.phase === 'PLANNING' && player === gameState.turnIndex + 1);
+}
+
+function cancelImmobilizedPlans(player) {
+    gameState.plans[player - 1] = gameState.plans[player - 1]
+        .filter(plan => plan.prisonerAction || plan.siegeCancel);
+    if (gameState.turnIndex === player - 1) {
+        gameState.selectedSquare = null;
+        gameState.validMoves = [];
+        gameState.selectedHeldPiece = null;
+        gameState.pendingMerge = null;
+        gameState.pendingTransfer = null;
+        gameState.lockedPieceIds = new Set();
+    }
+}
+
+function useLuckyCard(player, cardId, target) {
+    if (!canUseLuckyCards(player)) return 'Lucky Cards can only be used during your unlocked planning turn.';
+    const hand = gameState.luckyCards[player - 1];
+    const card = hand.find(entry => entry.id === cardId);
+    if (!card || !Object.hasOwn(LUCKY_CARD_TYPES, card.type)) return 'That Lucky Card is not in your hand.';
+    if (card.type === 'steal') {
+        if (!RESOURCE_TYPES.some(resource => resource.key === target)) return 'Choose a valid resource type.';
+        const holder = getResourceHolderForPlayer(player);
+        if (!holder) return 'You need a capital Tower, King, or Queen to receive stolen resources.';
+        let total = 0;
+        getResourceBearingUnits().forEach(({ unit, piece }) => {
+            if (piece.player === player || piece.player < 1 || piece.player > 4) return;
+            const store = getUnitResourceStore(unit);
+            const amount = Math.max(0, Number(store?.[target]) || 0);
+            if (!amount) return;
+            total += amount;
+            store[target] = 0;
+        });
+        const store = getUnitResourceStore(holder, true);
+        store[target] = (Number(store[target]) || 0) + total;
+        refreshResourceTotals();
+        const resource = RESOURCE_TYPES.find(entry => entry.key === target);
+        logAction(`Player ${player} used Resource burglar and stole ${total} ${resource.label} from all other players.`);
+    } else {
+        if (!Number.isInteger(target) || target < 1 || target > 4 || target === player ||
+            !gameState.activePlayers[target - 1] || gameState.eliminated[target - 1]) {
+            return 'Choose another active, non-eliminated player.';
+        }
+        gameState.immobilizedUntilRound[target - 1] = Math.max(
+            gameState.immobilizedUntilRound[target - 1], gameState.round + 1);
+        cancelImmobilizedPlans(target);
+        logAction(`Player ${player} used Stop Sign: Player ${target} is immobilized through round ${gameState.immobilizedUntilRound[target - 1]}. Queued movement and siege attacks were cancelled.`);
+    }
+    hand.splice(hand.indexOf(card), 1);
+    return null;
+}
 
 function isResourcePurchaseRound(round = gameState.round) {
     return round > 0 && round % RESOURCE_PURCHASE_INTERVAL === 0;
@@ -140,6 +215,14 @@ function getCastleUpgradeTarget(player, unitId) {
         : null;
 }
 
+function getResourceUpgradeTarget(targetId) {
+    if (typeof targetId !== 'string' || !/^(?:[0-9]|1[0-5]):(?:0|[1-9][0-9]*)$/.test(targetId)) return null;
+    const [province, index] = targetId.split(':').map(Number);
+    if (!Number.isSafeInteger(index)) return null;
+    const resource = getProvinceResources(gameState.provinceResources, province)[index];
+    return resource ? { province, resource } : null;
+}
+
 function getNextRecruitmentIdentity(player, type) {
     const names = new Set();
     const addNames = units => units.forEach(unit => {
@@ -200,6 +283,11 @@ function getPurchaseConditions(player, action, targetId = null, options = {}) {
             add('Owned province', getProvinceOwners(gameState.board)[getProvinceIndex(target.row, target.column, gameState.boardSize)] === player);
             add('Castle level below 2', Math.floor(Number(target.unit.castleUpgradeLevel) || 0) < 2);
         }
+    } else if (action === 'resource') {
+        const target = getResourceUpgradeTarget(targetId);
+        add('Resource site', target);
+        add('Owned province', target && getProvinceOwners(gameState.board)[target.province] === player);
+        add('Production below 2', target && !target.resource.productionUpgraded);
     }
     return conditions;
 }
@@ -241,8 +329,18 @@ function purchaseResourceAction(player, action, targetId = null, options = {}) {
         const target = getCastleUpgradeTarget(player, targetId);
         applyCastleUpgrade(target);
         logAction(`🏰 Castle upgraded to level ${target.unit.castleUpgradeLevel}.`);
-    } else {
-        logAction(`Player ${player} purchased a Lucky Card. It has no effect yet.`);
+    } else if (action === 'resource') {
+        const { province, resource } = getResourceUpgradeTarget(targetId);
+        resource.productionUpgraded = true;
+        const type = RESOURCE_TYPES.find(entry => entry.key === resource.type);
+        logAction(`${type.icon} ${type.label} production in province ${province + 1} upgraded to 2.`);
+    } else if (action === 'lucky') {
+        const types = Object.keys(LUCKY_CARD_TYPES);
+        gameState.luckyCards[player - 1].push({
+            id: `lucky_${gameState.nextLuckyCardId++}`,
+            type: types[Math.floor(Math.random() * types.length)]
+        });
+        logAction(`Player ${player} purchased a Lucky Card.`);
     }
     return true;
 }
@@ -287,6 +385,16 @@ function renderResourcePurchaseOptions(player) {
         add('castle', unit.id, `Castle level ${level} · ${getUnitName(unit)}`);
     });
     if (!castles.length) add('castle', null, 'Castle upgrade · No owned Castle');
+    const owners = getProvinceOwners(gameState.board);
+    gameState.provinceResources.forEach((_, province) => {
+        if (owners[province] !== player) return;
+        getProvinceResources(gameState.provinceResources, province).forEach((resource, index) => {
+            const type = RESOURCE_TYPES.find(entry => entry.key === resource.type);
+            const position = getResourcePosition(resource, province, gameState.boardSize, gameState.biomes);
+            add('resource', `${province}:${index}`,
+                `${type.label} production ${resource.productionUpgraded ? 2 : 1}/2 · Province ${province + 1} · ${coordsToNotation(...position)}`);
+        });
+    });
     add('lucky', null, 'Lucky Card');
     return options.join('');
 }
@@ -304,7 +412,8 @@ function renderRequirements(player, cost, conditions = []) {
 }
 
 function renderPurchaseControl(player, action, targetId, label, className = '', content = escapeHtml(label)) {
-    const requirements = renderRequirements(player, RESOURCE_PURCHASE_COSTS[action],
+    const description = action === 'resource' ? 'Increase production from 1 to 2 per successful check. ' : '';
+    const requirements = description + renderRequirements(player, RESOURCE_PURCHASE_COSTS[action],
         getPurchaseConditions(player, action, targetId));
     const target = targetId === null ? '' : ` data-target="${escapeHtml(String(targetId))}"`;
     return `<span class="requirement-trigger" tabindex="0" data-requirements="${escapeHtml(requirements)}" aria-label="${escapeHtml(label)} requirements" aria-describedby="purchase-requirements"><button type="button" class="${className}" data-purchase="${action}"${target} aria-label="${escapeHtml(label)}"${canPurchaseResourceAction(player, action, targetId) ? '' : ' disabled'}>${content}</button></span>`;
