@@ -89,7 +89,8 @@ for (const interval of [1, 2, 4]) {
         assertFilledSlices(progress, 'The clock advances even when resources are produced every round');
         assert.match(element('round-clock')['aria-label'],
             new RegExp(`production in ${interval - (round - 1) % interval} rounds?`));
-        assert.match(element('round-clock')['aria-label'], /purchases every 4 rounds/);
+        assert.match(element('round-clock')['aria-label'], /purchases available every round during planning/);
+        assert.match(element('round-clock')['aria-label'], /province food decreases after rounds 4, 8, and 12/);
         assert.match(element('round-clock')['aria-label'], /new temporary objectives at the end of each cycle/);
     }
 }
@@ -100,16 +101,39 @@ assert.match(html, /id="mp-resource-production-interval"[\s\S]*?Every turn \(def
 assert.match(html, /id="round-clock"[\s\S]*?id="btn-finish-plan"/);
 const clockFace = html.match(/<svg class="plan-action-icon round-clock-face"[\s\S]*?<\/svg>/)[0];
 assert.match(clockFace, /viewBox="0 0 100 100"/);
-assert.equal((clockFace.match(/🛒/g) || []).length, 3, 'Every fourth step has a shopping cart');
+assert.match(clockFace, /id="round-clock-slice-shape" d="M50 50 L50 8 A42 42/,
+    'The wheel has a 42-unit radius');
+assert.doesNotMatch(clockFace, /🛒/, 'The clock does not mark obsolete purchase rounds');
 assert.equal((clockFace.match(/📜/g) || []).length, 1, 'The completed cycle has a scroll');
 const clockSlices = [...clockFace.matchAll(/<use href="#round-clock-slice-shape" class="([^"]+)"(?: transform="rotate\((\d+) 50 50\)")?><\/use>/g)];
 assert.equal(clockSlices.length, 12, 'The clock has 12 slices');
 assert.deepEqual(clockSlices.map((slice, index) => Number(slice[2] || 0)),
     Array.from({ length: 12 }, (_, index) => index * 30), 'Slices cover the whole clock clockwise');
 assert.equal(clockSlices.filter(slice => slice[1].includes('filled')).length, 1, 'The initial round has one filled slice');
+const foodMarkers = [...clockFace.matchAll(/<use href="#round-clock-food-decrease" x="([^"]+)" y="([^"]+)" width="9" height="9"><\/use>/g)];
+assert.equal(foodMarkers.length, 3, 'The clock has three food decrease markers');
+function sliceAt(x, y) {
+    x -= 50;
+    y -= 50;
+    const angle = (Math.atan2(x, -y) * 180 / Math.PI + 360) % 360;
+    return Math.floor(angle / 30) + 1;
+}
+const markerSlices = foodMarkers.map(marker => sliceAt(Number(marker[1]) + 4.5, Number(marker[2]) + 4.5));
+assert.deepEqual(markerSlices, [4, 8, 12], 'Food decreases are marked inside slices 4, 8, and 12');
+const scroll = clockFace.match(/<text x="([^"]+)" y="([^"]+)">📜<\/text>/);
+assert(scroll, 'The objective cycle has a scroll marker');
+assert.equal(sliceAt(Number(scroll[1]), Number(scroll[2])), 12, 'The scroll is inside slice 12');
+assert(Math.hypot(Number(scroll[1]) - 50, Number(scroll[2]) - 50) < 42,
+    'The scroll is inside the wheel');
+assert(Math.hypot(Number(scroll[1]) - (Number(foodMarkers[2][1]) + 4.5),
+    Number(scroll[2]) - (Number(foodMarkers[2][2]) + 4.5)) >= 10,
+    'The scroll and food marker do not overlap');
+assert.match(clockFace, /id="round-clock-food-decrease"[\s\S]*?d="M25 5v9m-4-4 4 4 4-4"/,
+    'Food markers show a downward arrow');
+assert.match(html, /aria-label="Round clock:[^"]*province food decreases after rounds 4, 8, and 12/);
 assert.doesNotMatch(clockFace, /round-clock-hand/);
 assert.match(html, /id="round-clock-status">1 \/ 12/);
-assert.match(html, /id="shopping-notice"[^>]*role="status"/);
+assert.doesNotMatch(html, /id="shopping-notice"/);
 const css = fs.readFileSync('styles.css', 'utf8');
 assert.match(html, /<\/svg>\s*<\/div>\s*<div class="plan-controls">\s*<span id="round-clock-status"[\s\S]*?<span id="planning-countdown"[\s\S]*?<button id="btn-finish-plan"[\s\S]*?<button id="btn-clear-plan"/);
 for (const [id, label] of [['btn-finish-plan', 'Commit Plans'], ['btn-clear-plan', 'Reset Plans']]) {
@@ -122,13 +146,13 @@ assert.match(css, /\.plan-actions\s*\{[^}]*display:\s*grid;[^}]*width:\s*13rem;[
 assert.match(css, /\.plan-controls\s*\{[^}]*display:\s*contents/);
 assert.match(css, /\.plan-actions > \.round-clock\s*\{[^}]*grid-area:\s*1\s*\/\s*1\s*\/\s*4\s*\/\s*-1;[^}]*position:\s*relative/);
 assert.match(css, /\.round-clock-face\s*\{[^}]*position:\s*absolute;[^}]*inset:\s*0;[^}]*width:\s*100%;[^}]*height:\s*100%/);
+assert.match(css, /#planning-countdown\s*\{[^}]*font-size:\s*1\.25rem/);
 for (const [id, row, column] of [
     ['round-clock-status', 1, 1], ['planning-countdown', 1, 2],
     ['btn-finish-plan', 3, 1], ['btn-clear-plan', 3, 2]
 ]) {
     assert.match(css, new RegExp(`#${id}\\s*\\{[^}]*grid-area:\\s*${row}\\s*\\/\\s*${column};`));
 }
-assert.match(css, /\.plan-actions > \.shopping-notice\s*\{[^}]*grid-column:\s*1\s*\/\s*-1/);
 assert.match(css, /\.plan-commit \.plan-action-icon,\s*\.plan-reset \.plan-action-icon\s*\{[^}]*width:\s*1\.75rem;[^}]*height:\s*1\.75rem/);
 assert.match(css, /\.board-top-controls\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)/);
 assert.match(css, /\.plan-actions\s*\{[^}]*width:\s*min\(100%,\s*13rem\)/);

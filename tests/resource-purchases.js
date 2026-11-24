@@ -12,7 +12,7 @@ const context = vm.createContext({
     'resource-purchases', 'movement-rules', 'siege-rules', 'battle-rules'
 ].forEach(name => vm.runInContext(fs.readFileSync(`js/${name}.js`, 'utf8'), context));
 const api = vm.runInContext(`const gameState = new GameState();
-    ({ state: gameState, createUnit, createResourceStockpiles, isResourcePurchaseRound,
+    ({ state: gameState, createUnit, createResourceStockpiles,
        canPurchaseResourceAction, purchaseResourceAction, getPlayerUnitCount,
        getCastleUpgradeLevel, getBattleCandidateData, refreshResourceTotals,
        getPieceContents, getValidMovesForPiece, registerSiegeStarts, resolveResourceProduction,
@@ -48,8 +48,17 @@ const enemyCastle = castle(2, 'enemy-castle', 0, 8, [1, 0]);
 state.capitalTowerIds[0] = capital.tower.id;
 api.refreshResourceTotals();
 
-assert.equal(api.isResourcePurchaseRound(3), false);
-assert.equal(api.isResourcePurchaseRound(4), true);
+for (const round of [1, 2, 3, 4, 5, 8, 12, 13]) {
+    state.round = round;
+    for (const [action, target] of [
+        ['pawn', 1], ['horse', 1], ['armour', 'starting-pawn'],
+        ['castle', capital.tower.id], ['lucky', null]
+    ]) {
+        assert(api.canPurchaseResourceAction(1, action, target),
+            `${action} is available in round ${round} when its requirements are met`);
+    }
+}
+state.round = 4;
 assert.equal(api.canPurchaseResourceAction(1, 'pawn', 1), true);
 assert.equal(api.canPurchaseResourceAction(1, 'pawn', 0), false,
     'The capital province is not a recruiting province');
@@ -73,11 +82,9 @@ assert(!api.canPurchaseResourceAction(1, 'pawn', `castle:${diagonalProvince.towe
 assert(!api.canPurchaseResourceAction(1, 'pawn', `castle:${capital.tower.id}`));
 assert(!api.canPurchaseResourceAction(1, 'pawn', `castle:${enemyCastle.tower.id}`));
 state.round = 3;
-const closedOptions = api.renderResourcePurchaseOptions(1);
-assert.match(closedOptions, /Purchases open on rounds 4, 8, 12/);
-assert([...closedOptions.matchAll(/<button[^>]*>/g)].every(([tag]) => tag.includes(' disabled')),
-    'All purchases remain visible but disabled outside purchase rounds');
-state.round = 4;
+const openOptions = api.renderResourcePurchaseOptions(1);
+assert.match(openOptions, /data-purchase="lucky"[^>]*>/);
+assert.doesNotMatch(openOptions, /Purchases open on rounds/);
 state.multiplayer = true;
 state.committed[0] = true;
 const lockedOptions = api.renderResourcePurchaseOptions(1);
@@ -87,6 +94,10 @@ assert([...lockedOptions.matchAll(/<button[^>]*>/g)].every(([tag]) => tag.includ
 state.multiplayer = false;
 state.committed[0] = false;
 
+state.phase = 'RESOLVING';
+assert.equal(api.canPurchaseResourceAction(1, 'lucky'), false, 'Purchases still require planning');
+state.phase = 'PLANNING';
+state.round = 1;
 assert(api.purchaseResourceAction(1, 'pawn', 1));
 assert.equal(recruitProvince.piece.contents.length, 2);
 assert.equal(recruitProvince.piece.contents.at(-1).name, 'Ap2',
@@ -105,6 +116,7 @@ const secondCastle = castle(1, 'second-recruit', 5, 0);
 const sharedProvinceOptions = api.renderResourcePurchaseOptions(1);
 assert.match(sharedProvinceOptions, /data-purchase="horse" data-target="castle:second-recruit-tower"[^>]*>/);
 assert.match(sharedProvinceOptions, /data-purchase="horse" data-target="castle:other-recruit-tower"[^>]*>/);
+state.round = 2;
 assert(api.purchaseResourceAction(1, 'horse', `castle:${secondCastle.tower.id}`));
 assert.equal(secondCastle.piece.contents.at(-1).type, 'n',
     'Recruitment targets the selected Castle even when another Castle shares its province');
@@ -129,9 +141,9 @@ state.provinceRecruitmentUsed[1] = true;
 state.board[8][8] = null;
 
 state.round = 5;
-assert.equal(api.canPurchaseResourceAction(1, 'lucky'), false,
-    'Purchases are unavailable between fourth-round purchase windows');
-state.round = 4;
+assert.equal(api.canPurchaseResourceAction(1, 'lucky'), true,
+    'Lucky Cards are available between former purchase windows');
+state.round = 3;
 
 const armourUnit = api.createUnit(1, 'q', 'armour-target', 'Aq-armour');
 capital.piece.contents.push(armourUnit);
@@ -153,6 +165,7 @@ state.sieges = [{
     id: 'existing-siege', towerSquare: [0, 0], towerTimer: 6,
     attackers: [{ pieceId: 'attacker', timer: 3 }]
 }];
+state.round = 5;
 assert(api.purchaseResourceAction(1, 'castle', capital.tower.id));
 assert.equal(api.getCastleUpgradeLevel(capital.piece), 1);
 assert.equal(state.sieges[0].towerTimer, 8);
@@ -174,6 +187,7 @@ const defender = api.getBattleCandidateData({ candidates: [{
 assert.equal(defender.towerDefenderBonus, 5);
 
 const resourcesBeforeLucky = { ...state.resources[0] };
+state.round = 7;
 assert(api.purchaseResourceAction(1, 'lucky'));
 assert.deepEqual({ ...state.resources[0] }, {
     ...resourcesBeforeLucky,
@@ -257,7 +271,7 @@ assert(api.getValidMovesForPiece(5, 8).some(([row, column]) => row === 4 && colu
     'An unaffordable siege target remains accessible to show its disabled action');
 const html = fs.readFileSync('PaxNonCerta.html', 'utf8');
 for (let player = 1; player <= 4; player++) {
-    assert.match(html, new RegExp(`id="diplomacy-actions-p${player}"[^<]*</span></span><details id="resource-purchases-p${player}"`),
+    assert.match(html, new RegExp(`id="diplomacy-actions-p${player}"[^<]*</span></span><span class="player-purchase-actions"><details id="resource-purchases-p${player}"`),
         'Each shopping-cart dropdown sits next to the diplomacy control');
     assert.match(html, new RegExp(`id="resource-purchases-p${player}"[^>]*>[\\s\\S]*?<summary[^>]*aria-label="Resource shop"`));
     assert.equal((html.match(new RegExp(`id="resource-purchases-p${player}"`, 'g')) || []).length, 1,
@@ -299,8 +313,7 @@ state.eliminated[0] = true;
 assert.equal(api.purchaseResourceAction(1, 'resource', '0:0'), false, 'Eliminated players cannot upgrade');
 state.eliminated[0] = false;
 state.round = 3;
-assert.equal(api.purchaseResourceAction(1, 'resource', '0:0'), false, 'Upgrades require a purchase round');
-state.round = 4;
+assert.equal(api.canPurchaseResourceAction(1, 'resource', '0:0'), true, 'Sites can be upgraded on any round');
 state.multiplayer = true;
 state.committed[0] = true;
 assert.equal(api.purchaseResourceAction(1, 'resource', '0:0'), false, 'Committed plans cannot purchase');

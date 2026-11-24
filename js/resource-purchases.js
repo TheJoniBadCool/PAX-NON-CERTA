@@ -1,4 +1,3 @@
-const RESOURCE_PURCHASE_INTERVAL = 4;
 const RESOURCE_PURCHASE_COSTS = {
     pawn: { food: 2, wood: 1, gold: 1 },
     horse: { horse: 2, metal: 1, gold: 1 },
@@ -86,10 +85,6 @@ function useLuckyCard(player, cardId, target) {
     }
     hand.splice(hand.indexOf(card), 1);
     return null;
-}
-
-function isResourcePurchaseRound(round = gameState.round) {
-    return round > 0 && round % RESOURCE_PURCHASE_INTERVAL === 0;
 }
 
 function getPlayerUnitCount(player, type) {
@@ -256,7 +251,6 @@ function getPurchaseConditions(player, action, targetId = null, options = {}) {
         !gameState.eliminated[player - 1];
     add('Active player', validPlayer);
     if (!options.ignoreTurn) {
-        add('Purchase round', isResourcePurchaseRound());
         add('Planning', ['PLANNING', 'COMMITTED'].includes(gameState.phase));
         if (gameState.multiplayer) add('Plan unlocked', !gameState.committed[player - 1]);
     }
@@ -348,9 +342,7 @@ function purchaseResourceAction(player, action, targetId = null, options = {}) {
 function renderResourcePurchaseOptions(player) {
     if (!['PLANNING', 'COMMITTED'].includes(gameState.phase)) return '';
     const options = [];
-    if (!isResourcePurchaseRound()) {
-        options.push('<span class="resource-purchase-notice">Purchases open on rounds 4, 8, 12, etc.</span>');
-    } else if (gameState.multiplayer && gameState.committed[player - 1]) {
+    if (gameState.multiplayer && gameState.committed[player - 1]) {
         options.push('<span class="resource-purchase-notice">Unlock your plan to purchase.</span>');
     }
     const add = (action, target, label) => {

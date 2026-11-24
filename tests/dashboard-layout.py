@@ -66,5 +66,13 @@ assert [by_id(name)["parent"] for name in ("round-clock-status", "planning-count
 assert [node["attrs"]["id"] for node in parser.nodes if node["parent"] is cards] == [
     "card-p1", "card-p2", "card-p3", "card-p4"
 ]
+for player in range(1, 5):
+    shop = by_id(f"resource-purchases-p{player}")
+    group = shop["parent"]
+    assert group["attrs"].get("class") == "player-purchase-actions"
+    assert group["parent"]["attrs"].get("class") == "player-card-heading"
+    assert group["parent"]["parent"] is by_id(f"card-p{player}")
+styles = Path("styles.css").read_text()
+assert "flex: 0 0 auto;" in styles.split(".player-purchase-actions {", 1)[1].split("}", 1)[0]
 assert "hidden" in by_id("objectives-panel")["attrs"]["class"].split()
 print("Dashboard layout checks passed.")

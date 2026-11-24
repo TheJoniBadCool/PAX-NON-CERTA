@@ -20,7 +20,13 @@ function element() {
         remove() { this.removed = true; },
         contains(target) { return target === this || this.children.some(child => child.contains(target)); },
         setAttribute(name, value) { this[name] = value; },
-        querySelector() { return element(); },
+        querySelector(selector) {
+            if (selector === 'button[data-purchase]:not(:disabled)') {
+                return (this.html.match(/<button\b[^>]*data-purchase="[^"]+"[^>]*>/g) || [])
+                    .some(tag => !/\sdisabled(?:\s|>)/.test(tag)) ? element() : null;
+            }
+            return element();
+        },
         set innerHTML(value) { this.children = []; this.html = value; }
     };
     const classes = new Set();
@@ -68,12 +74,12 @@ const context = vm.createContext({
     }
 });
 ['constants', 'models', 'game-state', 'diplomacy-rules', 'setup-utils', 'board-utils',
-'resource-purchases', 'capital-rules', 'movement-rules', 'planning-rules',
+'resource-purchases', 'capital-rules', 'movement-rules', 'planning-rules', 'mission-rules', 'objective-rules',
     'board-setup', 'board-renderer', 'setup-renderer', 'status-ui', 'prisoner-rules'].forEach(name =>
     vm.runInContext(fs.readFileSync(`js/${name}.js`, 'utf8'), context));
 const api = vm.runInContext(`const gameState = new GameState();
     ({ state: gameState, createStartingBoard, initBoard, generateProvinceResources, positionProvinceResources,
-       createSeededRandom, resolveResourceProduction, getProvinceIndex, createUnit,
+       createSeededRandom, resolveResourceProduction, getProvinceIndex, createUnit, purchaseResourceAction,
        renderBoard, renderMapPreview, renderCustomSetupBoard, updatePlayerCards,
        isValidCustomMap, getUnitResourceStore, refreshResourceTotals,
        transferStoredUnitResources, transferCapturedUnitResources,
@@ -667,15 +673,16 @@ for (const multiplayer of [false, true]) {
                 for (const committed of [false, true]) {
                     state.committed[viewer] = committed;
                     api.updatePlayerCards();
-                    const available = round % 4 === 0 && state.activePlayers[viewer] &&
+                    const canOpenShop = state.activePlayers[viewer] &&
                         !state.eliminated[viewer] &&
-                        (phase === 'PLANNING' || (multiplayer && phase === 'COMMITTED')) &&
-                        (!multiplayer || !committed);
-                    assert.equal(elements.get('shopping-notice').innerText,
-                        available ? 'It is Shopping time!!' : '');
+                        (phase === 'PLANNING' || (multiplayer && phase === 'COMMITTED'));
                     for (let index = 0; index < 4; index++) {
+                        const options = elements.get(`resource-purchase-options-p${index + 1}`);
+                        const enabled = (options.html.match(/<button\b[^>]*data-purchase="[^"]+"[^>]*>/g) || [])
+                            .some(tag => !/\sdisabled(?:\s|>)/.test(tag));
                         assert.equal(elements.get(`resource-purchases-p${index + 1}`).classList.contains('shopping-available'),
-                            available && index === viewer, 'Only the current available shop is highlighted');
+                            canOpenShop && index === viewer && enabled,
+                            'Only a shop with an enabled purchase is highlighted');
                     }
                 }
                 state.committed[viewer] = false;
@@ -683,6 +690,63 @@ for (const multiplayer of [false, true]) {
         }
     }
 }
+state.reset();
+state.boardSize = 16;
+state.board = Array.from({ length: 16 }, () => Array(16).fill(null));
+state.biomes = Array.from({ length: 16 }, () => Array(16).fill('plains'));
+state.activePlayers = [true, true, false, false];
+state.phase = 'PLANNING';
+state.turnIndex = 0;
+const shopCapital = castle(1, 'shop-capital');
+const shopNeighbour = castle(1, 'shop-neighbour');
+state.board[0][0] = shopCapital;
+state.board[0][4] = shopNeighbour;
+state.capitalTowerIds[0] = 'shop-capital-tower';
+shopCapital.contents.push(api.createUnit(1, 'p', 'shop-armour-target'));
+state.provinceResources[0] = { type: 'food', productionChance: 50, row: 0, column: 1 };
+const shop = elements.get('resource-purchases-p1');
+const shopOptions = elements.get('resource-purchase-options-p1');
+for (const [action, stock] of [
+    [null, {}],
+    ['pawn', { food: 2, wood: 1, gold: 1 }],
+    ['horse', { horse: 2, metal: 1, gold: 1 }],
+    ['armour', { food: 1, metal: 2, wood: 2, gold: 1 }],
+    ['castle', { stone: 3, food: 1, wood: 2, gold: 1 }],
+    ['resource', { stone: 2, wood: 2, food: 2, gold: 1 }],
+    ['lucky', { gold: 1, horse: 1, metal: 1, food: 1, wood: 1 }]
+]) {
+    shopCapital.contents[0].resourceStockpile = stock;
+    api.refreshResourceTotals();
+    api.updatePlayerCards();
+    assert.equal(shop.classList.contains('shopping-available'), action !== null,
+        `Shop highlight reflects ${action || 'no'} affordable purchase`);
+    if (action) {
+        assert((shopOptions.html.match(new RegExp(`<button\\b[^>]*data-purchase="${action}"[^>]*>`, 'g')) || [])
+            .some(tag => !/\sdisabled(?:\s|>)/.test(tag)), `${action} is actually purchasable`);
+    }
+}
+shopCapital.contents[0].resourceStockpile = { food: 2, wood: 1, gold: 1 };
+state.board[0][4] = null;
+api.refreshResourceTotals();
+api.updatePlayerCards();
+assert(!shop.classList.contains('shopping-available'),
+    'Affordable recruitment does not highlight without an eligible Castle');
+state.board[0][4] = shopNeighbour;
+api.updatePlayerCards();
+assert(shop.classList.contains('shopping-available'), 'An eligible Castle enables recruitment');
+shopCapital.contents[0].resourceStockpile = { gold: 1, horse: 1, metal: 1, food: 1, wood: 1 };
+api.refreshResourceTotals();
+state.multiplayer = true;
+state.committed[0] = true;
+api.updatePlayerCards();
+assert(!shop.classList.contains('shopping-available'), 'A locked plan does not highlight the shop');
+state.committed[0] = false;
+api.updatePlayerCards();
+assert(shop.classList.contains('shopping-available'), 'Unlocking restores the highlight');
+assert(api.purchaseResourceAction(1, 'lucky'), 'The available Lucky Card can be purchased');
+api.updatePlayerCards();
+assert(!shop.classList.contains('shopping-available'), 'Spending the resources removes the highlight');
+
 for (const size of [12, 16]) {
     function setupRaid() {
         state.reset();

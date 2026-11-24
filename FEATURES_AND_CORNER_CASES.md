@@ -297,8 +297,8 @@ chess rules.
   missions see the changed ownership. Rebel survivors join their conqueror
   rather than becoming prisoners. Multiplayer refill requests are validated by
   the host, and meter state is included in snapshots and reconnects.
-- Resource purchases are available during planning on rounds 4, 8, 12, etc.;
-  multiple affordable purchases are allowed in one eligible round. The shopping-cart
+- Resource purchases are available during unlocked planning on every round;
+  multiple affordable purchases are allowed. The shopping-cart
   dropdown in the current player's card heading lists Lucky Cards, recruitment,
   Castle upgrades, non-Tower armour purchases, and owned resource-site upgrades.
   Castle purchases also have controls in the Castle unit list; resource sites
@@ -306,7 +306,8 @@ chess rules.
   conditions. Recruitment places the unit in the selected Castle, including when
   multiple Castles share a province.
   The 12-slice round clock fills one slice per round independently of
-  resource-production settings, then resets for the next cycle. Carts mark purchase rounds and a scroll marks
+  resource-production settings, then resets for the next cycle. Grain bags with
+  downward arrows mark province food decreases after rounds 4, 8, and 12; a scroll marks
   the end of each temporary-objective cycle. Pawns cost
   2 Food, 1 Wood, and 1 Gold; Horses cost 2 Horse, 1 Metal, and 1 Gold.
   Both are recruited onto an owned Castle in an orthogonally adjacent province
@@ -316,20 +317,20 @@ chess rules.
   toward those limits.
 - Armour can be purchased for a unit in a Castle/Tower stack for 1 Food,
   2 Metal, 2 Wood, and 1 Gold. It is a one-time level 0-to-1 upgrade, available
-  only on purchase rounds; Towers cannot buy armour, and the previous free armour
+  during unlocked planning on any round; Towers cannot buy armour, and the previous free armour
   upgrade is removed.
 - Any owned Castle may be upgraded twice, each level costing 3 Stone, 1 Food,
   2 Wood, and 1 Gold. Level 1 changes stationary Tower defence from ×3 to ×4,
   siege assault readiness from 3 to 4 rounds, and the garrison timer from 6 to
   8. Level 2 changes these to ×5, 6 rounds, and 12 rounds respectively.
 - A site in an exclusively owned province may be upgraded once for 2 Stone,
-  2 Wood, 2 Food, and 1 Gold on a purchase round. Its popup shows its probability
+  2 Wood, 2 Food, and 1 Gold during unlocked planning on any round. Its popup shows its probability
   and output out of two, with a disabled upgrade control when ineligible.
   Each successful production check then yields two resources to the normal
   owner or chosen raider. Upgrades belong to individual sites, persist through
   conquest, and synchronize in multiplayer snapshots.
-- Lucky Cards cost 1 each of Gold, Horse, Metal, Food, and Wood during normal
-  purchase windows. Each purchase draws independently with equal chances from
+- Lucky Cards cost 1 each of Gold, Horse, Metal, Food, and Wood during unlocked
+  planning on any round. Each purchase draws independently with equal chances from
   Resource burglar and Stop Sign; duplicates are allowed. Cards never expire.
   The question-mark card button immediately left of the cart opens the private
   hand as icons with description tooltips; its first card-plus icon buys another.

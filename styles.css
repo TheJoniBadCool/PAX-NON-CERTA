@@ -551,15 +551,6 @@
             pointer-events: none;
         }
 
-        .plan-actions > .shopping-notice {
-            grid-column: 1 / -1;
-            grid-row: 4;
-        }
-
-        .shopping-notice:empty {
-            display: none;
-        }
-
         .plan-controls > * {
             z-index: 1;
         }
@@ -640,7 +631,7 @@
         }
         #planning-countdown {
             color: var(--text-main);
-            font-size: 1.5rem;
+            font-size: 1.25rem;
             font-weight: 700;
             font-variant-numeric: tabular-nums;
             line-height: 1.2;
@@ -658,16 +649,10 @@
         }
         .round-clock-slice.filled { fill: #818cf8; }
         .round-clock-markers {
-            font-size: 9px;
+            font-size: 10px;
             text-anchor: middle;
             dominant-baseline: central;
         }
-        .shopping-notice {
-            color: #fbbf24;
-            font-size: 0.75rem;
-            font-weight: 700;
-        }
-
         @media (max-width: 650px) {
             .board-top-controls {
                 grid-template-columns: minmax(0, 1fr);
@@ -912,17 +897,16 @@
             font-size: .85rem;
         }
 
-        .resource-purchases {
-            position: static;
+        .player-purchase-actions {
+            display: flex;
+            align-items: center;
+            flex: 0 0 auto;
+            gap: 0.3rem;
             margin-left: auto;
-            flex-shrink: 0;
         }
-
-        .player-actions:has(.diplomacy-actions:not(:empty)) + .resource-purchases { margin-left: 0; }
-
-        .lucky-cards { position: static; flex-shrink: 0; margin-left: auto; }
-        .player-actions:has(.diplomacy-actions:not(:empty)) + .lucky-cards,
-        .lucky-cards + .resource-purchases { margin-left: 0; }
+        .player-purchase-actions:not(:has(details:not(.hidden))) { display: none; }
+        .player-actions:has(.diplomacy-actions:not(:empty)) + .player-purchase-actions { margin-left: 0; }
+        .resource-purchases, .lucky-cards { position: static; flex-shrink: 0; }
         .lucky-cards > summary svg { width: 22px; height: 22px; }
         .lucky-card-hand { display: flex; flex-wrap: wrap; gap: 6px; align-items: flex-start; }
         .lucky-card-options .lucky-card-hand > .requirement-trigger { width: auto; }

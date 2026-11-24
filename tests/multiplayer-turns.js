@@ -474,23 +474,24 @@ async function run() {
     assert(guest.sent.filter(message => message.type === 'sync' && message.game).pop().game.provinceFood[0] === 5,
         'A food refill is synchronized to guests');
     const savedResources = state.resources;
-    state.round = 4;
+    state.round = 3;
     state.board[1][0] = { id: 'guest-upgrade-tower', player: 2, type: 'r', contents: [{
         id: 'guest-upgrade-tower-unit', player: 2, type: 'r',
         resourceStockpile: { stone: 2, wood: 2, food: 2, gold: 1 }
     }] };
     ctx.refreshResourceTotals();
-    guest.emit('data', { type: 'purchase', action: 'resource', targetId: '16:0', gameId: 1, round: 4 });
+    guest.emit('data', { type: 'purchase', action: 'resource', targetId: '16:0', gameId: 1, round: 3 });
     assert(!state.provinceResources[0][0].productionUpgraded, 'The host rejects invalid site targets');
-    guest.emit('data', { type: 'purchase', action: 'resource', targetId: '0:0', gameId: 1, round: 4 });
+    guest.emit('data', { type: 'purchase', action: 'resource', targetId: '0:0', gameId: 1, round: 3 });
     assert(state.provinceResources[0][0].productionUpgraded && state.resources[1].stone === 0 &&
         state.resources[1].wood === 0 && state.resources[1].food === 0 && state.resources[1].gold === 0,
-        'The host applies and charges an authenticated guest site upgrade');
+        'The host applies and charges an authenticated guest site upgrade on a non-fourth round');
     assert(guest.sent.filter(message => message.type === 'sync' && message.game).pop()
         .game.provinceResources[0][0].productionUpgraded, 'Guest snapshots include the site upgrade');
-    guest.emit('data', { type: 'purchase', action: 'resource', targetId: '0:0', gameId: 1, round: 4 });
+    guest.emit('data', { type: 'purchase', action: 'resource', targetId: '0:0', gameId: 1, round: 3 });
     assert(guest.sent.some(message => message.type === 'notice' && message.text.includes('Purchase rejected')),
         'The host rejects a repeated upgrade');
+    state.round = 4;
     const savedPlans = state.plans;
     state.plans = [[{ from: [1, 1], to: [1, 2] }, { prisonerAction: 'release' }], [], [], []];
     state.luckyCards = [[{ id: 'host-secret-card', type: 'steal' }],

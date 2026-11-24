@@ -86,7 +86,7 @@ function updateRoundDisplay() {
     const productionInterval = getResourceProductionInterval();
     const roundsUntilProduction = productionInterval - completedRounds % productionInterval;
     const roundLabel = roundsUntilProduction === 1 ? 'round' : 'rounds';
-    const description = `Round clock: round ${cycleProgress} of ${interval} in the temporary objective cycle; purchases every ${RESOURCE_PURCHASE_INTERVAL} rounds; new temporary objectives at the end of each cycle; resource production in ${roundsUntilProduction} ${roundLabel}`;
+    const description = `Round clock: round ${cycleProgress} of ${interval} in the temporary objective cycle; province food decreases after rounds 4, 8, and 12; purchases available every round during planning; new temporary objectives at the end of each cycle; resource production in ${roundsUntilProduction} ${roundLabel}`;
     document.querySelectorAll('#round-clock-slices .round-clock-slice').forEach((slice, index) => {
         slice.classList.toggle('filled', index < cycleProgress);
     });
@@ -192,7 +192,6 @@ function updatePlayerCards() {
         tradeModal.classList.add('hidden');
     }
     if (!tradeModal.classList.contains('hidden')) updateResourceTradeAvailability();
-    let shoppingAvailable = false;
     for (let i = 0; i < 4; i++) {
         const card = document.getElementById(`card-p${i + 1}`);
         const badge = document.getElementById(`badge-p${i + 1}`);
@@ -238,14 +237,12 @@ function updatePlayerCards() {
         const purchases = document.getElementById(`resource-purchases-p${i + 1}`);
         const showShop = currentPlayerCanManage && !gameState.eliminated[i] &&
             ['PLANNING', 'COMMITTED'].includes(gameState.phase);
-        const highlightShop = showShop && isResourcePurchaseRound() &&
-            (!gameState.multiplayer || !gameState.committed[i]);
-        shoppingAvailable ||= highlightShop;
         purchases.classList.toggle('hidden', !showShop);
-        purchases.classList.toggle('shopping-available', highlightShop);
         if (!showShop) purchases.open = false;
-        document.getElementById(`resource-purchase-options-p${i + 1}`).innerHTML =
-            showShop ? renderResourcePurchaseOptions(i + 1) : '';
+        const purchaseOptions = document.getElementById(`resource-purchase-options-p${i + 1}`);
+        purchaseOptions.innerHTML = showShop ? renderResourcePurchaseOptions(i + 1) : '';
+        purchases.classList.toggle('shopping-available',
+            showShop && !!purchaseOptions.querySelector('button[data-purchase]:not(:disabled)'));
         renderLuckyCards(i + 1, showShop);
         const stopLabel = isPlayerImmobilized(i + 1)
             ? `Stop Sign: immobilized through round ${gameState.immobilizedUntilRound[i]}.` : '';
@@ -253,10 +250,6 @@ function updatePlayerCards() {
         renderPlayerDiplomacy(i);
     }
     if (typeof PrivateChat !== 'undefined') PrivateChat.renderButtons();
-    const shoppingNotice = document.getElementById('shopping-notice');
-    const shoppingMessage = shoppingAvailable ? 'It is Shopping time!!' : '';
-    if (shoppingNotice.innerText !== shoppingMessage) shoppingNotice.innerText = shoppingMessage;
-
     const p = PLAYERS[gameState.turnIndex];
     activePlayerNameEl.innerText = gameState.multiplayer
         ? `You are ${p.name} (Player ${p.id})`
