@@ -53,8 +53,22 @@ const castleProvince = (board, player) => {
     }
 };
 
-assert.equal(api.state.startingPosition, 'corner');
+assert.equal(api.state.startingPosition, 'agreement');
 assert.equal(api.state.startingArmy, 'default');
+const defaultPlayers = [true, true, true, true];
+const defaultPreview = api.createStartingBoard(defaultPlayers, 12, 'default-setup',
+    null, 'zero', '16', 'tiered', true, null, 'agreement', 'default');
+api.initBoard(null, 12, 'default-setup');
+assert.deepEqual(copy(api.state.board), copy(defaultPreview.board));
+assert.deepEqual(copy(api.state.provinceResources), copy(defaultPreview.provinceResources));
+assert(api.state.board.flat().filter(Boolean).every(piece => piece.player === 5),
+    'The default preview and game start in province selection with only rebels');
+const defaultChances = api.state.provinceResources.map(resource => resource.productionChance);
+assert.equal(defaultChances.filter(chance => chance === 100).length, 3);
+assert.equal(defaultChances.filter(chance => chance === 50).length, 5);
+assert.equal(defaultChances.filter(chance => chance === 20).length, 8);
+api.state.reset();
+api.state.planningTimeSeconds = 0;
 for (const [preset, expected] of [
     ['default', { r: 1, b: 1, p: 2, n: 1, q: 1, k: 1 }],
     ['full', { r: 1, b: 2, p: 4, n: 2, q: 1, k: 1 }]

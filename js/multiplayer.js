@@ -16,7 +16,7 @@ const Multiplayer = (() => {
         name: '',
         myIndex: 0,
         count: 2,
-        boardSize: 16,
+        boardSize: 12,
         mapSeed: '',
         mapPreviewSignature: null,
         setupBoard: null,
@@ -1449,8 +1449,9 @@ const Multiplayer = (() => {
         btnFinishPlan.disabled = !canAct || m.pendingCommit !== null || PlanningTimer.expired();
         const canUnlock = gameState.phase === 'COMMITTED' && !gameState.eliminated[me];
         $('commit-plan-icon').innerText = canUnlock ? '↶' : '✓';
-        $('commit-plan-label').innerText = canUnlock ? 'Unlock Plan' : 'Commit Plans';
-        btnFinishPlan.setAttribute('aria-label', canUnlock ? 'Unlock Plan' : 'Commit Plans');
+        const commitAction = canUnlock ? 'Unlock Plan' : 'Commit Plans';
+        btnFinishPlan.setAttribute('aria-label', commitAction);
+        btnFinishPlan.title = commitAction;
         btnRestart.innerText = isHost() ? '🔄 Restart Room' : '🚪 Leave';
         activePlayerDescEl.innerText = describePhase();
         btnForceSkip.classList.toggle('hidden', !(isHost() && ['PLANNING', 'COMMITTED'].includes(gameState.phase) &&
@@ -1490,6 +1491,10 @@ const Multiplayer = (() => {
     $('btn-mp-join').addEventListener('click', joinRoom);
     $('btn-mp-start').addEventListener('click', startMatch);
     $('btn-mp-generate-map').addEventListener('click', generateLobbyMapPreview);
+    $('btn-mp-random-seed').addEventListener('click', () => {
+        $('mp-map-seed').value = createRandomMapSeed();
+        invalidateLobbyMapPreview();
+    });
     $('btn-mp-setup').addEventListener('click', editCustomSetup);
     $('mp-setup-mode').addEventListener('change', () => invalidateLobbyMapPreview());
     $('mp-starting-army').addEventListener('change', () => invalidateLobbyMapPreview());

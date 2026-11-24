@@ -44,6 +44,7 @@ const context = vm.createContext({
         body: element(),
         documentElement: { clientWidth: 360, clientHeight: 640 },
         createElement: element,
+        querySelectorAll() { return []; },
         getElementById(id) {
             if (!elements.has(id)) elements.set(id, element());
             return elements.get(id);
@@ -80,6 +81,14 @@ const api = vm.runInContext(`const gameState = new GameState();
        bindBoardInteractions,
        types: RESOURCE_TYPES, modes: RESOURCE_MODES })`, context);
 const { state } = api;
+assert.equal(state.boardSize, 12);
+assert.equal(state.fogSight, 'small');
+assert.equal(state.resourceMode, '16');
+assert.equal(state.resourceBalance, 'tiered');
+assert.equal(state.resourceCapitals, true);
+assert.equal(state.showResourcesToOthers, true);
+assert.equal(state.resourceProductionInterval, 1);
+assert.equal(state.progressionMode, 'zero');
 const plain = value => JSON.parse(JSON.stringify(value));
 const legacyStockpile = { resourceStockpile: { gold: 3 } };
 assert.equal(api.getUnitResourceStore(legacyStockpile, true).stone, 0,
@@ -109,8 +118,8 @@ function assertChanceProfile(resources, balance) {
         return;
     }
     assert.deepEqual(plain(chances), [
-        ...Array(Math.max(0, chances.length - 7)).fill(20),
-        ...Array(Math.min(4, Math.max(0, chances.length - 3))).fill(50),
+        ...Array(Math.max(0, chances.length - 8)).fill(20),
+        ...Array(Math.min(5, Math.max(0, chances.length - 3))).fill(50),
         ...Array(Math.min(3, chances.length)).fill(100)
     ].sort((a, b) => a - b), 'Tiered chances use the 100%, 50%, and 20% profile');
 }
@@ -118,6 +127,8 @@ function assertChanceProfile(resources, balance) {
 for (const size of [12, 16]) {
     for (const mode of ['8', '12', '16']) {
         state.resourceCapitals = false;
+        state.resourceBalance = 'off';
+        state.startingPosition = 'corner';
         const starting = api.createStartingBoard(allPlayers, size, 'resources', null, 'zero', mode);
         const resources = starting.provinceResources.filter(Boolean);
         assert.equal(resources.length, Number(mode));
@@ -473,6 +484,15 @@ sparseBoard[0][0] = castle(5, 'one');
 const sparse = api.generateProvinceResources(sparseBoard, '12', api.createSeededRandom('sparse'), 'allow-empty');
 assertBalanced(sparse, false);
 assert.equal(sparse[0].productionChance, 25, 'A lone resource gets 25%');
+for (let count = 0; count <= 16; count++) {
+    const board = Array.from({ length: 16 }, () => Array(16).fill(null));
+    for (let province = 0; province < count; province++) {
+        board[Math.floor(province / 4) * 4][(province % 4) * 4] = castle(5, `tier-${province}`);
+    }
+    const resources = api.generateProvinceResources(board, '12', api.createSeededRandom(`tier-${count}`), 'tiered');
+    assert.equal(resources.filter(Boolean).length, count);
+    assertChanceProfile(resources, 'tiered');
+}
 assert.throws(() => api.generateProvinceResources(sparseBoard, '12', api.createSeededRandom('sparse'), 'require-all'),
     /Cannot place a resource in every quadrant/);
 assert.throws(() => api.generateProvinceResources(sparseBoard, '8', api.createSeededRandom('sparse'), 'require-all'),
@@ -492,6 +512,7 @@ assert.equal(capitalsCompleteQuadrants.filter(Boolean).length, 9);
 assert.throws(() => api.generateProvinceResources(rebelBoard, '8', api.createSeededRandom('seed'), 'invalid'),
     /Unsupported resource balance/);
 state.reset();
+state.boardSize = 16;
 state.board = Array.from({ length: 16 }, () => Array(16).fill(null));
 for (let index = 0; index < 3; index++) state.board[0][index * 4] = castle(5, `rebel-${index}`);
 assert.equal(api.generateProvinceResources(state.board, '8', api.createSeededRandom('custom'))
@@ -538,6 +559,7 @@ for (const chance of [5, 25, 50, 75, 95]) {
 }
 
 state.reset();
+state.boardSize = 16;
 state.board = Array.from({ length: 16 }, () => Array(16).fill(null));
 state.biomes = Array.from({ length: 16 }, () => Array(16).fill('plains'));
 state.board[0][0] = castle(1, 'interval-test');
@@ -557,6 +579,7 @@ for (const interval of [1, 2, 4]) {
 }
 
 state.reset();
+state.boardSize = 16;
 state.activePlayers = [true, true, true, false];
 state.resourceProductionInterval = 4;
 state.board = Array.from({ length: 16 }, () => Array(16).fill(null));
@@ -1010,6 +1033,6 @@ state.reset();
 assert(state.resources.every(stock => Object.values(stock).every(count => count === 0)));
 assert.equal(state.lastResourceProductionRound, null);
 assert.equal(state.provinceResources.filter(Boolean).length, 0);
-assert.equal(state.resourceCapitals, false);
+assert.equal(state.resourceCapitals, true);
 assert.equal(state.resourceProductionInterval, 1);
 console.log('Resource distribution, production, fog rendering and private stockpile checks passed.');

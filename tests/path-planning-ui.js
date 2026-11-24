@@ -56,13 +56,14 @@ vm.runInContext(`
     };
 `, context);
 const api = vm.runInContext(`({
-    state: gameState, handleSquareClick, handleSquareAction, selectBoardPiece,
+    state: gameState, handleSquareClick, handleSquareAction, handleSquarePopup, selectBoardPiece,
     resolveAllMoves, createUnit, putPieceAt, refreshMovementPaths, renderBoard,
     refreshResourceTotals
 })`, context);
 const state = api.state;
 function setup(types = ['b']) {
     state.reset();
+    state.planningTimeSeconds = 0;
     state.boardSize = 12;
     state.activePlayers = [true, true, false, false];
     state.eliminated = [false, false, true, true];
@@ -81,6 +82,34 @@ const click = (r, c) => api.handleSquareClick(r, c);
 const button = id => (getElement(id).handlers.click || getElement(id).onclick)();
 
 async function run() {
+    for (const types of [['p'], ['b', 'p']]) {
+        const army = setup(types);
+        const prisoner = army.contents.at(-1);
+        prisoner.originalPlayer = 2;
+        prisoner.prisonerOf = 1;
+        click(5, 5);
+        assert.ok(getElement('piece-tooltip').classList.contains('hidden'),
+            'Selecting a prisoner-only or mixed stack must not force open the unit panel');
+        assert.ok(state.validMoves.some(([r, c]) => r === 5 && c === 6),
+            'Selecting a prisoner-containing stack preserves its adjacent moves');
+        click(5, 6);
+        assert.equal(state.plans[0].length, 1, 'A normal click queues the whole stack movement');
+        assert.equal(state.plans[0][0].isUnmerge, undefined);
+        assert.equal(state.plans[0][0].contents.length, types.length);
+        await api.resolveAllMoves();
+        assert.equal(state.board[5][6].id, army.id, 'The whole stack moves without unmerging');
+        assert.ok(state.board[5][6].contents.some(unit => unit.id === prisoner.id && unit.prisonerOf === 1),
+            'Moving preserves prisoner status');
+        button('btn-privacy-ready');
+        click(5, 6);
+        assert.equal(state.validMoves.length, 0, 'Prisoner-containing stacks still rest on even rounds');
+        api.handleSquarePopup(5, 6);
+        assert.ok(!getElement('piece-tooltip').classList.contains('hidden'),
+            'The explicit unit-panel action still opens prisoner management on rest rounds');
+        assert.match(getElement('piece-tooltip-units').innerHTML, /data-action="execute"/);
+        assert.match(getElement('piece-tooltip-units').innerHTML, /data-action="release"/);
+    }
+
     setup();
     click(5, 5);
     click(5, 6);

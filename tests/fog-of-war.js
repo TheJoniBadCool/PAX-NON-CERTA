@@ -45,6 +45,7 @@ const piece = (player, ...types) => ({
 function reset(size = 16) {
     state.reset();
     state.boardSize = size;
+    state.fogSight = 'medium';
     state.activePlayers = [true, true, false, false];
     state.eliminated = [false, false, true, true];
     state.board = Array.from({ length: size }, () => Array(size).fill(null));

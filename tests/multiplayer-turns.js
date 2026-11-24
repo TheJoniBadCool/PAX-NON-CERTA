@@ -26,7 +26,8 @@ function element() {
             toggle: (value, force) => force ? classes.add(value) : classes.delete(value)
         },
         addEventListener: (event, handler) => { handlers[event] = handler; },
-        append() {}, appendChild() {}, remove() {}, setAttribute() {}
+        append() {}, appendChild() {}, remove() {},
+        setAttribute(name, value) { this[name] = value; }
     };
 }
 
@@ -372,6 +373,12 @@ async function run() {
         'Changing balance invalidates the lobby preview');
     document.getElementById('mp-resource-balance').value = 'require-all';
     document.getElementById('mp-resource-balance').handlers.change();
+    document.getElementById('btn-mp-generate-map').handlers.click();
+    document.getElementById('btn-mp-random-seed').handlers.click();
+    assert(document.getElementById('mp-map-seed').value === 'test-seed', 'Random seed fills the lobby seed field');
+    assert(document.getElementById('btn-mp-start').disabled, 'Random seed invalidates the lobby preview');
+    assert(document.getElementById('mp-map-preview-status').innerText.includes('Settings changed'),
+        'Random seed prompts for a new preview');
     document.getElementById('btn-mp-generate-map').handlers.click();
     const capitalOption = document.getElementById('mp-resource-capitals');
     capitalOption.checked = false;
@@ -771,6 +778,14 @@ async function run() {
     finishSave();
     await thirdCommit;
     guest.close();
+    const phaseBeforeRefreshTest = state.phase;
+    state.phase = 'COMMITTED';
+    multiplayer.refreshControls();
+    assert(ctx.btnFinishPlan.title === 'Unlock Plan' &&
+        ctx.btnFinishPlan['aria-label'] === 'Unlock Plan' &&
+        document.getElementById('commit-plan-icon').innerText === '↶',
+        'Committed players see an accessible unlock icon');
+    state.phase = phaseBeforeRefreshTest;
     multiplayer.refreshControls();
     assert(!document.getElementById('btn-force-skip').classList.contains('hidden'),
         'Skipping must remain available for a committed disconnected player with pending requests');
@@ -782,6 +797,11 @@ async function run() {
     relay.handlers.connection(guest);
     guest.emit('data', { type: 'join', name: 'Guest' });
     state.phase = 'GAME_OVER';
+    multiplayer.refreshControls();
+    assert(ctx.btnFinishPlan.title === 'Commit Plans' &&
+        ctx.btnFinishPlan['aria-label'] === 'Commit Plans' &&
+        document.getElementById('commit-plan-icon').innerText === '✓',
+        'The commit icon and accessible label reset outside the committed phase');
     multiplayer.onNewGameRequested();
     document.getElementById('mp-count').handlers.change({ target: { value: '3' } });
     assert(document.getElementById('mp-setup-status').innerText.includes('before starting'),

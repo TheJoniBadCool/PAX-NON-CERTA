@@ -80,15 +80,16 @@ function showPrivacyOverlay() {
 function updateRoundDisplay() {
     roundTagEl.innerText = `Round ${gameState.round}`;
     const completedRounds = gameState.round - 1;
-    const interval = RESOURCE_PURCHASE_INTERVAL;
+    const interval = MISSION_BATCH_ROUNDS;
     const cycleProgress = completedRounds % interval + 1;
     const clock = document.getElementById('round-clock');
     const productionInterval = getResourceProductionInterval();
     const roundsUntilProduction = productionInterval - completedRounds % productionInterval;
     const roundLabel = roundsUntilProduction === 1 ? 'round' : 'rounds';
-    const description = `Round clock: round ${cycleProgress} of ${interval} in the purchase cycle; purchases on rounds 4, 8, 12, etc.; resource production in ${roundsUntilProduction} ${roundLabel}`;
-    document.getElementById('round-clock-hand').style.transform =
-        `rotate(${gameState.round * 360 / interval}deg)`;
+    const description = `Round clock: round ${cycleProgress} of ${interval} in the temporary objective cycle; purchases every ${RESOURCE_PURCHASE_INTERVAL} rounds; new temporary objectives at the end of each cycle; resource production in ${roundsUntilProduction} ${roundLabel}`;
+    document.querySelectorAll('#round-clock-slices .round-clock-slice').forEach((slice, index) => {
+        slice.classList.toggle('filled', index < cycleProgress);
+    });
     document.getElementById('round-clock-status').innerText = `${cycleProgress} / ${interval}`;
     clock.setAttribute('aria-label', description);
     clock.title = description;
@@ -126,8 +127,9 @@ function renderObjectives() {
         temporaryRows.innerHTML = batch.missions.map((mission, missionIndex) => {
             const label = getMissionLabel(mission);
             return `<li class="objective-item mission-item${mission.status === 'completed' ? ' objective-completed' : ''}">
+                <input type="checkbox" disabled ${mission.status === 'completed' ? 'checked' : ''} aria-label="${escapeHtml(label)}">
                 <span class="objective-reward">+${mission.points}</span>
-                <span class="objective-label">${escapeHtml(label)} · ${escapeHtml(mission.status)}</span>
+                <span class="objective-label">${escapeHtml(label)}</span>
                 <button type="button" class="mission-locate" data-mission-index="${missionIndex}" aria-label="Locate ${escapeHtml(label)}" title="Highlight target squares without changing visibility">🔍</button>
             </li>`;
         }).join('');

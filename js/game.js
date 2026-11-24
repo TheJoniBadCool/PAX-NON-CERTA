@@ -1020,8 +1020,7 @@
             if (clickedPiece && !isEliminatedPiece(clickedPiece) && clickedPiece.player === activePlayerId) {
                 cancelPieceMovementPaths(clickedPiece, activePlayerId);
                 selectBoardPiece(r, c, clickedPiece);
-                if (gameState.selectedSquare && (getSiegeForAttacker(clickedPiece.id) || getSiegeAtSquare([r, c]) ||
-                    getPieceContents(clickedPiece).some(isPrisoner))) {
+                if (gameState.selectedSquare && (getSiegeForAttacker(clickedPiece.id) || getSiegeAtSquare([r, c]))) {
                     showPieceTooltip(r, c, boardEl.children[r * gameState.boardSize + c]);
                 }
             } else {
@@ -1844,7 +1843,7 @@
             resolveProvinceFood(gameState.round - 1);
             if (typeof finishMissionRound === 'function') finishMissionRound(gameState.round - 1);
             const { winners, draw } = resolveObjectiveRound();
-            if (typeof issueMissionBatches === 'function' && (gameState.round - 1) % 16 === 0 &&
+            if (typeof issueMissionBatches === 'function' && (gameState.round - 1) % MISSION_BATCH_ROUNDS === 0 &&
                 !winners.length && !draw) issueMissionBatches(gameState.round);
             renderBoard();
 
@@ -2462,12 +2461,17 @@
             document.getElementById('resource-capitals').checked = event.target.checked;
             refreshCustomMapPreview();
         });
-        document.getElementById('custom-map-seed').addEventListener('input', () => {
+        const updateCustomMapSeed = () => {
             document.getElementById('map-seed').value = document.getElementById('custom-map-seed').value;
             if (Multiplayer.isEditingSetup()) {
                 document.getElementById('mp-map-seed').value = document.getElementById('custom-map-seed').value;
             }
             refreshCustomMapPreview();
+        };
+        document.getElementById('custom-map-seed').addEventListener('input', updateCustomMapSeed);
+        document.getElementById('btn-custom-random-seed').addEventListener('click', () => {
+            document.getElementById('custom-map-seed').value = createRandomMapSeed();
+            updateCustomMapSeed();
         });
         const invalidateHotseatPreview = () => {
             hotseatMapPreview = null;
@@ -2476,6 +2480,10 @@
                 'Settings changed. Generate a new map preview before starting.';
             updateHotseatMapControls();
         };
+        document.getElementById('btn-random-seed').addEventListener('click', () => {
+            document.getElementById('map-seed').value = createRandomMapSeed();
+            invalidateHotseatPreview();
+        });
         document.querySelectorAll(
             '#player-selection-list input[type="checkbox"], #board-size, #map-seed, #resource-mode, #resource-balance, #resource-capitals, #starting-army, ' +
             'input[name="progression-mode"]'

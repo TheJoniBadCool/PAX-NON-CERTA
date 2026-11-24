@@ -22,6 +22,7 @@ const api = vm.runInContext(`const gameState = new GameState();
        getBattleCandidateData, processRetreatsAtRoundStart,
        rebelId: REBEL_PLAYER_ID, getPieceContents, getUnitDisplayClass })`, context);
 const { state } = api;
+state.startingPosition = 'corner';
 const seedPlayers = [true, true, false, false];
 const seededMapA = api.createStartingBoard(seedPlayers, 12, 'test-seed');
 const seededMapB = api.createStartingBoard(seedPlayers, 12, 'test-seed');

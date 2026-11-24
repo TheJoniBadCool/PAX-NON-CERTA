@@ -8,7 +8,7 @@
 </head>
 <body>
 
-    <header>
+    <header id="site-header">
         <div class="brand">
             <div class="brand-icon">⚔️</div>
             <div>
@@ -23,8 +23,12 @@
             <button id="btn-menu" class="btn btn-secondary">🏠 Menu</button>
             <button id="btn-rules" class="btn btn-secondary">📖 Rules</button>
             <button id="btn-restart" class="btn btn-primary">🔄 New Game</button>
+            <button id="btn-hide-header" class="btn btn-secondary" type="button"
+                aria-controls="site-header" aria-expanded="true">Hide Header</button>
         </div>
     </header>
+    <button id="btn-show-header" class="btn btn-secondary show-header hidden" type="button"
+        aria-controls="site-header" aria-expanded="false">Show Header</button>
 
     <main class="combat-log-hidden">
         <!-- Board and player status -->
@@ -56,27 +60,42 @@
                         </div>
                     </div>
                     <div class="plan-actions">
-                        <div id="round-clock" class="plan-action round-clock" role="group" aria-label="Round clock: round 1 of 4 in the purchase cycle">
-                            <svg class="plan-action-icon round-clock-face" viewBox="0 0 32 32" aria-hidden="true">
-                                <circle cx="16" cy="16" r="14"></circle>
-                                <path class="round-clock-ticks" d="M16 3v3 M29 16h-3 M16 29v-3 M3 16h3"></path>
-                                <g id="round-clock-hand">
-                                    <path d="M16 16V8"></path>
+                        <div id="round-clock" class="plan-action round-clock" role="group" aria-label="Round clock: round 1 of 12 in the temporary objective cycle; purchases every 4 rounds; new temporary objectives at the end of each cycle">
+                            <svg class="plan-action-icon round-clock-face" viewBox="0 0 100 100" aria-hidden="true">
+                                <defs><path id="round-clock-slice-shape" d="M50 50 L50 20 A30 30 0 0 1 65 24.019 Z"></path></defs>
+                                <g id="round-clock-slices">
+                                    <use href="#round-clock-slice-shape" class="round-clock-slice filled"></use>
+                                    <use href="#round-clock-slice-shape" class="round-clock-slice" transform="rotate(30 50 50)"></use>
+                                    <use href="#round-clock-slice-shape" class="round-clock-slice" transform="rotate(60 50 50)"></use>
+                                    <use href="#round-clock-slice-shape" class="round-clock-slice" transform="rotate(90 50 50)"></use>
+                                    <use href="#round-clock-slice-shape" class="round-clock-slice" transform="rotate(120 50 50)"></use>
+                                    <use href="#round-clock-slice-shape" class="round-clock-slice" transform="rotate(150 50 50)"></use>
+                                    <use href="#round-clock-slice-shape" class="round-clock-slice" transform="rotate(180 50 50)"></use>
+                                    <use href="#round-clock-slice-shape" class="round-clock-slice" transform="rotate(210 50 50)"></use>
+                                    <use href="#round-clock-slice-shape" class="round-clock-slice" transform="rotate(240 50 50)"></use>
+                                    <use href="#round-clock-slice-shape" class="round-clock-slice" transform="rotate(270 50 50)"></use>
+                                    <use href="#round-clock-slice-shape" class="round-clock-slice" transform="rotate(300 50 50)"></use>
+                                    <use href="#round-clock-slice-shape" class="round-clock-slice" transform="rotate(330 50 50)"></use>
                                 </g>
-                                <circle class="round-clock-pivot" cx="16" cy="16" r="1.5"></circle>
+                                <g class="round-clock-markers">
+                                    <text x="88" y="64">🛒</text>
+                                    <text x="19" y="82">🛒</text>
+                                    <text x="38" y="9">🛒</text>
+                                    <text x="57" y="9">📜</text>
+                                </g>
                             </svg>
-                            <span id="round-clock-status">1 / 4</span>
+                        </div>
+                        <div class="plan-controls">
+                            <span id="round-clock-status">1 / 12</span>
                             <span id="planning-countdown" class="hidden" role="timer" aria-label="Planning time remaining" title="Planning time remaining"></span>
+                            <button id="btn-finish-plan" class="plan-action plan-commit" type="button" aria-label="Commit Plans" title="Commit Plans">
+                                <span id="commit-plan-icon" class="plan-action-icon" aria-hidden="true">✓</span>
+                            </button>
+                            <button id="btn-clear-plan" class="plan-action plan-reset" type="button" aria-label="Reset Plans" title="Reset Plans">
+                                <span class="plan-action-icon" aria-hidden="true">✕</span>
+                            </button>
                         </div>
                         <div id="shopping-notice" class="shopping-notice" role="status" aria-live="polite"></div>
-                        <button id="btn-finish-plan" class="plan-action plan-commit" type="button" aria-label="Commit Plans">
-                            <span id="commit-plan-icon" class="plan-action-icon" aria-hidden="true">✓</span>
-                            <span id="commit-plan-label">Commit Plans</span>
-                        </button>
-                        <button id="btn-clear-plan" class="plan-action plan-reset" type="button" aria-label="Reset Plans">
-                            <span class="plan-action-icon" aria-hidden="true">✕</span>
-                            <span>Reset Plans</span>
-                        </button>
                     </div>
                 </div>
             <div class="board-wrapper">
@@ -330,34 +349,34 @@
                     <div class="setup-option">
                         <label class="mp-field" for="mp-board-size">Board size
                             <select id="mp-board-size">
-                                <option value="12">12 × 12</option>
-                                <option value="16" selected>16 × 16</option>
+                                <option value="12" selected>12 × 12</option>
+                                <option value="16">16 × 16</option>
                             </select>
                         </label>
                     </div>
                     <label class="mp-field" for="mp-fog-sight">Fog of war sight
                         <select id="mp-fog-sight">
-                            <option value="small">Small</option>
-                            <option value="medium" selected>Medium (default)</option>
+                            <option value="small" selected>Small (default)</option>
+                            <option value="medium">Medium</option>
                             <option value="large">Large</option>
                         </select>
                     </label>
                     <label class="mp-field" for="mp-resource-mode">Resources
                         <select id="mp-resource-mode">
-                            <option value="8" selected>8 resources (rebel count minus four)</option>
+                            <option value="8">8 resources (rebel count minus four)</option>
                             <option value="12">12 resources (rebel count)</option>
-                            <option value="16">16 resources (1 per province)</option>
+                            <option value="16" selected>16 resources (1 per province)</option>
                         </select>
                     </label>
                     <label><input id="mp-resource-capitals" type="checkbox"> Allow resources in player capitals (always on with 16 resources)</label>
                     <label><input id="mp-show-resources-to-others" type="checkbox" checked> Show resource balances to other players</label>
                     <label class="mp-field" for="mp-resource-balance">Resource balance
                         <select id="mp-resource-balance">
-                            <option value="off">Unbalanced (default)</option>
+                            <option value="off">Unbalanced: random chances</option>
                             <option value="allow-empty">Balanced: allow empty quadrants</option>
                             <option value="require-all">Balanced: at least one resource per quadrant</option>
                             <option value="all-100">100%: all resources</option>
-                            <option value="tiered">Unbalanced: 3 at 100%, 4 at 50%, rest at 20%</option>
+                            <option value="tiered" selected>Unbalanced: 3 at 100%, 5 at 50%, rest at 20% (default)</option>
                         </select>
                     </label>
                     <label class="mp-field" for="mp-resource-production-interval">Resource production
@@ -367,20 +386,21 @@
                             <option value="4">Every 4 turns</option>
                         </select>
                     </label>
-                    <label><input id="mp-planning-timer-enabled" type="checkbox"> Enable planning timer (per player, each round)</label>
+                    <label><input id="mp-planning-timer-enabled" type="checkbox" checked> Enable planning timer (per player, each round)</label>
                     <label class="mp-field" for="mp-planning-time">Planning time
-                        <input id="mp-planning-time" type="number" min="1" max="86400" step="1" value="2" required disabled>
+                        <input id="mp-planning-time" type="number" min="1" max="86400" step="1" value="40" required>
                     </label>
                     <label class="mp-field" for="mp-planning-time-unit">Time unit
-                        <select id="mp-planning-time-unit" disabled>
-                            <option value="minutes" selected>Minutes</option>
-                            <option value="seconds">Seconds</option>
+                        <select id="mp-planning-time-unit">
+                            <option value="minutes">Minutes</option>
+                            <option value="seconds" selected>Seconds</option>
                         </select>
                     </label>
                     <div class="map-preview-controls">
                         <label class="mp-field" for="mp-map-seed">Map seed
                             <input id="mp-map-seed" type="text" maxlength="64" placeholder="Generate one or enter a seed">
                         </label>
+                        <button id="btn-mp-random-seed" class="btn btn-secondary random-seed-button" type="button">Random Seed</button>
                         <button id="btn-mp-generate-map" class="btn btn-secondary" type="button">🗺️ Generate Map</button>
                         <div id="mp-map-preview" class="map-preview-grid" role="img" aria-label="Map preview"></div>
                         <div id="mp-map-preview-status" class="mp-status" aria-live="polite">Generate a map to preview the starting layout.</div>
@@ -398,10 +418,10 @@
                     </div>
                     <label class="mp-field">Starting position
                         <select id="mp-setup-mode">
-                            <option value="corner">Corner Position (default)</option>
+                            <option value="corner">Corner Position</option>
                             <option value="custom">Custom placement</option>
                             <option value="random">Random</option>
-                            <option value="agreement">Gentleman's Agreement</option>
+                            <option value="agreement" selected>Gentleman's Agreement (default)</option>
                         </select>
                     </label>
                     <div id="mp-custom-options" class="hidden">
@@ -447,34 +467,34 @@
                 <div class="setup-option">
                     <label class="mp-field" for="board-size">Board size
                         <select id="board-size">
-                            <option value="12">12 × 12</option>
-                            <option value="16" selected>16 × 16</option>
+                            <option value="12" selected>12 × 12</option>
+                            <option value="16">16 × 16</option>
                         </select>
                     </label>
                 </div>
                 <label class="mp-field" for="fog-sight">Fog of war sight
                     <select id="fog-sight">
-                        <option value="small">Small</option>
-                        <option value="medium" selected>Medium (default)</option>
+                        <option value="small" selected>Small (default)</option>
+                        <option value="medium">Medium</option>
                         <option value="large">Large</option>
                     </select>
                 </label>
                 <label class="mp-field" for="resource-mode">Resources
                     <select id="resource-mode">
-                        <option value="8" selected>8 resources (rebel count minus four)</option>
+                        <option value="8">8 resources (rebel count minus four)</option>
                         <option value="12">12 resources (rebel count)</option>
-                        <option value="16">16 resources (1 per province)</option>
+                        <option value="16" selected>16 resources (1 per province)</option>
                     </select>
                 </label>
                 <label><input id="resource-capitals" type="checkbox"> Allow resources in player capitals (always on with 16 resources)</label>
                 <label><input id="show-resources-to-others" type="checkbox" checked> Show resource balances to other players</label>
                 <label class="mp-field" for="resource-balance">Resource balance
                     <select id="resource-balance">
-                        <option value="off">Unbalanced (default)</option>
+                        <option value="off">Unbalanced: random chances</option>
                         <option value="allow-empty">Balanced: allow empty quadrants</option>
                         <option value="require-all">Balanced: at least one resource per quadrant</option>
                         <option value="all-100">100%: all resources</option>
-                        <option value="tiered">Unbalanced: 3 at 100%, 4 at 50%, rest at 20%</option>
+                        <option value="tiered" selected>Unbalanced: 3 at 100%, 5 at 50%, rest at 20% (default)</option>
                     </select>
                 </label>
                 <label class="mp-field" for="resource-production-interval">Resource production
@@ -484,20 +504,21 @@
                         <option value="4">Every 4 turns</option>
                     </select>
                 </label>
-                <label><input id="planning-timer-enabled" type="checkbox"> Enable planning timer (per player, each round)</label>
+                <label><input id="planning-timer-enabled" type="checkbox" checked> Enable planning timer (per player, each round)</label>
                 <label class="mp-field" for="planning-time">Planning time
-                    <input id="planning-time" type="number" min="1" max="86400" step="1" value="2" required disabled>
+                    <input id="planning-time" type="number" min="1" max="86400" step="1" value="40" required>
                 </label>
                 <label class="mp-field" for="planning-time-unit">Time unit
-                    <select id="planning-time-unit" disabled>
-                        <option value="minutes" selected>Minutes</option>
-                        <option value="seconds">Seconds</option>
+                    <select id="planning-time-unit">
+                        <option value="minutes">Minutes</option>
+                        <option value="seconds" selected>Seconds</option>
                     </select>
                 </label>
                 <div id="hotseat-map-preview-controls" class="map-preview-controls">
                     <label class="mp-field" for="map-seed">Map seed
                         <input id="map-seed" type="text" maxlength="64" placeholder="Generate one or enter a seed">
                     </label>
+                    <button id="btn-random-seed" class="btn btn-secondary random-seed-button" type="button">Random Seed</button>
                     <button id="btn-generate-map" class="btn btn-secondary" type="button">🗺️ Generate Map</button>
                     <div id="map-preview" class="map-preview-grid" role="img" aria-label="Map preview"></div>
                     <div id="map-preview-status" class="mp-status" aria-live="polite">Generate a map to preview the starting layout.</div>
@@ -515,10 +536,10 @@
                 </div>
                 <div class="setup-option">
                     <strong>Starting position</strong>
-                    <label><input type="radio" name="setup-mode" value="corner" checked> Corner Position (default)</label>
+                    <label><input type="radio" name="setup-mode" value="corner"> Corner Position</label>
                     <label><input type="radio" name="setup-mode" value="custom"> Custom placement</label>
                     <label><input type="radio" name="setup-mode" value="random"> Random</label>
-                    <label><input type="radio" name="setup-mode" value="agreement"> Gentleman's Agreement</label>
+                    <label><input type="radio" name="setup-mode" value="agreement" checked> Gentleman's Agreement (default)</label>
                 </div>
                 <div class="saved-setup-section">
                     <strong>Saved custom setups</strong>
@@ -566,11 +587,11 @@
                     <label><input id="custom-resource-capitals" type="checkbox"> Allow resources in player capitals (always on with 16 resources)</label>
                     <label class="mp-field" for="custom-resource-balance">Resource balance
                         <select id="custom-resource-balance">
-                            <option value="off">Unbalanced (default)</option>
+                            <option value="off">Unbalanced: random chances</option>
                             <option value="allow-empty">Balanced: allow empty quadrants</option>
                             <option value="require-all">Balanced: at least one resource per quadrant</option>
                             <option value="all-100">100%: all resources</option>
-                            <option value="tiered">Unbalanced: 3 at 100%, 4 at 50%, rest at 20%</option>
+                            <option value="tiered">Unbalanced: 3 at 100%, 5 at 50%, rest at 20% (default)</option>
                         </select>
                     </label>
                 </div>
@@ -578,6 +599,7 @@
                     <label class="mp-field" for="custom-map-seed">Map seed
                         <input id="custom-map-seed" type="text" maxlength="64" placeholder="Generate one or enter a seed">
                     </label>
+                    <button id="btn-custom-random-seed" class="btn btn-secondary random-seed-button" type="button">Random Seed</button>
                     <button id="btn-custom-generate-map" class="btn btn-secondary" type="button">🗺️ Generate Map</button>
                     <div id="custom-map-preview" class="map-preview-grid" role="img" aria-label="Custom setup map preview"></div>
                     <div id="custom-map-preview-status" class="mp-status" aria-live="polite">
@@ -718,6 +740,7 @@
     <script src="js/setup-actions.js"></script>
     <script src="js/rules-guide.js"></script>
     <script src="js/private-chat.js"></script>
+    <script src="js/header-toggle.js"></script>
     <script src="js/game.js"></script>
     <script src="js/multiplayer.js"></script>
     <!--

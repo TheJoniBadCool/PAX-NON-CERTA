@@ -48,7 +48,9 @@ dashboard = by_class("board-dashboard")
 top = by_class("board-top-controls")
 board = by_class("board-wrapper")
 cards = by_class("player-cards")
-assert [node for node in parser.nodes if node["parent"] is dashboard] == [top, board, cards]
+assert [node for node in parser.nodes if node["parent"] is dashboard] == [
+    top, board, by_id("purchase-requirements"), cards
+]
 assert by_id("objectives-panel")["parent"] is by_class("board-objectives")
 assert by_class("board-objectives")["parent"] is top
 sections = by_class("objectives-sections")
@@ -57,7 +59,10 @@ assert by_id("objectives-list")["parent"]["parent"]["parent"] is sections
 assert by_id("temporary-objectives-panel")["parent"] is sections
 actions = by_class("plan-actions")
 assert actions["parent"] is top
-assert [by_id(name)["parent"] for name in ("round-clock", "btn-finish-plan", "btn-clear-plan")] == [actions] * 3
+assert by_id("round-clock")["parent"] is actions
+controls = by_class("plan-controls")
+assert controls["parent"] is actions
+assert [by_id(name)["parent"] for name in ("round-clock-status", "planning-countdown", "btn-finish-plan", "btn-clear-plan")] == [controls] * 4
 assert [node["attrs"]["id"] for node in parser.nodes if node["parent"] is cards] == [
     "card-p1", "card-p2", "card-p3", "card-p4"
 ]

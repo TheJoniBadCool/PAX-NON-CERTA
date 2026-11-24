@@ -19,6 +19,7 @@ const api = vm.runInContext(`({
 })`, context);
 
 assert.deepEqual(Array.from(api.sizes), [12, 16]);
+api.state.startingPosition = 'corner';
 for (const size of [10, 14]) {
     assert.throws(() => api.initBoard(null, size), /Unsupported board size/);
 }

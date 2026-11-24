@@ -1,4 +1,4 @@
-const MISSION_BATCH_ROUNDS = 16;
+const MISSION_BATCH_ROUNDS = 12;
 
 function getMissionBoardUnits() {
     const units = [];

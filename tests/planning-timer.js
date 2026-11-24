@@ -70,7 +70,7 @@ const enabled = getElement('planning-timer-enabled');
 const duration = getElement('planning-time');
 const unit = getElement('planning-time-unit');
 
-assert.equal(state.planningTimeSeconds, 0, 'Timers default off');
+assert.equal(state.planningTimeSeconds, 40, 'Timers default to 40 seconds');
 assert.equal(timer.readSettings(), 0);
 enabled.checked = true;
 enabled.handlers.change();
@@ -140,4 +140,4 @@ console.log('Planning timer settings, hotseat expiry, handoff, and lifecycle che
 
 const html = fs.readFileSync('PaxNonCerta.html', 'utf8');
 assert.match(html, /id="round-clock-status"[^>]*>[^<]*<\/span>\s*<span id="planning-countdown"/,
-    'The planning countdown sits directly below the round clock');
+    'The planning countdown sits directly below the round count');

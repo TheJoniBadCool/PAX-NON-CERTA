@@ -134,6 +134,14 @@ function changeCastleOwner(castleId, player) {
 }
 
 async function run() {
+    context.Math.random = () => 0.5;
+    document.getElementById('map-preview').innerHTML = 'old preview';
+    document.getElementById('btn-random-seed').handlers.click();
+    assert.equal(document.getElementById('map-seed').value, '2147483648');
+    assert.equal(document.getElementById('map-preview').innerHTML, '');
+    assert.equal(document.getElementById('btn-start-selected-game').disabled, true);
+    assert.match(document.getElementById('map-preview-status').innerText, /Settings changed/);
+    delete context.Math.random;
     const resourceSelector = document.getElementById('resource-mode');
     const balanceSelector = document.getElementById('resource-balance');
     balanceSelector.value = 'off';
@@ -229,14 +237,14 @@ async function run() {
     assert.deepEqual([...generatedPoints].sort(), [2, 3, 4, 5, 6]);
     assert(sawRepeatedKind, 'Objective kinds can be repeated');
     for (const kind of ['defeat', 'death', 'conquer', 'lose', 'protector', 'bounty',
-        'expansionist', 'monopolist', 'richest', 'army', 'castle-lord']) {
+        'expansionist', 'monopolist', 'richest', 'army']) {
         assert(generatedKinds.has(kind), `Expected random objective kind ${kind}`);
     }
+    assert(!generatedKinds.has('castle-lord'), 'Castle Lord is no longer a random objective');
 
     start();
     state.objectives = [[
         { kind: 'expansionist', points: 2 },
-        { kind: 'castle-lord', points: 3 },
         { kind: 'army', points: 4 },
         { kind: 'richest', points: 5 },
         { kind: 'monopolist', resourceType: 'gold', points: 6 }
@@ -252,13 +260,13 @@ async function run() {
     state.resources[1].gold = 1;
     state.board[4][10] = null;
     api.updateObjectiveScores();
-    assert.equal(state.scores[0], 20, 'Each unique lead and complete monopoly earns its reward');
+    assert.equal(state.scores[0], 17, 'Each unique lead and complete monopoly earns its reward');
     state.resources[1].gold = 2;
     api.updateObjectiveScores();
-    assert.equal(state.scores[0], 15, 'A tied gold stockpile revokes the reward');
+    assert.equal(state.scores[0], 12, 'A tied gold stockpile revokes the reward');
     state.eliminated[1] = true;
     api.updateObjectiveScores();
-    assert.equal(state.scores[0], 20, 'Eliminated players do not prevent a unique lead');
+    assert.equal(state.scores[0], 17, 'Eliminated players do not prevent a unique lead');
     state.eliminated[1] = false;
     changeCastleOwner(enemyCastle, 2);
     api.updateObjectiveScores();
@@ -412,6 +420,16 @@ async function run() {
         api.generateCustomMapPreview();
         const mapBefore = JSON.stringify(api.getCustomMap().biomes);
         const resourcesBefore = JSON.stringify(api.getCustomMap().provinceResources);
+        context.Math.random = () => 0.25;
+        context.Multiplayer.isEditingSetup = () => true;
+        document.getElementById('btn-custom-random-seed').handlers.click();
+        assert.equal(document.getElementById('custom-map-seed').value, '1073741824');
+        assert.equal(document.getElementById('map-seed').value, '1073741824');
+        assert.equal(document.getElementById('mp-map-seed').value, '1073741824');
+        assert.equal(JSON.stringify(api.getCustomMap().biomes), mapBefore);
+        assert.equal(JSON.stringify(api.getCustomMap().provinceResources), resourcesBefore);
+        context.Multiplayer.isEditingSetup = () => false;
+        delete context.Math.random;
         for (const [type, column] of [['k', 0], ['k', 0], ['r', 1], ['r', 2]]) {
             state.customSetupType = type;
             api.placeCustomPiece(0, column);
@@ -481,13 +499,20 @@ async function run() {
     assert(!document.getElementById('objectives-list').innerHTML.includes('<tr'),
         'Checklist entries must use list markup');
     state.missionBatches[0] = {
-        expiresRound: 16,
+        expiresRound: 12,
         missions: [{ kind: 'attack-player', targetPlayer: 2, points: 2, status: 'active' }]
     };
     api.renderObjectives();
     assert(!document.getElementById('objectives-list').innerHTML.includes('Attack Blue'));
-    assert(document.getElementById('temporary-objectives-list').innerHTML.includes('Attack Blue'));
+    const temporaryObjectives = document.getElementById('temporary-objectives-list').innerHTML;
+    assert(temporaryObjectives.includes('Attack Blue'));
+    assert(temporaryObjectives.includes('<input type="checkbox" disabled'));
+    assert(!temporaryObjectives.includes('· active'), 'Temporary objectives use a checkbox instead of status text');
     assert(!document.getElementById('temporary-objectives-panel').classList.contains('hidden'));
+    state.missionBatches[0].missions[0].status = 'completed';
+    api.renderObjectives();
+    assert(document.getElementById('temporary-objectives-list').innerHTML.includes('disabled checked'),
+        'Completed temporary objectives show a checked box');
     state.missionBatches[0] = null;
     api.renderObjectives();
     assert(document.getElementById('temporary-objectives-panel').classList.contains('hidden'));
@@ -514,7 +539,7 @@ async function run() {
     context.Math.random = () => rolls++ === 0 ? 0 : 0.99;
     const attacker = state.board[0][10];
     const battleMission = { kind: 'attack-player', targetPlayer: 2, points: 1, status: 'active' };
-    state.missionBatches[0] = { startRound: 1, expiresRound: 16, missions: [battleMission] };
+    state.missionBatches[0] = { startRound: 1, expiresRound: 12, missions: [battleMission] };
     const battle = api.processCollisionGroup({
         type: 'TARGET', targetSquare: [4, 0],
         candidates: [
@@ -656,7 +681,7 @@ async function run() {
         for (const batch of state.missionBatches.filter(Boolean)) {
             assert.equal(batch.missions.length, 3);
             assert.equal(batch.startRound, 1);
-            assert.equal(batch.expiresRound, 16);
+            assert.equal(batch.expiresRound, 12);
             batch.missions.forEach(mission => {
                 kinds.add(mission.kind);
                 assert([1, 2].includes(mission.points));
@@ -671,7 +696,7 @@ async function run() {
 
     const mission = (kind, extra = {}) => ({ kind, points: 2, status: 'active', ...extra });
     const setBatch = (index, missions, startRound = 1) => {
-        state.missionBatches[index] = { startRound, expiresRound: startRound + 15, missions };
+        state.missionBatches[index] = { startRound, expiresRound: startRound + 11, missions };
     };
     start();
     state.objectives = [[], [], [], []];
@@ -693,8 +718,8 @@ async function run() {
     assert.equal(state.scores[0], 4, 'Successful missions add permanent points once');
     api.finishMissionRound(1);
     assert.equal(state.missionPoints[0], 4, 'Re-evaluation does not duplicate mission rewards');
-    state.round = 17;
-    api.finishMissionRound(16);
+    state.round = 13;
+    api.finishMissionRound(12);
     api.updateObjectiveScores();
     assert.equal(state.scores[0], 4, 'Completed rewards survive batch expiration');
 
@@ -733,22 +758,22 @@ async function run() {
     setBatch(0, [avoid, mission('attack-player', { targetPlayer: 2 }), mission('attack-player', { targetPlayer: 2 })]);
     api.recordMissionAttack(state.board[4][10], state.board[0][10]);
     assert.equal(avoid.status, 'failed');
-    state.round = 17;
-    api.finishMissionRound(16);
+    state.round = 13;
+    api.finishMissionRound(12);
     api.updateObjectiveScores();
     assert.equal(state.scores[0], -2, 'A batch with no successes has one permanent penalty');
-    api.finishMissionRound(16);
+    api.finishMissionRound(12);
     assert.equal(state.missionPoints[0], -2, 'The expiration penalty applies only once');
 
     start();
     state.objectives = [[], [], [], []];
     const safe = mission('avoid-player', { targetPlayer: 2 });
     setBatch(0, [safe]);
-    state.round = 16;
-    api.finishMissionRound(15);
+    state.round = 12;
+    api.finishMissionRound(11);
     assert.equal(safe.status, 'active');
-    state.round = 17;
-    api.finishMissionRound(16);
+    state.round = 13;
+    api.finishMissionRound(12);
     assert.equal(safe.status, 'completed', 'Protection missions complete on the last round');
     assert.equal(state.missionPoints[0], 2);
 
@@ -779,7 +804,7 @@ async function run() {
     setBatch(1, [lastRoundRaid]);
     state.board[1][1] = state.board[4][10];
     state.board[4][10] = null;
-    state.round = 16;
+    state.round = 12;
     await api.resolveAllMoves();
     assert.equal(lastRoundRaid.status, 'completed', 'Raids on the final round are recorded before expiry');
     assert.equal(lastRoundProtection.status, 'failed');
@@ -872,12 +897,23 @@ async function run() {
     start();
     state.objectives = [[], [], [], []];
     setBatch(0, [mission('attack-player', { targetPlayer: 2 })]);
-    state.round = 16;
+    const firstBatch = state.missionBatches[0];
+    state.round = 8;
+    await api.resolveAllMoves();
+    assert.equal(state.missionBatches[0], firstBatch, 'Missions do not refresh at the former 8-round boundary');
+    state.round = 11;
+    await api.resolveAllMoves();
+    assert.equal(state.missionBatches[0], firstBatch, 'Missions remain active through round 12');
+    state.round = 12;
     await api.resolveAllMoves();
     assert.equal(state.missionPoints[0], -2);
     assert.equal(state.scores[0], -2);
-    assert.equal(state.missionBatches[0].startRound, 17, 'A fresh batch starts after the sixteenth round');
+    assert.equal(state.missionBatches[0].startRound, 13, 'A fresh batch starts after the twelfth round');
+    assert.equal(state.missionBatches[0].expiresRound, 24, 'The next batch lasts a full 12 rounds');
     assert.equal(state.missionBatches[0].missions.length, 3);
+    state.round = 24;
+    await api.resolveAllMoves();
+    assert.equal(state.missionBatches[0].startRound, 25, 'Later batches refresh on the same cycle');
 
     start();
     state.objectives = [[], [], [], []];
@@ -891,7 +927,7 @@ async function run() {
     start();
     state.objectives = [[{ kind: 'death', unitId: 'missing', points: -18 }], [], [], []];
     setBatch(0, [mission('attack-player', { targetPlayer: 2 })]);
-    state.round = 16;
+    state.round = 12;
     await api.resolveAllMoves();
     assert.equal(state.scores[0], -20);
     assert(state.eliminated[0], 'Batch expiration can eliminate a player in the same round');

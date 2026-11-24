@@ -277,7 +277,7 @@ function generateProvinceResources(board, mode, random, balance = 'off', resourc
         : [];
     shuffle(types);
     const tieredChances = balance === 'tiered'
-        ? shuffle(selected.map((_, index) => index < 3 ? 100 : index < 7 ? 50 : 20))
+        ? shuffle(selected.map((_, index) => index < 3 ? 100 : index < 8 ? 50 : 20))
         : null;
     const resources = Array(16).fill(null);
     selected.forEach((province, index) => {

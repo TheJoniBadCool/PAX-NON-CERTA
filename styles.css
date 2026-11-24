@@ -76,6 +76,16 @@
             gap: 0.5rem;
         }
 
+        .show-header {
+            position: fixed;
+            top: 0;
+            right: 0;
+            z-index: 20;
+            padding: 0.3rem 0.5rem;
+            border-radius: 0 0 0 8px;
+            font-size: 0.7rem;
+        }
+
         @media (max-width: 600px) {
             header {
                 flex-wrap: wrap;
@@ -522,11 +532,62 @@
         .btn[hidden] { display: none; }
 
         .plan-actions {
-            display: flex;
-            flex-direction: column;
-            align-items: stretch;
+            display: grid;
+            width: 13rem;
+            aspect-ratio: 1.15;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            grid-template-rows: 2rem minmax(0, 1fr) 2rem;
+            align-items: center;
             gap: 0.25rem;
             padding: 0.25rem;
+        }
+
+        .plan-actions > .round-clock {
+            grid-area: 1 / 1 / 4 / -1;
+            position: relative;
+            align-self: stretch;
+            min-width: 0;
+            min-height: 0;
+            pointer-events: none;
+        }
+
+        .plan-actions > .shopping-notice {
+            grid-column: 1 / -1;
+            grid-row: 4;
+        }
+
+        .shopping-notice:empty {
+            display: none;
+        }
+
+        .plan-controls > * {
+            z-index: 1;
+        }
+
+        .plan-controls {
+            display: contents;
+            color: var(--text-main);
+            font-size: 0.7rem;
+            font-weight: 600;
+        }
+
+        #round-clock-status {
+            grid-area: 1 / 1;
+        }
+
+        #planning-countdown {
+            grid-area: 1 / 2;
+            justify-self: end;
+        }
+
+        #btn-finish-plan {
+            grid-area: 3 / 1;
+            justify-self: start;
+        }
+
+        #btn-clear-plan {
+            grid-area: 3 / 2;
+            justify-self: end;
         }
 
         .plan-action {
@@ -557,9 +618,16 @@
 
         .plan-commit,
         .plan-reset {
-            flex-direction: column;
-            gap: 0.15rem;
-            text-align: center;
+            gap: 0.25rem;
+            padding: 0.15rem;
+            font-size: 0.65rem;
+        }
+
+        .plan-commit .plan-action-icon,
+        .plan-reset .plan-action-icon {
+            width: 1.75rem;
+            height: 1.75rem;
+            font-size: 1.2rem;
         }
 
         .plan-commit .plan-action-icon { background: #15803d; }
@@ -568,12 +636,9 @@
         .plan-action:disabled { opacity: 0.4; cursor: not-allowed; }
 
         .round-clock {
-            display: grid;
-            grid-template-columns: 2rem 1fr;
             cursor: default;
         }
         #planning-countdown {
-            grid-column: 1 / -1;
             color: var(--text-main);
             font-size: 1.5rem;
             font-weight: 700;
@@ -581,26 +646,37 @@
             line-height: 1.2;
         }
         .round-clock-face {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+        }
+        .round-clock-slice {
             fill: var(--bg-card);
             stroke: #a5b4fc;
-            stroke-width: 2;
+            stroke-width: 0.6;
         }
-        .round-clock-ticks { stroke: var(--text-muted); }
-        #round-clock-hand {
-            transform-origin: 16px 16px;
-            transform: rotate(90deg);
-            transition: transform 0.3s ease;
-            stroke-linecap: round;
+        .round-clock-slice.filled { fill: #818cf8; }
+        .round-clock-markers {
+            font-size: 9px;
+            text-anchor: middle;
+            dominant-baseline: central;
         }
-        .round-clock-pivot { fill: #a5b4fc; stroke: none; }
         .shopping-notice {
             color: #fbbf24;
             font-size: 0.75rem;
             font-weight: 700;
         }
 
-        @media (prefers-reduced-motion: reduce) {
-            #round-clock-hand { transition: none; }
+        @media (max-width: 650px) {
+            .board-top-controls {
+                grid-template-columns: minmax(0, 1fr);
+            }
+
+            .plan-actions {
+                width: min(100%, 13rem);
+                justify-self: center;
+            }
         }
 
         .phase-status {
@@ -669,7 +745,7 @@
             outline-offset: -3px;
         }
 
-        .objective-item.mission-item { grid-template-columns: auto minmax(0, 1fr) auto; }
+        .objective-item.mission-item { grid-template-columns: 11px auto minmax(0, 1fr) auto; }
         .mission-locate { cursor: pointer; }
 
         .province-resource {
@@ -1863,6 +1939,7 @@
             grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
             grid-template-areas:
                 "seed preview"
+                "random preview"
                 "generate preview"
                 "status preview";
             align-items: center;
@@ -1875,6 +1952,7 @@
 
         .map-preview-controls > .mp-field { grid-area: seed; width: 100%; }
         .map-preview-controls > .btn { grid-area: generate; }
+        .map-preview-controls > .random-seed-button { grid-area: random; }
         .map-preview-controls > .map-preview-grid { grid-area: preview; }
         .map-preview-controls > .mp-status { grid-area: status; }
 
@@ -2399,7 +2477,7 @@
         @media (max-width: 480px) {
             .map-preview-controls {
                 grid-template-columns: minmax(0, 1fr);
-                grid-template-areas: "seed" "generate" "preview" "status";
+                grid-template-areas: "seed" "random" "generate" "preview" "status";
             }
 
             .map-preview-grid { width: min(180px, 100%); }

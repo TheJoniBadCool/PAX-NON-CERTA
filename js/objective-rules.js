@@ -59,8 +59,7 @@ function initializeObjectives() {
             }] : []),
             () => ({ kind: 'expansionist', label: 'Expansionist: hold more provinces than any other player' }),
             () => ({ kind: 'richest', label: 'Richest king: have the largest gold stockpile' }),
-            () => ({ kind: 'army', label: 'Largest Army: have the most living combat units' }),
-            () => ({ kind: 'castle-lord', label: 'Castle Lord: control more castles than any other player' })
+            () => ({ kind: 'army', label: 'Largest Army: have the most living combat units' })
         ];
         const count = 6 + Math.floor(Math.random() * 5);
         return Array.from({ length: count }, () => {
@@ -89,7 +88,6 @@ function updateObjectiveScores() {
     const livingUnitIds = new Set();
     const castleOwners = new Map();
     const armies = [0, 0, 0, 0];
-    const castles = [0, 0, 0, 0];
     const royalPrisoners = [[], [], [], []];
     const visit = (piece, onBoard) => {
         getPieceContents(piece).forEach(unit => {
@@ -100,9 +98,7 @@ function updateObjectiveScores() {
                 if (unit.prisonerOf === piece.player && unit.originalPlayer >= 1 &&
                     unit.originalPlayer <= PLAYERS.length && unit.originalPlayer !== piece.player &&
                     ['k', 'q'].includes(getUnitType(unit))) royalPrisoners[piece.player - 1].push(unit);
-            } else if (getUnitType(unit) === 'r') {
-                if (onBoard) castles[piece.player - 1]++;
-            } else {
+            } else if (getUnitType(unit) !== 'r') {
                 armies[piece.player - 1]++;
             }
         });
@@ -139,9 +135,6 @@ function updateObjectiveScores() {
                     break;
                 case 'army':
                     objective.completed = leads(armies, index);
-                    break;
-                case 'castle-lord':
-                    objective.completed = leads(castles, index);
                     break;
                 case 'monopolist': {
                     const sites = gameState.provinceResources.flatMap((_, province) =>

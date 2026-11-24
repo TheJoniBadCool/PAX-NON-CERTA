@@ -11,10 +11,10 @@ chess rules.
 
 ### Game setup
 
-- At game start, the host/player chooses a 12x12 or 16x16 board.
+- At game start, the host/player chooses a 12x12 (default) or 16x16 board.
 - A new game starts with a player-selection modal.
 - At least two of four players must be selected.
-- **Corner Position** is the default: Red starts top-left, Blue top-right,
+- With **Corner Position**, Red starts top-left, Blue top-right,
   Green bottom-right, and Yellow bottom-left. Each corner province is 3x3 on
   a 12x12 board or 4x4 on a 16x16 board.
 - Each selected player receives one castle stack holding the selected roster:
@@ -24,7 +24,7 @@ chess rules.
   Position**, **Custom placement**, **Random**, and **Gentleman's Agreement**.
 - Random assigns each active player a distinct province anywhere on the map;
   the seed reproduces provinces, armies, gates, terrain, and resources.
-- Gentleman's Agreement generates an initially all-rebel map. After Start Game,
+- Gentleman's Agreement is the default and generates an initially all-rebel map. After Start Game,
   players select/deselect unclaimed provinces on the complete, unfogged map.
   Online, each player selects only their own province and locks it with the green
   **Good luck, good Sirs!** button; play starts after all active players confirm.
@@ -37,7 +37,7 @@ chess rules.
   player roster in its existing castle and removes its outside rebel Pawn.
   Castle squares, gates, terrain, resources, and unchosen rebels stay unchanged.
   Resources are generated while all 16 provinces are rebel-owned (12 sites in
-  the default resource mode, 16 in the other modes); choosing a resource province
+  the 8-resource mode, 16 in the other modes); choosing a resource province
   keeps its resource even when capital resources were disabled. This is disclosed
   in the selection screen. Objectives are initialized for the final armies.
 - Normal planning is blocked until agreement completes. Starting a new match
@@ -213,17 +213,17 @@ chess rules.
   are shown during planning and multiplayer snapshots share all balances; when
   disabled, each player sees only their own and multiplayer snapshots omit
   opponents' balances.
-- Hotseat and Multiplayer hosts choose **8 resources** (default),
-  **12 resources**, or **16 resources** before previewing their map. Changing this choice invalidates
+- Hotseat and Multiplayer hosts choose **8 resources**,
+  **12 resources**, or **16 resources** (default) before previewing their map. Changing this choice invalidates
   the preview; the seed and mode reproduce the same resource assignments.
-- With 12 rebel provinces, the default mode covers eight randomly selected
+- With 12 rebel provinces, the 8-resource mode covers eight randomly selected
   provinces with 1 horse, 2 food, 2 wood, 1 metal, 1 gold, and 1 stone.
-- By default full mode covers all 12 rebel provinces with 2 horses, 3 food,
+- The 12-resource mode covers all 12 rebel provinces with 2 horses, 3 food,
   3 wood, 2 metal, 1 gold, and 1 stone.
 - The 16-resource mode places one resource in every province, regardless of
   ownership, with 3 horses, 4 food, 4 wood, 3 metal, 1 gold, and 1 stone.
-- Every board size has 16 provinces. If the rebel count differs, default mode
-  places rebels minus four resources (minimum zero), full mode places the rebel count, and
+- Every board size has 16 provinces. If the rebel count differs, 8-resource mode
+  places rebels minus four resources (minimum zero), 12-resource mode places the rebel count, and
   16-resource mode always covers all provinces. Resource counts use proportional
   largest-remainder rounding with random ties.
 - The optional **Allow resources in player capitals** checkbox adds exclusively
@@ -235,7 +235,7 @@ chess rules.
   the 8/12 resource count; no rebels are added. Capitals can join the pool when
   enabled, but empty and contested provinces cannot. The 16-resource mode still places
   one resource in every province, including empty and mixed-ownership provinces.
-- By default each province's resource independently receives a uniformly random whole-number
+- The random-chance option gives each province's resource a uniformly random whole-number
   production chance from 5% through 95%, inclusive, at map generation. Optional
   balanced mode assigns whole-number chances of at least 5% that sum to exactly
   25% within each populated 2x2 corner quadrant. Empty quadrants are either
@@ -243,9 +243,9 @@ chess rules.
   When prohibited, eligible provinces are selected to cover all quadrants;
   an impossible custom map or resource count produces a preview error instead.
   Counts need not be equal across quadrants. The all-100% option gives every
-  generated site a 100% chance. The tiered unbalanced option assigns 100% to
-  three sites, 50% to the next four, and 20% to all remaining sites; with fewer
-  than seven sites, tiers fill in that order. Tier assignments are randomized
+  generated site a 100% chance. The default tiered unbalanced option assigns 100% to
+  three sites, 50% to the next five, and 20% to all remaining sites; with fewer
+  than eight sites, tiers fill in that order. Tier assignments are randomized
   among sites using the map seed. Changing balance invalidates previews.
   Resource icons are public even in fog and forests; tooltips show their chance.
   Resource types and chances are fixed to provinces, not castles, persist through
@@ -305,8 +305,9 @@ chess rules.
   have separate controls in their right-click or long-press popup (also available by keyboard). Disabled actions show colored stockpile/required counts and eligibility
   conditions. Recruitment places the unit in the selected Castle, including when
   multiple Castles share a province.
-  The round-clock hand advances a quarter-turn per completed round independently
-  of resource-production settings. Pawns cost
+  The 12-slice round clock fills one slice per round independently of
+  resource-production settings, then resets for the next cycle. Carts mark purchase rounds and a scroll marks
+  the end of each temporary-objective cycle. Pawns cost
   2 Food, 1 Wood, and 1 Gold; Horses cost 2 Horse, 1 Metal, and 1 Gold.
   Both are recruited onto an owned Castle in an orthogonally adjacent province
   to the current capital. Each province can be used once total for either
@@ -357,7 +358,7 @@ chess rules.
 ### Fog of war
 
 - Fog sight is selected before the match in Hotseat or by the Multiplayer host;
-  Medium is the default, and snapshots and reconnects carry the selection.
+  Small is the default, and snapshots and reconnects carry the selection.
 - Medium and Large reveal owned provinces and all eight neighboring provinces,
   including diagonally touching ones. Small reveals owned provinces and only
   squares up to two steps from them in any direction, including diagonals.
@@ -446,8 +447,8 @@ chess rules.
   - Red: enemy collision, stationary enemy target, or enemy swap.
 - Planned movement is animated before resolution.
 - The round number increments after resolution.
-- An optional pre-game planning timer accepts a whole-number duration in seconds
-  or minutes, shared by every player each round; it defaults off.
+- The pre-game planning timer accepts a whole-number duration in seconds
+  or minutes, shared by every player each round; it defaults to 40 seconds and can be disabled.
 - At zero, queued plans (including empty plans) commit automatically. Hotseat
   starts each timer when planning begins, not during privacy handoffs, province
   selection, alliance review, or resolution. Manual commitment stops that timer.
@@ -729,7 +730,7 @@ chess rules.
   cause further eliminations, which are resolved until stable.
 - King death alone does not eliminate a player.
 - Every active player receives three private missions at game start and every
-  16 completed rounds. Each batch expires after 16 rounds; successes give
+  12 completed rounds. Each batch expires after 12 rounds; successes give
   permanent +1 or +2 points, and no successes incurs one permanent -2 penalty.
   Expiration and scoring occur before victory and defeat checks.
 - Battle and siege events satisfy attack missions and fail corresponding
