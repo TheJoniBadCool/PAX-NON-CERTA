@@ -436,15 +436,14 @@ chess rules.
 - Players plan moves privately, one player at a time.
 - The active player may plan zero, one, or multiple moves.
 - A player locks in their plan with **Commit Plans**.
-- **Reset Plans** clears only the active player's current plans and
-  planning selections.
+- **Reset Plans** clears only the active player's current plans, saved future
+  routes, and planning selections.
 - The next non-eliminated player receives the device.
 - Once every non-eliminated player has planned, all plans resolve simultaneously.
 - Planned moves are displayed with arrows:
-  - Green: ordinary move.
-  - Yellow: merge or same-player destination conflict.
+  - Green: ordinary move, merge, transfer, or valid traced route.
+  - Yellow: an invalid traced step and its dependent suffix.
   - Red: enemy collision, stationary enemy target, or enemy swap.
-  - Blue: held-piece transfer.
 - Planned movement is animated before resolution.
 - The round number increments after resolution.
 - An optional pre-game planning timer accepts a whole-number duration in seconds
@@ -459,6 +458,40 @@ chess rules.
   and the last draft received by the host; each new round gets a fresh limit.
 - The objective checklist shows only the current player's
   objectives and score, clearing its contents during hotseat handoff and resolution.
+
+### Path tracing
+
+- After queuing an ordinary move, group unmerge, castle exit, or **Leave Siege**,
+  the player can keep selecting adjacent destinations from the projected
+  endpoint to plan later rounds. Only movement-like actions extend tracing.
+- A route may end with a legal attack, merge, castle entry, or siege; these
+  terminal actions cannot be followed by further steps. Future merges require
+  confirmation but do not lock their target until their execution round.
+- Consecutive green arrows show the route. Each round automatically queues only
+  its next due action. Pawns, stacks containing Pawns, and prisoners insert their
+  normal even-round rests, shown by small `zzz` markers between arrows. Terminal
+  siege deployment retains its normal even-round Pawn exception.
+- Projection uses current terrain, gates, resources, alliances, and visible
+  occupancy. It neither discovers concealed enemies nor predicts future scouting
+  or enemy movement. This round's own known departures may vacate destinations.
+- During planning, routes are revalidated against the owner's current view.
+  A newly invalid step and every dependent later step turn yellow. The valid
+  prefix remains green and may still execute; an invalid first step queues
+  nothing. A formerly empty step does not silently turn into an attack or merge.
+- On commitment, including timer expiry, only the yellow suffix is deleted;
+  the valid prefix is retained. The player may instead select the source to
+  cancel and replace the route. Left-clicking the routed piece/stack cancels its
+  remaining route and automatic order before selecting it normally. As before,
+  clicking another piece as a valid destination takes priority over selection.
+- Battle participation cancels a route even if all its units survive. Changes to
+  the routed group's unit composition or ownership also cancel it; routes do not
+  follow captured, retreating, merged, or missing groups. A castle exit/unmerge
+  tracks the detached group's identity, not the stationary source remainder.
+- Routes are private to their owner during planning and commitment, hidden during
+  handoffs and resolution, and reset for a new match. Multiplayer sends private
+  route drafts to the host even without a timer; snapshots/reconnects restore only
+  the receiving player's routes and the next queued action, never opponents'
+  routes. Unlocking alone does not erase a saved route.
 
 ### Movement rules
 
@@ -734,9 +767,10 @@ chess rules.
   round resolves immediately in the usual order (move, merge, battles).
 - Only the room creator can press Start Battle and Proceed; the battle winner
   can decide captured units' fates from their own battle window.
-- **Cancel Siege** is a planned action in multiplayer (hotseat still cancels
-  immediately). It replaces any other plan for that catapult, so the besieging
+- **Leave Siege** is a planned action in both multiplayer and Hotseat.
+  It replaces any other plan for that catapult, so the besieging
   stack does nothing else that round, and is applied during the movement phase.
+  A traced route may continue from its existing square on later rounds.
   If the defender plans **Sally Out** the same round, the sally battle still
   happens against the cancelling catapult.
 - Resource purchases, including paid armour upgrades, are validated and
@@ -882,10 +916,12 @@ clarification rather than guessing.
   Hotseat is client-only; multiplayer uses anonymous Supabase sessions and a
   database relay, while gameplay remains authoritative in the host browser.
 - Multiplayer: a locked-in plan cannot be edited; unlock first. A reload of a
-  client restores their locked plan from the host; an unlocked plan is lost.
+  client restores its locked plan and saved routes from the host. Timed drafts
+  and current plans attached to saved routes also restore. An untimed unlocked
+  plan without saved routes retains its existing non-restoration behavior.
 - Multiplayer: a client that unlocks just as the last player locks in loses the
   race; the host ignores unlock once resolution has begun.
-- Multiplayer: Cancel Siege against a Sally Out in the same round fights the
+- Leave Siege against a Sally Out in the same round fights the
   catapult; if the catapult is destroyed earlier in the same round, no sally
   battle occurs.
 

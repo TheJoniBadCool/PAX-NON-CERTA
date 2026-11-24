@@ -52,7 +52,7 @@ const context = vm.createContext({
     'capital-rules', 'battle-rules',
     'siege-rules', 'movement-rules', 'planning-rules', 'retreat-rules', 'prisoner-rules', 'objective-rules', 'mission-rules',
     'board-setup', 'starting-position', 'setup-actions', 'resource-purchases', 'status-ui',
-    'province-food', 'allied-resolution', 'game'
+    'province-food', 'allied-resolution', 'path-planning', 'game'
 ].forEach(name => vm.runInContext(fs.readFileSync(`js/${name}.js`, 'utf8'), context));
 context.animatePlannedMovements = async () => {};
 context.renderMapPreview = () => {};

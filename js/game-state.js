@@ -22,6 +22,9 @@ class GameState {
         this.startingConfirmed = [false, false, false, false];
         this.activePlayers = [true, true, true, true];
         this.plans = [[], [], [], []];
+        this.movementPaths = [[], [], [], []];
+        this.tracingPathId = null;
+        this.pendingPathAction = null;
         this.selectedSquare = null;
         this.validMoves = [];
         this.lockedPieceIds = new Set();

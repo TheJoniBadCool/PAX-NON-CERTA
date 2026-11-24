@@ -56,6 +56,8 @@ function renderPrisoners() {
 }
 
 function showPrivacyOverlay() {
+    gameState.tracingPathId = null;
+    gameState.pendingPathAction = null;
     gameState.phase = 'TRANSITION';
     gameState.lockedPieceIds = new Set();
     gameState.pendingMerge = null;

@@ -352,14 +352,17 @@ const Multiplayer = (() => {
         }
         if (message.type === 'draft' || message.type === 'commit') {
             if (message.gameId !== m.gameId || message.round !== gameState.round) return;
-            if (message.type === 'draft' && (!(gameState.planningTimeSeconds > 0) ||
+            if (message.type === 'draft' && (!(gameState.planningTimeSeconds > 0) && !message.paths ||
                 gameState.committed[index])) return;
             const plan = sanitizePlan(index, message.plan);
-            if (!plan) {
+            const paths = message.paths === undefined ? null :
+                sanitizeMovementPaths(index + 1, message.paths);
+            if (!plan || message.paths !== undefined && !paths) {
                 conn.send({ type: 'notice', text: 'Your plan was rejected by the host. Please re-plan.' });
                 syncTo(index);
                 return;
             }
+            if (paths) gameState.movementPaths[index] = paths;
             if (message.type === 'draft') gameState.plans[index] = plan;
             else hostSetCommit(index, true, plan);
         } else if (message.type === 'unlock') {
@@ -629,7 +632,10 @@ const Multiplayer = (() => {
     function hostSetCommit(index, value, plan = null) {
         if (!m.started || !['PLANNING', 'COMMITTED'].includes(gameState.phase)) return;
         if (gameState.eliminated[index]) return;
-        if (value) gameState.plans[index] = plan;
+        if (value) {
+            gameState.plans[index] = plan;
+            finalizeMovementPaths(index + 1);
+        }
         gameState.committed[index] = value;
         if (index === m.myIndex) {
             gameState.phase = value ? 'COMMITTED' : 'PLANNING';
@@ -649,7 +655,10 @@ const Multiplayer = (() => {
             return;
         }
         gameState.eliminated.forEach((eliminated, index) => {
-            if (!eliminated) gameState.committed[index] = true;
+            if (!eliminated) {
+                if (!gameState.committed[index]) finalizeMovementPaths(index + 1);
+                gameState.committed[index] = true;
+            }
         });
         gameState.phase = 'COMMITTED';
         getPendingAllianceRequests().forEach(pair => { pair.requestedBy = null; });
@@ -789,6 +798,7 @@ const Multiplayer = (() => {
         gameState.turnIndex = m.myIndex;
         gameState.lockedPieceIds = new Set();
         gameState.phase = gameState.eliminated[m.myIndex] ? 'COMMITTED' : 'PLANNING';
+        for (let index = 0; index < 4; index++) refreshMovementPaths(index + 1);
         PlanningTimer.start();
         clearTransientUi();
         hintTextEl.innerText = 'New round! Plan your moves, then press Commit Plans.';
@@ -830,7 +840,8 @@ const Multiplayer = (() => {
             noRender,
             hostNow: Date.now(),
             game: null,
-            myPlan: null
+            myPlan: null,
+            myPaths: []
         };
         if (m.started) {
             message.game = {
@@ -894,7 +905,9 @@ const Multiplayer = (() => {
                     desc: $('gameover-desc').innerText
                 } : null
             };
-            if (gameState.committed[index] || gameState.planningTimeSeconds > 0) {
+            message.myPaths = gameState.movementPaths[index];
+            if (gameState.committed[index] || gameState.planningTimeSeconds > 0 ||
+                message.myPaths.length) {
                 message.myPlan = gameState.plans[index];
             }
         }
@@ -921,14 +934,15 @@ const Multiplayer = (() => {
     }
 
     function onBoardRendered() {
-        if (m.role === 'client' && m.started && gameState.planningTimeSeconds > 0 &&
+        if (m.role === 'client' && m.started &&
             gameState.phase === 'PLANNING' && !PlanningTimer.expired() &&
             !gameState.committed[m.myIndex] && m.pendingCommit === null && m.conn?.open) {
             const plan = gameState.plans[m.myIndex];
-            const signature = JSON.stringify([m.gameId, gameState.round, plan]);
+            const paths = gameState.movementPaths[m.myIndex];
+            const signature = JSON.stringify([m.gameId, gameState.round, plan, paths]);
             if (signature !== m.draftSignature) {
                 m.draftSignature = signature;
-                m.conn.send({ type: 'draft', plan, gameId: m.gameId, round: gameState.round })
+                m.conn.send({ type: 'draft', plan, paths, gameId: m.gameId, round: gameState.round })
                     .then(sent => { if (!sent) m.draftSignature = null; })
                     .catch(error => {
                         m.draftSignature = null;
@@ -1134,6 +1148,7 @@ const Multiplayer = (() => {
         if (m.peer && typeof m.peer.scheduleReconcile === 'function') m.peer.scheduleReconcile();
         if (isNewRound) {
             gameState.plans = [[], [], [], []];
+            if (isNewGame) gameState.movementPaths = [[], [], [], []];
             gameState.lockedPieceIds = new Set();
             clearTransientUi();
         }
@@ -1204,6 +1219,9 @@ const Multiplayer = (() => {
             : !gameState.plans[message.you].length)) {
             gameState.plans[message.you] = message.myPlan;
         }
+        if (isNewRound || message.committed[message.you]) {
+            gameState.movementPaths[message.you] = message.myPaths || [];
+        }
         if (isPlayerImmobilized(message.you + 1)) {
             cancelImmobilizedPlans(message.you + 1);
             mergePrompt.classList.add('hidden');
@@ -1258,6 +1276,8 @@ const Multiplayer = (() => {
 
     // ---------- Shared UI ----------
     function clearTransientUi() {
+        gameState.tracingPathId = null;
+        gameState.pendingPathAction = null;
         gameState.pendingMerge = null;
         gameState.selectedHeldPiece = null;
         gameState.pendingTransfer = null;
@@ -1286,6 +1306,7 @@ const Multiplayer = (() => {
             return;
         }
         const locked = gameState.phase === 'PLANNING';
+        if (locked) finalizeMovementPaths(me + 1);
         const gameId = m.gameId;
         const round = gameState.round;
         const plan = JSON.parse(JSON.stringify(gameState.plans[me]));
@@ -1317,7 +1338,9 @@ const Multiplayer = (() => {
         }
         if (locked) {
             clearTransientUi();
-            await m.conn.send({ type: 'commit', plan, gameId, round });
+            await m.conn.send({
+                type: 'commit', plan, paths: gameState.movementPaths[me], gameId, round
+            });
         } else {
             await m.conn.send({ type: 'unlock', gameId, round });
         }

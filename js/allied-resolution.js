@@ -70,6 +70,7 @@ function makeAlliedBattleCandidate(members) {
 }
 
 function fightAlliedSides(sides, square) {
+    if (typeof cancelBattleMovementPaths === 'function') cancelBattleMovementPaths(sides.flat());
     if (typeof recordMissionBattle === 'function') recordMissionBattle(sides.flat());
     const group = {
         type: 'TARGET', targetSquare: square, squareNotations: [coordsToNotation(...square)],

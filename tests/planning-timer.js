@@ -43,7 +43,7 @@ const context = vm.createContext({
     Multiplayer: { isEditingSetup: () => false, isPendingCommit: () => false }
 });
 ['constants', 'models', 'game-state', 'capital-rules', 'planning-timer', 'resource-purchases',
-    'province-food', 'status-ui', 'game'].forEach(name =>
+    'province-food', 'status-ui', 'path-planning', 'game'].forEach(name =>
     vm.runInContext(fs.readFileSync(`js/${name}.js`, 'utf8'), context));
 vm.runInContext(`
     updatePlayerCards = () => {};

@@ -46,7 +46,7 @@ const context = vm.createContext({
 });
 ['constants', 'models', 'game-state', 'planning-timer', 'setup-utils', 'board-utils', 'capital-rules', 'movement-rules',
     'planning-rules', 'battle-rules', 'retreat-rules', 'prisoner-rules', 'objective-rules', 'siege-rules',
-    'resource-purchases', 'province-food', 'allied-resolution', 'game']
+    'resource-purchases', 'province-food', 'allied-resolution', 'path-planning', 'game']
     .forEach(name => vm.runInContext(fs.readFileSync(`js/${name}.js`, 'utf8'), context));
 const api = vm.runInContext(`({
     state: gameState, createUnit, getBattleCandidateData, casualtyChance,

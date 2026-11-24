@@ -72,6 +72,10 @@ function bindBoardInteractions() {
 }
 
 function renderBoard() {
+    if (gameState.phase === 'PLANNING' && typeof refreshMovementPaths === 'function') {
+        refreshMovementPaths(gameState.turnIndex + 1);
+        if (gameState.tracingPathId) updatePathTraceSelection();
+    }
     if (closeBoardResourcePopup) closeBoardResourcePopup();
     boardEl.innerHTML = '';
     boardEl.style.gridTemplateColumns = `repeat(${gameState.boardSize}, minmax(0, 1fr))`;

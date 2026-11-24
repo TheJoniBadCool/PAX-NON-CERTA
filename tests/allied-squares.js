@@ -54,7 +54,7 @@ const context = vm.createContext({
 'capital-rules',
     'movement-rules', 'planning-rules', 'battle-rules', 'siege-rules', 'retreat-rules', 'prisoner-rules',
     'objective-rules', 'board-renderer', 'resource-purchases', 'status-ui', 'battle-ui',
-    'province-food', 'allied-resolution', 'game']
+    'province-food', 'allied-resolution', 'path-planning', 'game']
     .forEach(name => vm.runInContext(fs.readFileSync(`js/${name}.js`, 'utf8'), context));
 context.captureLog = text => logs.push(text);
 vm.runInContext(`
@@ -257,6 +257,17 @@ async function run() {
     state.board[4][5] = piece(2);
     assert(api.getValidMovesForPiece(4, 4).some(([r, c]) => r === 4 && c === 5));
     assert.equal(api.getPlanArrowKind({ from: [4, 4], to: [4, 5], player: 1 }, []), 'green');
+    assert.equal(api.getPlanArrowKind({ from: [4, 4], to: [4, 5], player: 1, transfer: true }, []), 'green');
+    assert.equal(api.getPlanArrowKind({
+        from: [4, 4], to: [4, 5], player: 1, mergeAccepted: true
+    }, []), 'green');
+    assert.equal(api.getPlanArrowKind(
+        { from: [4, 4], to: [4, 5], player: 1 },
+        [
+            { from: [4, 4], to: [4, 5], player: 1 },
+            { from: [5, 5], to: [4, 5], player: 1 }
+        ]
+    ), 'green', 'Friendly arrivals use the movement arrow color');
 
     reset();
     ally(1, 2);

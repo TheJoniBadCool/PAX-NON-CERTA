@@ -65,8 +65,6 @@ function getAllPlannedMoves() {
 }
 
 function getPlanArrowKind(move, allMoves) {
-    if (move.transfer) return 'blue';
-
     const destinationMoves = allMoves.filter(other =>
         other.to[0] === move.to[0] && other.to[1] === move.to[1]
     );
@@ -85,12 +83,5 @@ function getPlanArrowKind(move, allMoves) {
     );
 
     if (enemyDestinationMove || enemyStationaryTarget || enemySwap) return 'red';
-    if (move.mergeAccepted) return 'yellow';
-
-    const samePlayerDestinationMoves = destinationMoves.filter(other =>
-        other.player === move.player
-    );
-    if (samePlayerDestinationMoves.length > 1) return 'yellow';
-
     return 'green';
 }

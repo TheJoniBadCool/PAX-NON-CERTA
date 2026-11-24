@@ -84,6 +84,7 @@ class PaxRelay {
 
 const state = {
     board: [], eliminated: [false, false, true, true], plans: [[], [], [], []],
+    movementPaths: [[], [], [], []],
     retreating: [[], [], [], []],
     committed: [false, false, false, false], phase: 'PLANNING', round: 1, boardSize: 16,
     objectives: [
@@ -157,6 +158,7 @@ const ctx = {
             state.provinceResources = JSON.parse(JSON.stringify(map.provinceResources));
         }
         state.plans = [[], [], [], []];
+        state.movementPaths = [[], [], [], []];
         state.eliminated = [false, false, true, true];
         state.phase = startingPosition === 'agreement' ? 'STARTING_POSITION' : 'PLANNING';
         state.startingPosition = startingPosition;
@@ -178,6 +180,7 @@ const ctx = {
         ctx.customSetupModal.classList.remove('hidden');
     },
     isTowerGateMove: () => true, canMoveWholePiece: () => true, getSiegeAtSquare: () => null,
+    getSiegeForAttacker: () => null,
     isPawnRestTurn: () => state.round % 2 === 0, hasPlayerResources: () => true,
     isEliminatedPiece: piece => Boolean(state.eliminated[piece.player - 1]),
     createRandomMapSeed: () => 'test-seed',
@@ -253,7 +256,12 @@ Object.assign(ctx, new Function('ctx', `with (ctx) {
     return { validatePrisonerPlans, getPlannedPieceContents, isPrisoner, canMoveWholePiece, canMoveHeldUnit,
         getMergedPieceType, getSquarePieces, getPieceAt, getPieceByIdAt, getPiecesAt, arePlayersAllied,
         arePlayersFriendly, putPieceAt, removePieceAt, canUnitsEnterSquare,
+        getAdjacentMoves, getUnitType,
         releaseAlliancePrisoners, cancelReleasedPrisonerPlans };
+}`)(ctx));
+Object.assign(ctx, new Function('ctx', `with (ctx) {
+    ${readSource('js/path-planning.js')}
+    return { refreshMovementPaths, finalizeMovementPaths, sanitizeMovementPaths };
 }`)(ctx));
 Object.assign(ctx, new Function('ctx', `with (ctx) {
     ${readSource('js/constants.js')}
@@ -559,6 +567,36 @@ async function run() {
     assert(!state.committed[1], 'A stale or future turn must be ignored');
     const guestPlan = [{ from: [0, 0], to: [0, 1], pieceId: 'guest-piece' }];
     const guestPiece = state.board[0][0];
+    const guestPath = {
+        pieceId: guestPiece.id, unitIds: ['unit'], signature: 'unit:p:0', steps: [
+            { from: [0, 0], to: [0, 1], kind: 'move', round: 1 },
+            { from: [0, 1], to: [0, 2], kind: 'move', round: 3 }
+        ]
+    };
+    const pathPlan = [{ ...guestPlan[0], pathId: guestPiece.id }];
+    guest.emit('data', { type: 'draft', gameId: 1, round: 1, plan: pathPlan, paths: [guestPath] });
+    assert(state.movementPaths[1].length === 1,
+        'Guests must persist private routes without requiring a planning timer');
+    state.tracingPathId = 'host-editing-route';
+    guest.emit('data', { type: 'commit', gameId: 1, round: 1, plan: pathPlan, paths: [guestPath] });
+    assert(state.committed[1] && state.movementPaths[1][0].steps.length === 2 &&
+        state.tracingPathId === 'host-editing-route',
+        'Committing a guest route must preserve its future steps and not interrupt host tracing');
+    state.movementPaths[0] = [{ pieceId: 'host-private-route', steps: [] }];
+    multiplayer.syncAlliedState();
+    const routeSync = JSON.parse(JSON.stringify(guest.sent.filter(message => message.type === 'sync').pop()));
+    assert(routeSync.myPaths[0].steps.length === 2 &&
+        !JSON.stringify(routeSync).includes('host-private-route') && !routeSync.game.movementPaths,
+        'Snapshots must send only the receiving player’s future routes');
+    state.movementPaths[0] = [];
+    state.tracingPathId = null;
+    guest.emit('data', { type: 'unlock', gameId: 1, round: 1 });
+    guest.emit('data', { type: 'draft', gameId: 1, round: 1, plan: [], paths: [] });
+    assert(!state.movementPaths[1].length, 'Clearing a route must synchronize its deletion');
+    guest.emit('data', { type: 'draft', gameId: 1, round: 1, plan: [], paths: [
+        { ...guestPath, unitIds: ['host-unit'] }
+    ] });
+    assert(!state.movementPaths[1].length, 'The host must reject routes using another army’s units');
     const sharedHostArmy = { id: 'shared-host', player: 1, type: 'n',
         contents: [{ id: 'host-unit', player: 1, type: 'n' }] };
     state.board[0][0] = [sharedHostArmy, guestPiece];
@@ -937,7 +975,12 @@ async function run() {
         requests[1].type === 'starting-confirm' && requests.every(message => message.gameId === 3),
         'Client selection and confirmation requests must carry the current match identity');
 
+    relay.connection.emit('data', routeSync);
+    assert(state.movementPaths[1][0].steps.length === 2 &&
+        state.plans[1][0].pathId === 'guest-piece',
+        'Reconnect restores private future routes and their current queued action');
     const timedSync = JSON.parse(JSON.stringify(sync));
+    timedSync.gameId = 4;
     timedSync.game.phase = 'PLANNING';
     timedSync.committed = [false, false, true, true];
     timedSync.game.planningTimeSeconds = 5;

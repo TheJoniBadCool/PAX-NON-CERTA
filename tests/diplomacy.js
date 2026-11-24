@@ -37,7 +37,7 @@ const context = vm.createContext({
     initBoard() {}, Multiplayer: { isPendingCommit: () => false, refreshControls() {}, getBadge: () => ({}) }
 });
 ['constants', 'models', 'game-state', 'capital-rules', 'planning-timer', 'diplomacy-rules', 'retreat-rules', 'prisoner-rules',
-    'setup-utils', 'board-utils', 'resource-purchases', 'province-food', 'status-ui', 'game'].forEach(name =>
+    'setup-utils', 'board-utils', 'resource-purchases', 'province-food', 'status-ui', 'path-planning', 'game'].forEach(name =>
     vm.runInContext(fs.readFileSync(`js/${name}.js`, 'utf8'), context));
 context.finishResolution = () => { resolutions++; };
 vm.runInContext("resolveAllMoves = () => { gameState.phase = 'RESOLVING'; finishResolution(); }; logAction = () => {};", context);

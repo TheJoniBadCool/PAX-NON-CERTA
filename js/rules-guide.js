@@ -39,6 +39,7 @@
                     basic: [
                         'On your turn, select any number of your pieces and queue their moves.',
                         'Click or tap one of your pieces, then an adjacent square, to choose where it goes.',
+                        'After moving or splitting, keep choosing destinations to trace a route for later rounds. Click the routed piece to cancel it.',
                         'Your moves stay hidden from opponents until everyone commits their plans.',
                         'Use Reset Plans to clear your queued actions; Commit Plans to lock them in.'
                     ],
@@ -54,7 +55,8 @@
                         'After a joint victory, allies unanimously choose who gets a captured castle and separately who handles prisoners. Online each player votes; Hotseat hands the device to each ally. If votes disagree, re-decide or Declare War: this overrides the round lock and immediately resumes fighting for the spoils. The agreed custodian uses normal prisoner controls. Non-owners of the castle remain on their original siege squares and fight immediately if an enemy has taken that square. Resolution waits for the decisions, including reconnects.',
                         'Existing prisoner release and execution decisions resolve first. Then pieces leave their starting squares, opposing swaps resolve, friendly arrivals merge, and remaining enemy stacks fight.',
                         'Moves into the same square, crossing enemy moves, and moving onto a stationary enemy can all cause a battle. Friendly paths do not intercept each other.',
-                        'Use the colored arrows to review planned moves: green for movement, yellow for merges, red for likely battles, and blue for transfers. Reset Plans clears only your own plans; Commit Plans locks them. Hotseat shows a privacy handoff between players.',
+                        'Use the colored arrows to review planned moves: green for movement, merges, and transfers, and red for likely battles. Reset Plans clears only your own plans; Commit Plans locks them. Hotseat shows a privacy handoff between players.',
+                        'After a move, unmerge, castle exit, or Leave Siege, choose further adjacent destinations to trace future rounds. Green route arrows include zzz markers for Pawn/prisoner rest turns; only the next due action queues each round. You may finish with an attack, merge, castle entry, or siege. Routes use current sight, ignoring concealed enemies and future scouting. A blocked step and its dependent suffix turn yellow and are removed on commitment, keeping any valid prefix. Left-click the routed piece to cancel its route and automatic order; Reset Plans clears all your routes. Any battle or stack-composition change cancels that stack’s route. Online routes are private and restored on reconnect.',
                         'The battle window pauses resolution: press Start Battle to roll, then Proceed after reviewing the result. Expand Rolls or tap ⓘ for dice and rules; hover or tap unit and stat details for odds, casualty chances, and bonuses. The combat log can be hidden or shown without clearing it.'
                     ]
                 },
@@ -148,7 +150,7 @@
                         'An ordinary Castle has a three-round assault timer and a six-round garrison timer; after the latter reaches zero, one random non-prisoner, non-Tower unit is lost each round. Castle upgrades change assault/garrison timers to 4/8 at level 1 and 6/12 at level 2, and raise stationary Tower defence from ×3 to ×4 or ×5.',
                         'A besieged Tower cannot move, merge, transfer, or split units out. Non-Tower defenders may Sally Out if at least one can fight, even on an even round. Survivors return inside if the catapult survives; defeated casualties are captured.',
                         'A successful siege automatically conquers the Tower. Counterattacks exclude the Tower itself.',
-                        'Use Cancel Siege on your catapult to withdraw it. In Hotseat this cancels immediately; in Multiplayer it is a planned action that uses up that catapult’s action for the round. If the defender also queues Sally Out, they still fight the cancelling catapult.'
+                        'Use Leave Siege on your catapult to withdraw it. In both Hotseat and Multiplayer, this is a planned action that uses up that catapult’s action for the round; traced movement begins on a later round. If the defender also queues Sally Out, they still fight the cancelling catapult.'
                     ]
                 },
                 {
@@ -242,6 +244,7 @@
                     basic: [
                         'Na sua vez, escolha as peças que quer mover e planeie as jogadas.',
                         'Clique ou toque numa das suas peças e depois numa casa adjacente para escolher o destino.',
+                        'Depois de mover ou separar unidades, continue a escolher destinos para traçar um percurso para rondas futuras. Clique na peça com percurso para o cancelar.',
                         'As jogadas ficam ocultas dos adversários até todos confirmarem os planos.',
                         'Use «Reiniciar planos» para os apagar e «Confirmar planos» para os bloquear.'
                     ],
@@ -252,6 +255,7 @@
                         'Primeiro são resolvidas as decisões já planeadas de libertar ou executar prisioneiros. Em seguida, as peças saem das casas de origem, resolvem-se as trocas entre inimigos, juntam-se as peças aliadas que chegam à mesma casa e combatem os grupos inimigos restantes.',
                         'Pode haver combate quando inimigos se dirigem para a mesma casa, cruzam caminhos ou atacam um inimigo que ficou parado. As peças aliadas não se interceptam.',
                         'Use as setas coloridas para rever os planos: verde para movimento, amarelo para junções, vermelho para possíveis combates e azul para transferências. «Reiniciar planos» apaga apenas os seus planos; «Confirmar planos» bloqueia-os. No modo Hotseat, aparece um ecrã de privacidade entre jogadores.',
+                        'Depois de mover, separar unidades, sair de um castelo ou abandonar um cerco, escolha casas adjacentes para traçar rondas futuras. As setas verdes incluem zzz nas pausas dos Peões e prisioneiros; só a próxima ação devida é planeada automaticamente. Pode terminar com ataque, junção, entrada num castelo ou cerco. O percurso usa apenas a visão atual, sem tropas ocultas nem reconhecimento futuro. Uma etapa bloqueada e as etapas posteriores dependentes ficam amarelas e são apagadas ao confirmar, mantendo a parte válida. Clique na peça para cancelar o percurso e a ação automática; «Reiniciar planos» apaga todos os seus percursos. Qualquer combate ou alteração das unidades do grupo cancela o respetivo percurso. Online, os percursos são privados e recuperados ao voltar a ligar.',
                         'A janela de combate pausa a resolução: prima «Iniciar combate» para lançar os dados e «Prosseguir» depois de consultar o resultado. Expanda «Lançamentos» ou toque em ⓘ para ver os dados e as regras; passe o cursor ou toque nas unidades e estatísticas para consultar probabilidades, baixas e bónus. Pode ocultar e voltar a mostrar o registo de combate sem apagar entradas.'
                     ]
                 },
@@ -344,7 +348,7 @@
                         'Um castelo normal tem um contador de assalto de três rondas e um contador de guarnição de seis rondas. Quando o segundo chega a zero, perde uma unidade aleatória por ronda, exceto prisioneiros e Torres. As melhorias de castelo alteram os contadores de assalto/guarnição para 4/8 no nível 1 e 6/12 no nível 2, e aumentam a defesa imóvel de ×3 para ×4 ou ×5.',
                         'Uma Torre cercada não pode mover-se, juntar-se a outras peças, transferir unidades nem separar unidades para o exterior. Os defensores que não são Torres podem sair para combater se pelo menos um deles puder lutar, mesmo numa ronda par. Se a catapulta sobreviver, os defensores sobreviventes regressam à Torre; os derrotados são capturados.',
                         'Um cerco bem-sucedido conquista automaticamente a Torre. A própria Torre não participa nos contra-ataques.',
-                        'Use «Cancelar cerco» na catapulta para a retirar. No modo Hotseat, o cancelamento é imediato; no Multijogador, é uma ação planeada que ocupa a catapulta nessa ronda. Se os defensores também planearem «Sair para combater», lutam na mesma contra a catapulta que está a cancelar o cerco.'
+                        'Use «Abandonar cerco» (Leave Siege) na catapulta para a retirar. Tanto no Hotseat como no Multijogador, é uma ação planeada que ocupa a catapulta nessa ronda; o percurso traçado começa numa ronda posterior. Se os defensores também planearem «Sair para combater», lutam na mesma contra a catapulta que está a abandonar o cerco.'
                     ]
                 },
                 {

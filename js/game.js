@@ -88,6 +88,8 @@
             if (trigger && !trigger.contains(event.relatedTarget)) hideRequirements();
         });
         function dismissPieceTooltip() {
+            gameState.tracingPathId = null;
+            gameState.pendingPathAction = null;
             pieceTooltip.classList.add('hidden');
             recruitOptions.classList.add('hidden');
             hideRequirements();
@@ -444,6 +446,9 @@
             gameState.lastProvinceFoodRound = null;
             reconcileProvinceFood();
             gameState.plans = [[], [], [], []];
+            gameState.movementPaths = [[], [], [], []];
+            gameState.tracingPathId = null;
+            gameState.pendingPathAction = null;
             gameState.diplomacy = createDiplomacyState();
             gameState.diplomacyReviewer = null;
             gameState.resourceTrades = [];
@@ -946,43 +951,30 @@
             const siege = selectedPiece ? getSiegeForAttacker(selectedPiece.id) : null;
             const attacker = siege && siege.attackers.find(entry => entry.pieceId === selectedPiece.id);
             if (!siege || !attacker || attacker.player !== gameState.turnIndex + 1) return;
-            if (gameState.multiplayer) {
-                // Planned like any other action: the catapult stack does nothing else this round.
-                const plans = gameState.plans[gameState.turnIndex];
-                gameState.plans[gameState.turnIndex] = plans.filter(move => move.prisonerAction || move.pieceId !== selectedPiece.id);
-                gameState.plans[gameState.turnIndex].push({
-                    pieceId: selectedPiece.id,
-                    from: [...gameState.selectedSquare],
-                    to: [...gameState.selectedSquare],
-                    pieceType: selectedPiece.type,
-                    contents: getPieceContents(selectedPiece),
-                    siegeCancel: true,
-                    siegeId: siege.id
-                });
-                gameState.selectedSquare = null;
-                gameState.validMoves = [];
-                pieceTooltip.classList.add('hidden');
-                hintTextEl.innerText = "Cancel Siege queued for this round.";
-                renderBoard();
-                return;
-            }
-            siege.attackers = siege.attackers.filter(entry => entry.pieceId !== selectedPiece.id);
-            if (!siege.attackers.length) {
-                gameState.sieges = gameState.sieges.filter(entry => entry.id !== siege.id);
-            }
-            const location = isPubliclyVisiblePiece(selectedPiece, [gameState.selectedSquare])
-                ? `at ${coordsToNotation(...siege.towerSquare)}` : 'out of sight';
-            logAction(`🏳️ Player ${gameState.turnIndex + 1} cancelled a siege ${location}.`);
-            gameState.selectedSquare = null;
-            gameState.validMoves = [];
+            const plans = gameState.plans[gameState.turnIndex];
+            gameState.plans[gameState.turnIndex] = plans.filter(move => move.prisonerAction || move.pieceId !== selectedPiece.id);
+            const order = {
+                pieceId: selectedPiece.id,
+                from: [...gameState.selectedSquare],
+                to: [...gameState.selectedSquare],
+                pieceType: selectedPiece.type,
+                contents: getPieceContents(selectedPiece),
+                siegeCancel: true,
+                siegeId: siege.id
+            };
+            gameState.plans[gameState.turnIndex].push(order);
+            beginMovementPath(order);
             pieceTooltip.classList.add('hidden');
-            hintTextEl.innerText = "Siege cancelled.";
+            hintTextEl.innerText = "Leave Siege queued. Choose a destination to trace movement for a later round.";
             renderBoard();
         };
 
         function queueUnmergePlan(sourcePiece, heldPiece, destination, targetPiece) {
             const queued = queueHeldGroupPlan(sourcePiece, heldPiece, destination, targetPiece);
             if (!queued) hintTextEl.innerText = 'Group order rejected: one or more selected units are unavailable.';
+            else cancelPieceMovementPaths({
+                player: sourcePiece.player, contents: getHeldGroupUnits(sourcePiece, heldPiece)
+            }, sourcePiece.player);
             return queued;
         }
 
@@ -995,7 +987,23 @@
             pieceTooltip.classList.add('hidden');
             siegePopup.classList.add('hidden');
             hideRequirements();
-            if (gameState.selectedSquare && gameState.validMoves.some(m => m[0] === r && m[1] === c)) {
+            const tracedPiece = gameState.tracingPathId &&
+                getVisiblePiece(r, c, gameState.turnIndex + 1);
+            const tracedPath = getTracingMovementPath();
+            const reselectingTrace = tracedPiece?.player === gameState.turnIndex + 1 && tracedPath &&
+                getPieceContents(tracedPiece).some(unit => tracedPath.unitIds.includes(unit.id));
+            if (!reselectingTrace && gameState.selectedSquare &&
+                gameState.validMoves.some(m => m[0] === r && m[1] === c)) {
+                if (gameState.tracingPathId) {
+                    const path = getTracingMovementPath();
+                    const units = getPathUnits(path, gameState.turnIndex + 1);
+                    const last = path.steps[path.steps.length - 1];
+                    const kind = getPathActionKind(path, last.to, [r, c], gameState.turnIndex + 1,
+                        getPathScheduleRound(path, units), units);
+                    if (kind === 'siege') showSiegePreparePopup(r, c);
+                    else handleSquareAction(r, c);
+                    return;
+                }
                 const source = getPieceAt(...gameState.selectedSquare, gameState.turnIndex + 1);
                 const target = getVisiblePiece(r, c, gameState.turnIndex + 1);
                 if (!gameState.selectedHeldPiece && source && !getSiegeForAttacker(source.id) &&
@@ -1010,12 +1018,14 @@
             const activePlayerId = gameState.turnIndex + 1;
             const clickedPiece = getVisiblePiece(r, c, activePlayerId);
             if (clickedPiece && !isEliminatedPiece(clickedPiece) && clickedPiece.player === activePlayerId) {
+                cancelPieceMovementPaths(clickedPiece, activePlayerId);
                 selectBoardPiece(r, c, clickedPiece);
                 if (gameState.selectedSquare && (getSiegeForAttacker(clickedPiece.id) || getSiegeAtSquare([r, c]) ||
                     getPieceContents(clickedPiece).some(isPrisoner))) {
                     showPieceTooltip(r, c, boardEl.children[r * gameState.boardSize + c]);
                 }
             } else {
+                gameState.tracingPathId = null;
                 gameState.selectedSquare = null;
                 gameState.selectedHeldPiece = null;
                 gameState.validMoves = [];
@@ -1054,6 +1064,8 @@
         }
 
         function selectBoardPiece(r, c, clickedPiece) {
+            gameState.tracingPathId = null;
+            gameState.pendingPathAction = null;
             if (gameState.lockedPieceIds.has(clickedPiece.id)) {
                 pieceTooltip.classList.add('hidden');
                 hintTextEl.innerText = "This piece is already committed to a merge for this turn.";
@@ -1088,6 +1100,29 @@
             const clickedPiece = getVisiblePiece(r, c, activePlayerId);
             if (!gameState.selectedSquare || !gameState.validMoves.some(m => m[0] === r && m[1] === c)) {
                 hintTextEl.innerText = "Click or tap one of your pieces before choosing an adjacent target square.";
+                return;
+            }
+            if (gameState.tracingPathId) {
+                const path = getTracingMovementPath();
+                const units = getPathUnits(path, activePlayerId);
+                const last = path.steps[path.steps.length - 1];
+                const kind = getPathActionKind(path, last.to, [r, c], activePlayerId,
+                    getPathScheduleRound(path, units), units);
+                if (kind === 'merge') {
+                    gameState.pendingPathAction = { pathId: path.pieceId, to: [r, c] };
+                    mergePromptText.innerText = 'End this route by merging into the selected piece on that future round?';
+                    btnMergeConfirm.innerText = 'Merge';
+                    mergePrompt.classList.remove('hidden');
+                    return;
+                }
+                if (!appendMovementPathStep([r, c])) {
+                    hintTextEl.innerText = 'Route step is no longer available. Select the piece to replan.';
+                } else {
+                    hintTextEl.innerText = gameState.tracingPathId
+                        ? 'Route extended. Choose the next destination, or select another piece to finish.'
+                        : 'Final action added to the route.';
+                }
+                renderBoard();
                 return;
             }
 
@@ -1131,10 +1166,14 @@
                 }
 
                 if (!queueUnmergePlan(sourcePiece, gameState.selectedHeldPiece, [r, c], null)) return;
+                const order = gameState.plans[gameState.turnIndex].at(-1);
                 gameState.selectedHeldPiece = null;
                 gameState.selectedSquare = null;
                 gameState.validMoves = [];
-                hintTextEl.innerText = "Group move queued.";
+                const tracing = beginMovementPath(order);
+                hintTextEl.innerText = tracing
+                    ? 'Group move queued. Choose the next destination to extend its route.'
+                    : 'Group move queued.';
                 renderBoard();
                 return;
             }
@@ -1225,13 +1264,20 @@
 
             gameState.selectedSquare = null;
             gameState.validMoves = [];
-            hintTextEl.innerText = `Move queued! You have planned ${gameState.plans[gameState.turnIndex].length} piece move(s).`;
+            const order = gameState.plans[gameState.turnIndex].at(-1);
+            const tracing = order && beginMovementPath(order);
+            hintTextEl.innerText = tracing
+                ? 'Move queued. Choose the next destination to extend its route, or select another piece to finish.'
+                : `Move queued! You have planned ${gameState.plans[gameState.turnIndex].length} piece move(s).`;
             renderBoard();
         }
 
         btnClearPlan.addEventListener('click', () => {
             if (!canEditPlans()) return;
             gameState.plans[gameState.turnIndex] = [];
+            gameState.movementPaths[gameState.turnIndex] = [];
+            gameState.tracingPathId = null;
+            gameState.pendingPathAction = null;
             gameState.lockedPieceIds = new Set();
             gameState.pendingMerge = null;
             gameState.selectedHeldPiece = null;
@@ -1275,6 +1321,17 @@
         });
 
         btnMergeConfirm.addEventListener('click', () => {
+            if (gameState.pendingPathAction) {
+                if (!canEditPlans()) return;
+                const { pathId, to } = gameState.pendingPathAction;
+                if (gameState.tracingPathId !== pathId || !appendMovementPathStep(to)) {
+                    hintTextEl.innerText = 'Route destination changed. Select the piece to replan.';
+                } else hintTextEl.innerText = 'Final merge added to the route.';
+                gameState.pendingPathAction = null;
+                mergePrompt.classList.add('hidden');
+                renderBoard();
+                return;
+            }
             if (!canEditPlans()) return;
             if (gameState.pendingTransfer) {
                 const { sourcePiece, heldPiece } = gameState.pendingTransfer;
@@ -1335,6 +1392,13 @@
         });
 
         btnMergeCancel.addEventListener('click', () => {
+            if (gameState.pendingPathAction) {
+                gameState.pendingPathAction = null;
+                mergePrompt.classList.add('hidden');
+                updatePathTraceSelection();
+                renderBoard();
+                return;
+            }
             gameState.pendingMerge = null;
             gameState.selectedHeldPiece = null;
             gameState.pendingTransfer = null;
@@ -1354,6 +1418,7 @@
                 return;
             }
             if (gameState.phase !== 'PLANNING') return;
+            finalizeMovementPaths(gameState.turnIndex + 1);
             pieceTooltip.classList.add('hidden');
             advanceTurn();
         }
@@ -1764,6 +1829,7 @@
             if (typeof recordMissionCastleOwnership === 'function') recordMissionCastleOwnership();
 
             // Reset planned moves for next turn
+            advanceMovementPaths(allIntendedMoves);
             gameState.plans = [[], [], [], []];
             applySiegeRoundProgress();
             updateHillHeld(hillOccupants, allIntendedMoves);
@@ -1924,6 +1990,7 @@
                 renderBattleCandidates(group);
                 battleRollsEl.innerHTML = '';
                 const activeCandidateData = getBattleCandidateData(group);
+                cancelBattleMovementPaths(group.candidates);
                 if (typeof recordMissionBattle === 'function') recordMissionBattle(group.candidates);
                 const captureOnly = activeCandidateData.filter(entry => entry.combatContents.length).length === 1 &&
                     activeCandidateData.some(entry => !entry.combatContents.length);
@@ -2156,6 +2223,7 @@
                     return;
                 }
                 const activeCandidateData = getBattleCandidateData(group);
+                cancelBattleMovementPaths(group.candidates);
                 if (typeof recordMissionBattle === 'function') recordMissionBattle(group.candidates);
                 const captureOnly = activeCandidateData.filter(entry => entry.combatContents.length).length === 1 &&
                     activeCandidateData.some(entry => !entry.combatContents.length);

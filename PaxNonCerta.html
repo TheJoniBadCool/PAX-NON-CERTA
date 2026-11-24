@@ -145,7 +145,7 @@
                 <div id="piece-tooltip" class="piece-tooltip hidden">
                     <div id="province-food-control" class="province-food-control hidden"></div>
                     <button id="btn-storm-castle" class="btn btn-amber" type="button" hidden>Storm Castle</button>
-                    <button id="btn-cancel-siege" class="btn btn-secondary" hidden>🏹 Cancel Siege</button>
+                    <button id="btn-cancel-siege" class="btn btn-secondary" hidden>🏹 Leave Siege</button>
                     <button id="btn-sally-out" class="btn btn-amber" hidden>⚔️ Sally Out</button>
                     <div id="piece-tooltip-units" class="piece-tooltip-units"></div>
                     <div id="castle-recruit-options" class="castle-recruit-options hidden"></div>
@@ -213,10 +213,8 @@
                 Click or tap a piece to select it, then an adjacent square to queue a 1-step move. Right-click or long-press for its unit list; click a catapult or besieged tower for siege actions.
             </div>
             <div style="font-size: 0.7rem; color: var(--text-muted); text-align: center; margin-top: 0.25rem;">
-                <span style="color: #22c55e;">━ Green: move</span> ·
-                <span style="color: #facc15;">━ Yellow: merge</span> ·
-                <span style="color: #ef4444;">━ Red: battle</span> ·
-                <span style="color: #3b82f6;">━ Blue: transfer</span>
+                <span style="color: #22c55e;">━ Green: movement, merge, transfer</span> ·
+                <span style="color: #ef4444;">━ Red: likely battle</span>
             </div>
         </section>
 
@@ -713,6 +711,7 @@
     <script src="js/prisoner-rules.js"></script>
     <script src="js/province-food.js"></script>
     <script src="js/planning-rules.js"></script>
+    <script src="js/path-planning.js"></script>
     <script src="js/plan-renderer.js"></script>
     <script src="js/board-setup.js"></script>
     <script src="js/starting-position.js"></script>
