@@ -69,6 +69,7 @@ class GameState {
         this.luckyCards = [[], [], [], []];
         this.nextLuckyCardId = 1;
         this.immobilizedUntilRound = [0, 0, 0, 0];
+        this.forceMarch = [[], [], [], []];
     }
 }
 

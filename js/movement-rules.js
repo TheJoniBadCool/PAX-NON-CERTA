@@ -18,12 +18,14 @@ function pieceContainsPawn(piece) {
     return getPieceContents(piece).some(unit => getUnitType(unit) === 'p');
 }
 
-function canMoveWholePiece(piece, plans = gameState.plans[piece.player - 1]) {
+function canMoveWholePiece(piece, plans = gameState.plans[piece.player - 1],
+    forceMarch = hasForceMarchAllowance(piece, plans)) {
     if (piece.player === REBEL_PLAYER_ID || isEliminatedPiece(piece) ||
         isPlayerImmobilized(piece.player)) return false;
     const contents = getPlannedPieceContents(piece, plans);
     return contents.length > 0 && (!isPawnRestTurn() ||
-        !contents.some(unit => getUnitType(unit) === 'p' || isPrisoner(unit)));
+        !contents.some(unit => getUnitType(unit) === 'p' || isPrisoner(unit)) ||
+        forceMarch);
 }
 
 function canMoveHeldUnit(unit, plans = gameState.plans.flat()) {

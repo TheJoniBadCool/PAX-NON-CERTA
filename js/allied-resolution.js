@@ -99,6 +99,10 @@ function fightAlliedSides(sides, square) {
                     survivors: entry.contents, casualties: [], captured: []
                 } : resolveCandidateCasualties(entry.candidate, entry.probability, index !== winner,
                     data.some(other => other.contents.some(unit => getUnitType(unit) === 'r')), rolls)));
+            const sallyDefenderIds = new Set(sides[1 - winner].filter(army => army.isSallyDefender)
+                .flatMap(army => getPieceContents(army).map(unit => unit.id)));
+            eliminateDefeatedRebels(results.get(group.candidates[1 - winner].pieceId),
+                unit => !sallyDefenderIds.has(unit.id), rolls);
             renderBattleCandidates(group, results, new Set(
                 results.get(group.candidates[1 - winner].pieceId).survivors.map(unit => unit.id)));
             renderBattleRolls(rolls);
@@ -277,7 +281,6 @@ async function resolveAlliedEncounter(group) {
     let armies = group.candidates;
     const prisoners = [];
     const towers = [];
-    const recruits = [];
     const victors = new Set();
     let castleOwner = null;
     let prisonerOwner = null;
@@ -303,13 +306,10 @@ async function resolveAlliedEncounter(group) {
                 if (army.isSallyDefender) {
                     const tower = getPieceAt(...square, army.player);
                     tower.contents.push(...retreating);
-                } else if (army.player === REBEL_PLAYER_ID) recruits.push(...retreating);
-                else queueRetreat(army.player, retreating, square);
+                } else if (army.player !== REBEL_PLAYER_ID) queueRetreat(army.player, retreating, square);
             });
             prisoners.push(...battle.loserResult.captured.filter(unit =>
                 unit.player !== REBEL_PLAYER_ID || isPrisoner(unit)));
-            recruits.push(...battle.loserResult.captured.filter(unit =>
-                unit.player === REBEL_PLAYER_ID && !isPrisoner(unit)));
             castleOwner = null;
             prisonerOwner = null;
         }
@@ -326,13 +326,6 @@ async function resolveAlliedEncounter(group) {
         }
         break;
     }
-    const leader = castleOwner || prisonerOwner ||
-        makeAlliedBattleCandidate(armies.filter(army => !victors.size || victors.has(army.player))).player;
-    const leaderArmy = armies.find(army => army.player === leader);
-    leaderArmy.contents.push(...recruits.map(unit => ({
-        ...unit, player: leader, id: `${unit.id}::recruited::${gameState.round}`,
-        name: getNextUnitName(leader, getUnitType(unit))
-    })));
     if (castleOwner) {
         armies.find(army => army.player === castleOwner).contents.push(...towers.map(unit => ({
             ...unit, player: castleOwner, id: `${unit.id}::conquered::${gameState.round}`,

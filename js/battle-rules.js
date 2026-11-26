@@ -135,3 +135,17 @@ function resolveCandidateCasualties(candidate, battleProbability, isLoser, siege
     });
     return { survivors, casualties, captured };
 }
+
+function eliminateDefeatedRebels(result, removeSurvivor, battleRolls) {
+    const isRebelTroop = unit => unit.player === REBEL_PLAYER_ID &&
+        !isPrisoner(unit) && getUnitType(unit) !== 'r';
+    const removed = [
+        ...result.captured.filter(isRebelTroop),
+        ...result.survivors.filter(unit => isRebelTroop(unit) && removeSurvivor(unit))
+    ];
+    const removedIds = new Set(removed.map(unit => unit.id));
+    result.captured = result.captured.filter(unit => !removedIds.has(unit.id));
+    result.survivors = result.survivors.filter(unit => !removedIds.has(unit.id));
+    result.casualties.push(...removed);
+    removed.forEach(unit => battleRolls.push(`${getUnitName(unit)}: eliminated after defeat`));
+}

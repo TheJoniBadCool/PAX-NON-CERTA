@@ -224,6 +224,15 @@ appendMovementPathStep([5, 7]);
 assert(path.steps[1].kind === 'siege' && path.steps[1].round === 2,
     'A terminal siege must preserve the existing even-round Pawn exception');
 
+piece = resetPathTest(['p']);
+gameState.round = 2;
+path = startPath(piece, [5, 5], [5, 6], { forceMarch: true });
+assert(getPathInvalidIndex(path, 1) === -1 && sanitizeMovementPaths(1, [path]),
+    'Force March must authorize the current even-round Pawn route');
+assert(appendMovementPathStep([5, 7]) && path.steps[1].round === 3,
+    'Force March applies only to its first move; later route steps follow normal rest rules');
+assert(getPathOrder(path, 1).forceMarch, 'The forced route order must retain its authorization marker');
+
 piece = resetPathTest();
 path = startPath(piece);
 startPath(piece, [5, 5], [6, 5]);

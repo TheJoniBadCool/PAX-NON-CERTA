@@ -175,13 +175,30 @@ function renderLuckyCards(player, visible) {
         const targets = card.type === 'steal'
             ? RESOURCE_TYPES.map(resource =>
                 `<button type="button" class="resource-purchase-button" data-lucky-use="${card.id}" data-lucky-target="${resource.key}">${resource.icon} ${resource.label}</button>`).join('')
-            : PLAYERS.filter(other => other.id !== player && gameState.activePlayers[other.id - 1] &&
+            : card.type === 'burglar' || card.type === 'immobilize'
+            ? PLAYERS.filter(other => other.id !== player && gameState.activePlayers[other.id - 1] &&
                 !gameState.eliminated[other.id - 1]).map(other =>
-                `<button type="button" class="resource-purchase-button" data-lucky-use="${card.id}" data-lucky-target="${other.id}">${escapeHtml(other.name)}</button>`).join('');
+                `<button type="button" class="resource-purchase-button" data-lucky-use="${card.id}" data-lucky-target="${other.id}">${escapeHtml(other.name)}</button>`).join('')
+            : card.type === 'sabotage'
+            ? getProvinceOwners(gameState.board).map((owner, province) => {
+                const food = gameState.provinceFood[province];
+                if (!owner || owner === player || !gameState.activePlayers[owner - 1] ||
+                    gameState.eliminated[owner - 1] || gameState.provinceFoodOwners[province] !== owner ||
+                    !Number.isInteger(food) || food < 1) return '';
+                return `<button type="button" class="resource-purchase-button" data-lucky-use="${card.id}" data-lucky-target="${province}">Province ${province + 1} · ${escapeHtml(PLAYERS[owner - 1].name)} · ${food}/6 Food</button>`;
+            }).join('') || '<span>No eligible other-player provinces.</span>'
+            : card.type === 'harvest'
+            ? `<button type="button" class="resource-purchase-button" data-lucky-use="${card.id}">Refill all provinces</button>`
+            : getForceMarchTargets(player).map(({ piece, row, column }) =>
+                `<button type="button" class="resource-purchase-button" data-lucky-use="${card.id}" data-lucky-target="${escapeHtml(piece.id)}">${escapeHtml(PLAYERS[player - 1].name)} ${escapeHtml(getPieceLabel(piece.type))} at ${coordsToNotation(row, column)}</button>`).join('') ||
+                '<span>Available only on even-numbered rounds for stacks that can leave their square.</span>';
         return `<div class="lucky-card-entry"><button type="button" class="lucky-card-button" data-lucky-select="${card.id}" aria-expanded="false" aria-label="${escapeHtml(tooltip)}" title="${escapeHtml(tooltip)}"${enabled ? '' : ' disabled'}>${type.icon}</button><div class="lucky-card-targets hidden" data-lucky-targets="${card.id}"><span>${escapeHtml(type.description)}</span>${targets}</div></div>`;
     }).join('');
+    const catalog = Object.values(LUCKY_CARD_TYPES).map(type =>
+        `<li><span class="lucky-card-catalog-icon">${type.icon}</span><span><strong>${escapeHtml(type.label)}</strong><br>${escapeHtml(type.description)}</span></li>`
+    ).join('');
     panel.querySelector('.lucky-card-options').innerHTML =
-        `<div class="lucky-card-hand">${buy}${cards}</div><span class="resource-purchase-notice">Keep cards indefinitely. Use once during unlocked planning; effects cannot be undone.</span>`;
+        `<button type="button" class="lucky-card-help-toggle" data-lucky-help aria-expanded="false" aria-controls="lucky-card-catalog-p${player}" title="Show possible Lucky Cards">?</button><div id="lucky-card-catalog-p${player}" class="lucky-card-catalog hidden"><strong>Possible Lucky Cards</strong><ul>${catalog}</ul></div><div class="lucky-card-hand">${buy}${cards}</div><span class="resource-purchase-notice">Keep cards indefinitely. Use once during unlocked planning; effects cannot be undone.</span>`;
 }
 
 function updatePlayerCards() {

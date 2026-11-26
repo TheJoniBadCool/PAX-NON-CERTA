@@ -131,6 +131,14 @@
         window.addEventListener('click', event => {
             const panel = event.target.closest('.resource-purchases, .lucky-cards');
             if (!panel) return;
+            const helpToggle = event.target.closest('[data-lucky-help]');
+            if (helpToggle) {
+                const catalog = panel.querySelector('.lucky-card-catalog');
+                const expanded = catalog.classList.contains('hidden');
+                catalog.classList.toggle('hidden', !expanded);
+                helpToggle.setAttribute('aria-expanded', String(expanded));
+                return;
+            }
             handlePurchaseClick(event);
             const select = event.target.closest('[data-lucky-select]');
             if (select && !select.disabled) {
@@ -143,7 +151,8 @@
             const player = gameState.turnIndex + 1;
             const card = gameState.luckyCards[player - 1].find(entry => entry.id === use.dataset.luckyUse);
             if (!card) return;
-            const target = card.type === 'immobilize' ? Number(use.dataset.luckyTarget) : use.dataset.luckyTarget;
+            const target = ['immobilize', 'burglar', 'sabotage'].includes(card.type)
+                ? Number(use.dataset.luckyTarget) : use.dataset.luckyTarget;
             if (gameState.multiplayer && !Multiplayer.isHost()) {
                 Multiplayer.requestLuckyCard(card.id, target);
                 return;
@@ -1249,16 +1258,18 @@
                 return;
             }
 
+            const moveOrder = {
+                pieceId: pieceToMove.id,
+                from: [fromR, fromC],
+                to: [r, c],
+                pieceType: pieceToMove.type,
+                contents: getPieceContents(pieceToMove)
+            };
+            markForceMarchPlan(pieceToMove, moveOrder, currentPlans);
             gameState.plans[gameState.turnIndex] = currentPlans.filter(p =>
                 p.prisonerAction || !(p.from[0] === fromR && p.from[1] === fromC));
             if (fromR !== r || fromC !== c) {
-                gameState.plans[gameState.turnIndex].push({
-                    pieceId: pieceToMove.id,
-                    from: [fromR, fromC],
-                    to: [r, c],
-                    pieceType: pieceToMove.type,
-                    contents: getPieceContents(pieceToMove)
-                });
+                gameState.plans[gameState.turnIndex].push(moveOrder);
             }
 
             gameState.selectedSquare = null;
@@ -1372,7 +1383,7 @@
             gameState.plans[gameState.turnIndex] = currentPlans.filter(move =>
                 move.prisonerAction || move.pieceId !== movingPiece.id && move.pieceId !== targetPiece.id
             );
-            gameState.plans[gameState.turnIndex].push({
+            const order = {
                 pieceId: movingPiece.id,
                 from,
                 to,
@@ -1380,7 +1391,9 @@
                 contents: getPieceContents(movingPiece),
                 mergeWithPieceId: targetPiece.id,
                 mergeAccepted: true
-            });
+            };
+            markForceMarchPlan(movingPiece, order, currentPlans);
+            gameState.plans[gameState.turnIndex].push(order);
             gameState.lockedPieceIds.add(movingPiece.id);
             gameState.lockedPieceIds.add(targetPiece.id);
             gameState.pendingMerge = null;
@@ -1833,6 +1846,7 @@
             applySiegeRoundProgress();
             updateHillHeld(hillOccupants, allIntendedMoves);
             gameState.round++;
+            gameState.forceMarch = [[], [], [], []];
             updateRoundDisplay();
             processRetreatsAtRoundStart();
             reconcileCapitals();
@@ -2044,7 +2058,6 @@
                         candidateResults.set(survivor.pieceId, winnerResult);
                         const retreatEntries = [];
                         const capturedTowers = [];
-                        const recruitedRebels = [];
 
                         group.candidates.forEach((cand, idx) => {
                             const [fr, fc] = cand.from;
@@ -2093,17 +2106,8 @@
                                 isSiege,
                                 battleRolls
                             );
+                            eliminateDefeatedRebels(result, () => true, battleRolls);
                             candidateResults.set(cand.pieceId, result);
-                            if (cand.player === REBEL_PLAYER_ID) {
-                                [...result.survivors, ...result.captured]
-                                    .filter(unit => getUnitType(unit) !== 'r' && !isPrisoner(unit))
-                                    .forEach(unit => recruitedRebels.push({
-                                        ...unit,
-                                        player: survivor.player,
-                                        id: `${survivor.pieceId}::rebel-captured::${unit.id}`,
-                                        name: getNextUnitName(survivor.player, getUnitType(unit))
-                                    }));
-                            }
                             const retained = [];
                             result.survivors.forEach(unit => {
                                 if (isSiege && getUnitType(unit) === 'r') {
@@ -2123,7 +2127,6 @@
                             }
                         });
 
-                        capturedTowers.push(...recruitedRebels);
                         const destination = survivor.to;
                         if (capturedTowers.length) {
                             const boardPiece = getPieceAt(...destination, survivor.player);
@@ -2274,13 +2277,15 @@
                         group.candidates.forEach((candidate, index) => {
                             if (index === survivorIdx) return;
                             const candidateData = candidateDataById.get(candidate.pieceId);
-                            candidateResults.set(candidate.pieceId, resolveCandidateCasualties(
+                            const result = resolveCandidateCasualties(
                                 candidate,
                                 candidateData ? candidateData.probability : 0,
                                 true,
                                 false,
                                 battleRolls
-                            ));
+                            );
+                            eliminateDefeatedRebels(result, () => !candidate.isSallyDefender, battleRolls);
+                            candidateResults.set(candidate.pieceId, result);
                         });
 
                         const defender = group.candidates.find(candidate => candidate.isSallyDefender);

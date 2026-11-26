@@ -127,6 +127,6 @@ state.board[4][4] = { id: 'recipient', player: 1, type: 'p', contents: [api.crea
 const capturedRebel = api.createUnit(api.rebel, 'p', 'rebel-captive');
 api.beginCaptureChoices(1, [capturedRebel], [4, 4]);
 assert.equal(state.pendingCapture, null);
-assert.equal(state.board[4][4].contents.at(-1).player, 1);
-assert.equal(state.board[4][4].contents.at(-1).prisonerOf, undefined);
+assert.deepEqual(state.board[4][4].contents.map(unit => unit.id), ['own'],
+    'Captured rebels do not join the winning army');
 console.log('Province food and rebellion checks passed.');

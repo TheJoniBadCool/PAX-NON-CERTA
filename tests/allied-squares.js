@@ -53,7 +53,7 @@ const context = vm.createContext({
 ['constants', 'models', 'game-state', 'planning-timer', 'setup-utils', 'diplomacy-rules', 'board-utils',
 'capital-rules',
     'movement-rules', 'planning-rules', 'battle-rules', 'siege-rules', 'retreat-rules', 'prisoner-rules',
-    'objective-rules', 'board-renderer', 'resource-purchases', 'status-ui', 'battle-ui',
+    'objective-rules', 'mission-rules', 'board-renderer', 'resource-purchases', 'status-ui', 'battle-ui',
     'province-food', 'allied-resolution', 'path-planning', 'game']
     .forEach(name => vm.runInContext(fs.readFileSync(`js/${name}.js`, 'utf8'), context));
 context.captureLog = text => logs.push(text);
@@ -377,6 +377,81 @@ async function run() {
     assert(alliedSurvivors.every(army => army.contents.every(unit => unit.player === army.player)));
     assert(alliedSurvivors.every(army => army.contents.some(unit => unit.experience === 1)),
         'Both winning armies gain experience');
+
+    for (const rebelCasualtyRoll of [0, 0.99]) {
+        reset();
+        state.phase = 'RESOLVING';
+        const attacker = piece(1, ['n']);
+        const rebel = piece(5, ['p']);
+        let roll = 0;
+        randomMath.random = () => roll++ === 0 ? 0 : roll === 2 ? 0.99 : rebelCasualtyRoll;
+        await drive(api.processCollisionGroup({
+            type: 'TARGET', targetSquare: [4, 4],
+            candidates: [candidate(attacker, [4, 4]), candidate(rebel, [4, 4])]
+        }));
+        const winner = api.getPieceAt(4, 4, 1);
+        assert.deepEqual(copy(winner.contents.map(unit => unit.id)), [attacker.contents[0].id],
+            'Neither captured nor surviving rebel troops are recruited');
+        assert.equal(state.pendingCapture, null);
+        assert.match(getElement('clash-result').innerText, /💀1 · ⛓0/,
+            'Defeated rebels are reported as casualties, not captives');
+    }
+
+    for (const allied of [false, true]) {
+        reset();
+        state.phase = 'RESOLVING';
+        if (allied) ally(1, 2);
+        const attacker = piece(1, ['n']);
+        const helper = piece(2, ['n']);
+        const rebelCastle = piece(5, ['r', 'p']);
+        const captive = { ...api.createUnit(5, 'q', 'rebel-held-prisoner'), originalPlayer: 3, prisonerOf: 5 };
+        rebelCastle.contents.push(captive);
+        let first = true;
+        randomMath.random = () => first ? (first = false, 0) : 0.99;
+        await drive(api.processCollisionGroup({
+            type: 'TARGET', targetSquare: [4, 4],
+            candidates: [
+                candidate(attacker, [4, 4]),
+                ...(allied ? [candidate(helper, [4, 4], [{ square: [3, 3], ids: helper.contents.map(unit => unit.id) }])] : []),
+                candidate(rebelCastle, [4, 4])
+            ]
+        }));
+        const winners = [api.getPieceAt(4, 4, 1), api.getPieceAt(3, 3, 2)].filter(Boolean);
+        const contents = winners.flatMap(army => army.contents);
+        assert(contents.some(unit => unit.type === 'r' && unit.player === 1), 'The rebel Tower is still conquered');
+        assert(contents.some(unit => unit.id === captive.id && unit.originalPlayer === 3),
+            'Prisoners held by rebels remain capturable');
+        assert(!contents.some(unit => unit.id === rebelCastle.contents[1].id || unit.type === 'p'),
+            'A defeated rebel garrison does not join any winner');
+    }
+
+    for (const allied of [false, true]) {
+        reset();
+        state.phase = 'RESOLVING';
+        if (allied) ally(1, 2);
+        const attacker = piece(1, ['n']);
+        const helper = piece(2, ['n']);
+        const rebelCastle = piece(5, ['r', 'p', 'p']);
+        state.board[4][3] = attacker;
+        if (allied) state.board[3][3] = helper;
+        state.board[4][4] = rebelCastle;
+        const rolls = [0, 0.99, ...(allied ? [0.99] : []), 0, 0.99];
+        randomMath.random = () => rolls.length ? rolls.shift() : 0.99;
+        await drive(api.processCollisionGroup({
+            type: 'SALLY', targetSquare: [4, 4],
+            candidates: [
+                { ...candidate(attacker, [4, 3]), isSallyAttacker: true },
+                ...(allied ? [{ ...candidate(helper, [3, 3]), isSallyAttacker: true }] : []),
+                { ...candidate(rebelCastle, [4, 4]), contents: rebelCastle.contents.slice(1), isSallyDefender: true }
+            ]
+        }));
+        const defenders = api.getPieceAt(4, 4, 5).contents;
+        assert.equal(defenders.filter(unit => unit.type === 'p').length, 1,
+            'A surviving rebel defender remains in its Tower after a sally');
+        const winners = [api.getPieceAt(4, 3, 1), api.getPieceAt(3, 3, 2)].filter(Boolean);
+        assert(winners.every(army => army.contents.every(unit => unit.player === army.player)),
+            'A captured rebel in a sally does not join either attacker');
+    }
 
     reset();
     ally(1, 2);

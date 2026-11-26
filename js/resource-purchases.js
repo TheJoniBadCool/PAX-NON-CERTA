@@ -14,16 +14,84 @@ const CASTLE_SIEGE_TIMERS = [
 ];
 const LUCKY_CARD_TYPES = {
     steal: {
-        label: 'Resource burglar',
-        icon: '<svg viewBox="0 0 32 32" aria-hidden="true"><path d="M3 9Q16 3 29 9L27 23Q21 27 16 21Q11 27 5 23Z" fill="currentColor"/><path d="M7 13L13 14L12 18L7 17ZM19 14L25 13L25 17L20 18Z" fill="var(--bg-card)"/></svg>',
+        label: 'General Taxes',
+        icon: '<svg viewBox="0 0 64 64" aria-hidden="true"><g fill="currentColor"><path d="M0 5h9l8 6 5 7-3 3-5-5 3 7-3 2-5-7-2 2-7-5Z"/><path d="M64 5h-9l-8 6-5 7 3 3 5-5-3 7 3 2 5-7 2 2 7-5Z"/><path d="M12 47c2-2 4-2 6 0l7 5h14l8-6c2-1 4-1 5 1s0 4-2 5l-10 8H23l-11-8c-2-2-2-4 0-5Z"/></g><g fill="#eab308" stroke="#854d0e" stroke-width="1.5" stroke-linejoin="round"><path d="M16 21l3 2 3-2-1 5c4 3 6 7 5 11-1 4-13 4-14 0-1-4 1-8 5-11Z"/><path d="M42 21l3 2 3-2-1 5c4 3 6 7 5 11-1 4-13 4-14 0-1-4 1-8 5-11Z"/></g><path d="M15 26h8m18 0h8" stroke="#854d0e" stroke-width="1.5"/></svg>',
         description: 'Choose a resource type. Steal all of it from every other player, including allies.'
+    },
+    burglar: {
+        label: 'Resources Burglar',
+        icon: '<svg viewBox="0 0 32 32" aria-hidden="true"><path d="M4 13c0-2 2-3 5-3s5 1 5 3l2 2-1 13H4L3 15Z" fill="currentColor"/><path d="M7 10 6 7l4 2m4 8-3 1" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="21" cy="7" r="4" fill="currentColor"/><path d="M18 7h6l-1 2h-4Zm-1 5h7l3 9-4 1 1 8h-5l-2-7-3 7h-5l4-11-3-5Z" fill="currentColor"/><path d="m18 13-4 4-4-1" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+        description: 'Choose another active player. Steal all of their resources, including from allies and retreating units.'
     },
     immobilize: {
         label: 'Stop Sign',
         icon: '<svg viewBox="0 0 32 32" aria-hidden="true"><path d="M10 2H22L30 10V22L22 30H10L2 22V10Z" fill="#dc2626" stroke="white"/><text x="16" y="19" text-anchor="middle" fill="white" font-size="9" font-weight="bold">STOP</text></svg>',
         description: 'Choose another player. Block movement, splits, transfers, retreat re-entry, and siege attacks this round and next. Defence is unaffected.'
+    },
+    'force-march': {
+        label: 'Force March',
+        icon: '<svg viewBox="0 0 32 32" aria-hidden="true"><path d="M3 4h6v7c0 2 2 3 5 4l3 2v4H3v-4l4-3c-2-1-4-3-4-5V4Z M15 14h6v5c0 2 2 3 5 4l3 2v4H15v-4l4-3c-2-1-4-3-4-5v-3Z" fill="currentColor"/></svg>',
+        description: 'Choose one of your Pawn- or prisoner-containing stacks to move this even-numbered round. One move only.'
+    },
+    harvest: {
+        label: 'Good Harvest Season',
+        icon: '<svg viewBox="0 0 32 32" aria-hidden="true"><path d="M7 28 16 6m-5 15-5-3m8-3-5-4m3 1 5-5m-2 12 5-3m-7-1 5-5" fill="none" stroke="#a16207" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M20 5a10 10 0 1 0 9 15A8 8 0 0 1 20 5Z" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/><path d="m22 5 3-2m-1 5 4-1" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
+        description: 'Refill the food meter to full in every currently owned province.'
+    },
+    sabotage: {
+        label: 'Sabotage Grain Storages',
+        icon: '<svg viewBox="0 0 32 32" aria-hidden="true"><path d="M5 10c0-2 5-4 11-4s11 2 11 4v15c0 2-5 4-11 4S5 27 5 25Z" fill="#d6a84f" stroke="#854d0e" stroke-width="1.5"/><path d="M5 10c0 2 5 4 11 4s11-2 11-4M5 17c0 2 5 4 11 4s11-2 11-4M11 7l2 5m5-5-2 5m-3 9 2 6" fill="none" stroke="#854d0e" stroke-width="1.5"/><path d="m22 4 2-2 7 7-2 2Z" fill="#78716c" stroke="#44403c" stroke-width="1"/><path d="M23 4c-2-2 1-3 1-4 3 2 3 4 1 6" fill="#f97316" stroke="#c2410c" stroke-width="1"/></svg>',
+        description: "Choose another active player's province. Reduce its food meter by 2; reaching 0 causes an immediate rebellion."
     }
 };
+
+function getForceMarchToken(player, pieceId) {
+    return gameState.forceMarch?.[player - 1]?.find(token => token.pieceId === pieceId);
+}
+
+function hasForceMarchAllowance(piece, plans = gameState.plans[piece.player - 1] || []) {
+    if (!piece || piece.player !== gameState.turnIndex + 1 || !isPawnRestTurn()) return false;
+    const token = getForceMarchToken(piece.player, piece.id);
+    if (!token) return false;
+    return !token.used || plans.some(plan => plan.forceMarch && plan.pieceId === piece.id);
+}
+
+function pieceHasRestingUnits(piece, plans = gameState.plans[piece.player - 1] || []) {
+    return getPlannedPieceContents(piece, plans)
+        .some(unit => getUnitType(unit) === 'p' || isPrisoner(unit));
+}
+
+function getForceMarchTargets(player) {
+    if (!isPawnRestTurn() || isPlayerImmobilized(player)) return [];
+    const targets = [];
+    gameState.board.forEach((row, r) => row.forEach((square, c) => {
+        getSquarePieces(square).forEach(piece => {
+            if (piece.player === player && piece.type !== 'r' && pieceHasRestingUnits(piece) &&
+                !getForceMarchToken(player, piece.id) && !getSiegeAtSquare([r, c]) &&
+                !getSiegeForAttacker(piece.id)) {
+                targets.push({ piece, row: r, column: c });
+            }
+        });
+    }));
+    return targets;
+}
+
+function markForceMarchPlan(piece, plan, plans = gameState.plans[piece.player - 1] || []) {
+    if (!isPawnRestTurn() || !pieceHasRestingUnits(piece, plans)) return false;
+    const token = getForceMarchToken(piece.player, piece.id);
+    if (!token) return false;
+    if (token.used && !plans.some(entry => entry.forceMarch && entry.pieceId === piece.id)) return false;
+    token.used = true;
+    plan.forceMarch = true;
+    return true;
+}
+
+function spendForceMarchPlan(player, plan) {
+    plan.filter(entry => entry.forceMarch).forEach(entry => {
+        const token = getForceMarchToken(player, entry.pieceId);
+        if (token) token.used = true;
+    });
+}
 
 function renderLuckyCardBack(withPlus = false) {
     return `<svg viewBox="0 0 32 32" aria-hidden="true"><rect x="6" y="2" width="21" height="28" rx="3" fill="none" stroke="currentColor" stroke-width="2"/><text x="16" y="23" text-anchor="middle" fill="currentColor" font-size="23">?</text>${withPlus ? '<path d="M25 21v10m-5-5h10" stroke="currentColor" stroke-width="3"/>' : ''}</svg>`;
@@ -72,8 +140,32 @@ function useLuckyCard(player, cardId, target) {
         store[target] = (Number(store[target]) || 0) + total;
         refreshResourceTotals();
         const resource = RESOURCE_TYPES.find(entry => entry.key === target);
-        logAction(`Player ${player} used Resource burglar and stole ${total} ${resource.label} from all other players.`);
-    } else {
+        logAction(`Player ${player} used General Taxes and stole ${total} ${resource.label} from all other players.`);
+    } else if (card.type === 'burglar') {
+        if (!Number.isInteger(target) || target < 1 || target > 4 || target === player ||
+            !gameState.activePlayers[target - 1] || gameState.eliminated[target - 1]) {
+            return 'Choose another active, non-eliminated player.';
+        }
+        const holder = getResourceHolderForPlayer(player);
+        if (!holder) return 'You need a capital Tower, King, or Queen to receive stolen resources.';
+        const received = Object.fromEntries(RESOURCE_TYPES.map(({ key }) => [key, 0]));
+        getResourceBearingUnits(target).forEach(({ unit }) => {
+            const store = getUnitResourceStore(unit);
+            if (!store) return;
+            RESOURCE_TYPES.forEach(({ key }) => {
+                const amount = Math.max(0, Number(store[key]) || 0);
+                if (!amount) return;
+                received[key] += amount;
+                store[key] = 0;
+            });
+        });
+        const store = getUnitResourceStore(holder, true);
+        RESOURCE_TYPES.forEach(({ key }) => {
+            store[key] = (Number(store[key]) || 0) + received[key];
+        });
+        refreshResourceTotals();
+        logAction(`Player ${player} used Resources Burglar and stole all resources from Player ${target}.`);
+    } else if (card.type === 'immobilize') {
         if (!Number.isInteger(target) || target < 1 || target > 4 || target === player ||
             !gameState.activePlayers[target - 1] || gameState.eliminated[target - 1]) {
             return 'Choose another active, non-eliminated player.';
@@ -82,6 +174,53 @@ function useLuckyCard(player, cardId, target) {
             gameState.immobilizedUntilRound[target - 1], gameState.round + 1);
         cancelImmobilizedPlans(target);
         logAction(`Player ${player} used Stop Sign: Player ${target} is immobilized through round ${gameState.immobilizedUntilRound[target - 1]}. Queued movement and siege attacks were cancelled.`);
+    } else if (card.type === 'harvest') {
+        reconcileProvinceFood();
+        let refilled = 0;
+        gameState.provinceFoodOwners.forEach((owner, province) => {
+            if (owner !== player || gameState.provinceFood[province] >= PROVINCE_FOOD_MAX) return;
+            gameState.provinceFood[province] = PROVINCE_FOOD_MAX;
+            refilled++;
+        });
+        logAction(`Player ${player} used Good Harvest Season and refilled the food meters in ${refilled} provinces.`);
+    } else if (card.type === 'sabotage') {
+        const owner = Number.isInteger(target) && target >= 0 && target < 16
+            ? getProvinceOwners(gameState.board)[target] : null;
+        if (!owner || owner === player || !gameState.activePlayers[owner - 1] ||
+            gameState.eliminated[owner - 1] || gameState.provinceFoodOwners[target] !== owner ||
+            !Number.isInteger(gameState.provinceFood[target]) || gameState.provinceFood[target] < 1) {
+            return "Choose another active player's owned province with a food meter.";
+        }
+        gameState.provinceFood[target] = Math.max(0, gameState.provinceFood[target] - 2);
+        logAction(`Player ${player} used Sabotage Grain Storages on Player ${owner}'s Province ${target + 1}; food is now ${gameState.provinceFood[target]}.`);
+        if (gameState.provinceFood[target] === 0) {
+            rebelProvince(target, owner, gameState.round);
+            reconcileProvinceFood();
+            syncSieges();
+            reconcileCapitals();
+            refreshResourceTotals();
+        }
+    } else {
+        if (!isPawnRestTurn()) return 'Force March can only be used during an even-numbered round.';
+        if (isPlayerImmobilized(player)) return 'Force March cannot be used while you are immobilized.';
+        let targetPiece = null;
+        let targetSquare = null;
+        gameState.board.some((row, r) => row.some((square, c) =>
+            getSquarePieces(square).some(piece => {
+                if (piece.id !== target || piece.player !== player) return false;
+                targetPiece = piece;
+                targetSquare = [r, c];
+                return true;
+            })));
+        if (!targetPiece || targetPiece.type === 'r' || !pieceHasRestingUnits(targetPiece) ||
+            getForceMarchToken(player, targetPiece.id) || getSiegeForAttacker(targetPiece.id)) {
+            return 'Choose one of your eligible Pawn- or prisoner-containing stacks.';
+        }
+        if (!targetSquare || getSiegeAtSquare(targetSquare)) {
+            return 'That stack cannot leave its current square.';
+        }
+        gameState.forceMarch[player - 1].push({ pieceId: targetPiece.id, used: false });
+        logAction(`Player ${player} used Force March for ${getPieceLabel(targetPiece.type)} at ${coordsToNotation(...targetSquare)}.`);
     }
     hand.splice(hand.indexOf(card), 1);
     return null;

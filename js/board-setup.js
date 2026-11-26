@@ -389,6 +389,7 @@ function initBoard(customBoard = null, boardSize = gameState.boardSize, seed = n
     gameState.luckyCards = [[], [], [], []];
     gameState.nextLuckyCardId = 1;
     gameState.immobilizedUntilRound = [0, 0, 0, 0];
+    gameState.forceMarch = [[], [], [], []];
     gameState.provinceRecruitmentUsed = Array(16).fill(false);
     gameState.lastResourceProductionRound = null;
     gameState.eliminated = gameState.activePlayers.map(isSelected => !isSelected);

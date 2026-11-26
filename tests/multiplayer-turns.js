@@ -101,6 +101,7 @@ state.deadPieces = [[], [], [], []];
 state.luckyCards = [[], [], [], []];
 state.nextLuckyCardId = 1;
 state.immobilizedUntilRound = [0, 0, 0, 0];
+state.forceMarch = [[], [], [], []];
 state.resourceBalance = 'off';
 state.resourceProductionInterval = 1;
 state.provinceResources = [{ type: 'gold', productionChance: 75 }];
@@ -171,6 +172,7 @@ const ctx = {
         state.luckyCards = [[], [], [], []];
         state.nextLuckyCardId = 1;
         state.immobilizedUntilRound = [0, 0, 0, 0];
+        state.forceMarch = [[], [], [], []];
     },
     updatePlayerCards() {}, renderBoard() {}, logAction() {}, showPlayerSelection() {},
     showCustomSetup(players, board, map) {
@@ -183,6 +185,20 @@ const ctx = {
     isTowerGateMove: () => true, canMoveWholePiece: () => true, getSiegeAtSquare: () => null,
     getSiegeForAttacker: () => null,
     isPawnRestTurn: () => state.round % 2 === 0, hasPlayerResources: () => true,
+    hasForceMarchAllowance: () => false,
+    getForceMarchToken(player, pieceId) {
+        return state.forceMarch[player - 1].find(token => token.pieceId === pieceId);
+    },
+    pieceHasRestingUnits(piece, plans = []) {
+        return ctx.getPlannedPieceContents(piece, plans).some(unit =>
+            unit.type === 'p' || ctx.isPrisoner(unit));
+    },
+    spendForceMarchPlan(player, plan) {
+        plan.filter(entry => entry.forceMarch).forEach(entry => {
+            const token = state.forceMarch[player - 1].find(item => item.pieceId === entry.pieceId);
+            if (token) token.used = true;
+        });
+    },
     isEliminatedPiece: piece => Boolean(state.eliminated[piece.player - 1]),
     createRandomMapSeed: () => 'test-seed',
     createStartingBoard: () => ({ board: [], biomes: [] }),
@@ -496,11 +512,17 @@ async function run() {
     state.plans = [[{ from: [1, 1], to: [1, 2] }, { prisonerAction: 'release' }], [], [], []];
     state.luckyCards = [[{ id: 'host-secret-card', type: 'steal' }],
         [{ id: 'guest-stop-card', type: 'immobilize' }], [], []];
+    state.forceMarch = [[{ pieceId: 'host-secret-march', used: false }],
+        [{ pieceId: 'guest-march', used: false }], [], []];
     multiplayer.syncAlliedState();
     const cardsSync = guest.sent.filter(message => message.type === 'sync' && message.game).pop();
     assert(cardsSync.game.luckyCards[0].length === 0 &&
         cardsSync.game.luckyCards[1][0].id === 'guest-stop-card' &&
-        !JSON.stringify(cardsSync).includes('host-secret-card'), 'Snapshots disclose only the recipient hand');
+        !JSON.stringify(cardsSync).includes('host-secret-card') &&
+        cardsSync.game.forceMarch[0].length === 0 &&
+        cardsSync.game.forceMarch[1][0].pieceId === 'guest-march' &&
+        !JSON.stringify(cardsSync).includes('host-secret-march'),
+        'Snapshots disclose only the recipient hand and Force March permissions');
     const cardMessage = { type: 'lucky-card', gameId: 1, round: 4, cardId: 'guest-stop-card', target: 1 };
     guest.emit('data', { ...cardMessage, gameId: 99 });
     guest.emit('data', { ...cardMessage, round: 99 });
@@ -524,6 +546,7 @@ async function run() {
     state.plans = savedPlans;
     state.luckyCards = [[], [], [], []];
     state.immobilizedUntilRound = [0, 0, 0, 0];
+    state.forceMarch = [[], [], [], []];
     delete state.provinceResources[0][0].productionUpgraded;
     state.board[1][0] = null;
     state.resources = savedResources;
@@ -684,6 +707,20 @@ async function run() {
     assert(!state.committed[1], 'Unlocking allows prisoner decisions to be changed');
     guestPiece.contents.pop();
     guestPiece.contents[0].type = 'p';
+    state.round = 2;
+    state.plans[1] = [];
+    state.committed[1] = false;
+    state.forceMarch[1] = [{ pieceId: 'guest-piece', used: false }];
+    const forceMarchPlan = [{
+        pieceId: 'guest-piece', from: [0, 0], to: [0, 1], forceMarch: true
+    }];
+    commitPlan(forceMarchPlan);
+    assert(state.committed[1] && state.plans[1][0].forceMarch &&
+        state.forceMarch[1][0].used, 'The host must accept and spend an authorized Force March move');
+    guest.emit('data', { type: 'unlock', gameId: 1, round: 2 });
+    guest.emit('data', { type: 'draft', gameId: 1, round: 2, plan: [], paths: [] });
+    commitPlan(forceMarchPlan);
+    assert(!state.committed[1], 'A reset Force March move cannot be queued again in that round');
     state.round = 1;
     state.board[1][1] = { id: 'host-king', player: 1, type: 'k', contents: [{
         id: 'host-king-unit', player: 1, type: 'k', resourceStockpile: { gold: 99 }

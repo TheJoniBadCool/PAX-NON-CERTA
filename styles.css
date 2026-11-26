@@ -910,6 +910,23 @@
         .lucky-cards > summary svg { width: 22px; height: 22px; }
         .lucky-card-hand { display: flex; flex-wrap: wrap; gap: 6px; align-items: flex-start; }
         .lucky-card-options .lucky-card-hand > .requirement-trigger { width: auto; }
+        .lucky-card-help-toggle {
+            align-self: flex-end;
+            width: 24px;
+            height: 24px;
+            border: 1px solid var(--text-muted);
+            border-radius: 50%;
+            background: var(--bg-card);
+            color: var(--text-main);
+            cursor: pointer;
+            font-weight: bold;
+            line-height: 1;
+        }
+        .lucky-card-catalog { font-size: .75rem; }
+        .lucky-card-catalog ul { display: grid; gap: 8px; margin: 6px 0 0; padding: 0; list-style: none; }
+        .lucky-card-catalog li { display: flex; align-items: flex-start; gap: 8px; }
+        .lucky-card-catalog-icon { flex: 0 0 28px; }
+        .lucky-card-catalog-icon svg { width: 28px; height: 28px; }
         .lucky-card-button {
             display: inline-flex;
             align-items: center;

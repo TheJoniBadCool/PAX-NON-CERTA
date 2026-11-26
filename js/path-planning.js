@@ -69,7 +69,8 @@ function getPathInvalidIndex(path, player) {
             if (index || !siege || siege.id !== step.siegeId) return index;
             continue;
         }
-        if (pathNeedsRest(units, step.round) && step.kind !== 'siege') return index;
+        if (pathNeedsRest(units, step.round) && step.kind !== 'siege' &&
+            !(index === 0 && step.forceMarch)) return index;
         if (!index && getSiegeAtSquare(step.from)) return index;
         if (!index && !step.isUnmerge && getSiegeForAttacker(path.pieceId)) return index;
         const kind = getPathActionKind(path, step.from, step.to, player, step.round, units);
@@ -91,6 +92,7 @@ function getPathOrder(path, player) {
         isUnmerge: true, sourcePieceId: step.sourcePieceId, unitIds: [...path.unitIds]
     });
     if (step.kind === 'leave') Object.assign(order, { siegeCancel: true, siegeId: step.siegeId });
+    if (step.forceMarch) order.forceMarch = true;
     if (step.kind === 'merge') Object.assign(order, {
         mergeAccepted: true, mergeWithPieceId: step.targetId
     });
@@ -193,6 +195,7 @@ function beginMovementPath(order) {
         signature: pathUnitSignature(units), invalidFrom: -1,
         steps: [{
             from: [...order.from], to: [...order.to], kind, round: gameState.round,
+            ...(order.forceMarch ? { forceMarch: true } : {}),
             ...(order.isUnmerge ? { isUnmerge: true, sourcePieceId: order.sourcePieceId } : {}),
             ...(order.siegeCancel ? { siegeId: order.siegeId } : {})
         }]
@@ -273,7 +276,7 @@ function advanceMovementPaths(moves) {
 
 // Future steps are private intentions, not executable orders. Rebuild their
 // shape here; only the current action goes through the normal plan validator.
-function sanitizeMovementPaths(player, paths) {
+function sanitizeMovementPaths(player, paths, plan = gameState.plans[player - 1]) {
     if (!Array.isArray(paths) || paths.length > 64) return null;
     const square = value => Array.isArray(value) && value.length === 2 &&
         value.every(n => Number.isInteger(n) && n >= 0 && n < gameState.boardSize);
@@ -285,10 +288,12 @@ function sanitizeMovementPaths(player, paths) {
             new Set(raw.unitIds).size !== raw.unitIds.length ||
             !Array.isArray(raw.steps) || !raw.steps.length) return null;
         const steps = [];
-        for (const entry of raw.steps) {
+        for (const [stepIndex, entry] of raw.steps.entries()) {
             if (!entry || !square(entry.from) || !square(entry.to) ||
                 !Number.isSafeInteger(entry.round) || entry.round < gameState.round ||
-                !['move', 'attack', 'merge', 'siege', 'leave'].includes(entry.kind)) return null;
+                !['move', 'attack', 'merge', 'siege', 'leave'].includes(entry.kind) ||
+                entry.forceMarch !== undefined &&
+                    (entry.forceMarch !== true || stepIndex !== 0 || entry.round !== gameState.round)) return null;
             const previous = steps[steps.length - 1];
             if (previous && (previous.kind !== 'move' && previous.kind !== 'leave' ||
                 entry.round <= previous.round || !samePathSquare(previous.to, entry.from))) return null;
@@ -297,6 +302,7 @@ function sanitizeMovementPaths(player, paths) {
             const step = {
                 from: [...entry.from], to: [...entry.to], kind: entry.kind, round: entry.round
             };
+            if (entry.forceMarch) step.forceMarch = true;
             if (['attack', 'merge', 'siege'].includes(entry.kind) &&
                 typeof entry.targetId !== 'string') return null;
             if (entry.targetId !== undefined) {
@@ -315,6 +321,8 @@ function sanitizeMovementPaths(player, paths) {
             steps.push(step);
         }
         const path = { pieceId: raw.pieceId, unitIds: [...raw.unitIds], steps, invalidFrom: -1 };
+        const forcedOrder = plan.find(order => order.forceMarch && order.pathId === raw.pieceId);
+        if (Boolean(steps[0].forceMarch) !== Boolean(forcedOrder)) return null;
         const units = getPathUnits(path, player);
         if (!units.length || steps[0].isUnmerge &&
             path.pieceId !== `${steps[0].sourcePieceId}::unmerge::${path.unitIds.join('::')}`) return null;

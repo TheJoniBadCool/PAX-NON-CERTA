@@ -294,8 +294,9 @@ chess rules.
   prisoners are released to their owners' release queues. A rebel Pawn appears
   on a random empty passable square in the province, or in a rebel Tower if none
   is available. Capital and siege state are reconciled, and objectives and
-  missions see the changed ownership. Rebel survivors join their conqueror
-  rather than becoming prisoners. Multiplayer refill requests are validated by
+  missions see the changed ownership. Defeated non-Tower rebel troops are
+  eliminated rather than joining their conqueror; surviving Sally Out defenders
+  return to their Tower. Multiplayer refill requests are validated by
   the host, and meter state is included in snapshots and reconnects.
 - Resource purchases are available during unlocked planning on every round;
   multiple affordable purchases are allowed. The shopping-cart
@@ -331,16 +332,25 @@ chess rules.
   conquest, and synchronize in multiplayer snapshots.
 - Lucky Cards cost 1 each of Gold, Horse, Metal, Food, and Wood during unlocked
   planning on any round. Each purchase draws independently with equal chances from
-  Resource burglar and Stop Sign; duplicates are allowed. Cards never expire.
+  General Taxes, Resources Burglar, Stop Sign, Force March, Good Harvest Season,
+  and Sabotage Grain Storages;
+  duplicates are allowed. Cards never expire.
   The question-mark card button immediately left of the cart opens the private
   hand as icons with description tooltips; its first card-plus icon buys another.
-  Select a card, then its resource/player target to consume it immediately.
+  Select a card, then its resource/player/stack target to consume it immediately.
   Cards may currently be used only during the owner's unlocked planning turn,
-  on any round, with no per-turn limit. Reset Plans does not undo their effects.
-- Resource burglar takes every other player's entire stock of the chosen resource,
+  with no per-turn limit. General Taxes and Stop Sign may be used on any
+  round; Force March may only be used on even-numbered rounds. Reset Plans does
+  not undo card use or restore a spent Force March allowance.
+- General Taxes takes every other player's entire stock of the chosen resource,
   including allies and stores in retreating units, into the user's normal resource
   holder. Other resource types stay untouched. A capital Tower, King, or Queen
   is required to receive the resources; invalid targets never consume cards.
+- Resources Burglar targets another active, non-eliminated player, including
+  allies, and transfers all six resource types from that player's resource-bearing
+  units, including retreating units, to the user's normal resource holder. It
+  requires the user to have a capital Tower, King, or Queen; invalid targets
+  never consume the card.
 - Stop Sign targets another active, non-eliminated player. It blocks movement,
   splits/transfers, retreat re-entry, siege deployment, assaults, and Sally Out
   through the current round and the next. Queued movement/attack orders are
@@ -350,6 +360,23 @@ chess rules.
   without losing units. Effects are public; hands remain private, including on
   reconnect. The host validates and serializes card use; new games reset hands
   and immobilization.
+- Force March targets one of the owner's board stacks containing a Pawn or
+  prisoner. It grants that stack one standard whole-stack move during the
+  current even-numbered round, bypassing only the Pawn/prisoner rest restriction.
+  Tower immobility, immobilization, siege restrictions, terrain, and destination
+  legality still apply; split/transfer orders are not enabled by the card.
+  The card is consumed when its stack is targeted. Its move allowance is spent
+  when a move is queued and cannot be retried if that move is reset or invalidated;
+  an unused allowance expires at round end. Force March permissions and plans
+  remain private to their owner in multiplayer snapshots.
+- Good Harvest Season fills the food meter to 6 in every province owned by the
+  player using the card. Other players' provinces, unowned provinces, and
+  contested provinces are unchanged.
+- Sabotage Grain Storages targets another active, non-eliminated player's
+  exclusively owned province, including an ally's, and reduces its food meter
+  by two, clamped at zero. Reaching zero causes an immediate rebellion with
+  the normal food-shortage consequences; invalid or stale targets do not consume
+  the card.
 - Starting a new siege costs 1 Food and 1 Wood and is
   allowed on any round, including rounds when Pawns are inactive. Additional
   attacker stacks joining an existing Castle siege do not pay the cost again.

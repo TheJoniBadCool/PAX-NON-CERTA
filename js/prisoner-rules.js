@@ -82,13 +82,7 @@ function beginCaptureChoices(player, contents, destination, recipient = null) {
     contents.forEach(unit => {
         const originalPlayer = unit.originalPlayer || unit.player;
         if (originalPlayer === REBEL_PLAYER_ID && player !== REBEL_PLAYER_ID) {
-            const { name, sequence } = getNextRecruitmentIdentity(player, getUnitType(unit));
-            const recruit = {
-                ...restorePrisoner(unit), player,
-                id: `recruited_p${player}_${sequence}`, name
-            };
-            addCapturedUnit(player, recruit, destination);
-            logAction(`P${player} recruited ${getUnitName(unit)}.`);
+            logAction(`${getUnitName(unit)} was eliminated instead of being recruited by P${player}.`);
         } else if (originalPlayer === player) {
             addCapturedUnit(player, restorePrisoner(unit), destination);
             logAction(`${getUnitName(unit)} was rescued by P${player} and can fight again.`);

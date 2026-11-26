@@ -356,13 +356,14 @@ const Multiplayer = (() => {
                 gameState.committed[index])) return;
             const plan = sanitizePlan(index, message.plan);
             const paths = message.paths === undefined ? null :
-                sanitizeMovementPaths(index + 1, message.paths);
+                sanitizeMovementPaths(index + 1, message.paths, plan || []);
             if (!plan || message.paths !== undefined && !paths) {
                 conn.send({ type: 'notice', text: 'Your plan was rejected by the host. Please re-plan.' });
                 syncTo(index);
                 return;
             }
             if (paths) gameState.movementPaths[index] = paths;
+            if (plan.some(entry => entry.forceMarch)) spendForceMarchPlan(index + 1, plan);
             if (message.type === 'draft') gameState.plans[index] = plan;
             else hostSetCommit(index, true, plan);
         } else if (message.type === 'unlock') {
@@ -486,12 +487,17 @@ const Multiplayer = (() => {
             !validatePrisonerPlans(index + 1, plan)) return null;
         const result = [];
         const detachedIds = new Set();
+        const forcedPieces = new Set();
         for (const entry of plan) {
             if (!entry || !isSquare(entry.from) || !isSquare(entry.to)) return null;
             if (Math.max(Math.abs(entry.from[0] - entry.to[0]), Math.abs(entry.from[1] - entry.to[1])) > 1) return null;
             const piece = getPieceAt(...entry.from, index + 1);
             if (!piece || piece.player !== index + 1) return null;
+            if (entry.forceMarch !== undefined && entry.forceMarch !== true) return null;
+            if (entry.forceMarch && (entry.isUnmerge || entry.siegeAssault ||
+                entry.sallyOut || entry.siegeCancel || forcedPieces.has(piece.id))) return null;
             if (entry.prisonerAction) {
+                if (entry.forceMarch) return null;
                 result.push({
                     pieceId: piece.id, unitId: entry.unitId, prisonerAction: entry.prisonerAction,
                     from: [...entry.from], to: [...entry.from]
@@ -501,6 +507,12 @@ const Multiplayer = (() => {
             if (isPlayerImmobilized(index + 1) && !entry.siegeCancel) return null;
             const plannedContents = getPlannedPieceContents(piece, plan);
             const plannedPiece = { ...piece, contents: plannedContents };
+            const forceMarchToken = entry.forceMarch && getForceMarchToken(index + 1, piece.id);
+            const previouslyQueuedForceMarch = gameState.plans[index].some(move =>
+                move.forceMarch && move.pieceId === piece.id);
+            if (entry.forceMarch && (!isPawnRestTurn() || piece.type === 'r' ||
+                !pieceHasRestingUnits(plannedPiece, []) || !forceMarchToken ||
+                forceMarchToken.used && !previouslyQueuedForceMarch)) return null;
             const stationarySiegeAction = !entry.isUnmerge && (entry.sallyOut || entry.siegeCancel) &&
                 entry.from[0] === entry.to[0] && entry.from[1] === entry.to[1];
             if (!stationarySiegeAction && !isPassableSquare(...entry.to)) return null;
@@ -536,7 +548,7 @@ const Multiplayer = (() => {
                     if (!siege || entry.siegeId !== siege.id) return null;
                 } else if (entry.sallyOut) {
                     if (!isValidSallyOutPlan(piece, entry.from, entry.to, index + 1, entry.siegeId)) return null;
-                } else if (!entry.siegeCancel && !canMoveWholePiece(plannedPiece, []) &&
+                } else if (!entry.siegeCancel && !canMoveWholePiece(plannedPiece, [], entry.forceMarch === true) &&
                     !paidSiegeStart) {
                     return null;
                 }
@@ -547,6 +559,7 @@ const Multiplayer = (() => {
             if (!canUnitsTarget(clean.contents, target, index + 1)) return null;
             if (!canUnitsEnterSquare(clean.contents, entry.to, index + 1)) return null;
             if (clean.contents.every(isPrisoner) && (entry.siegeAssault || entry.sallyOut || entry.siegeCancel)) return null;
+            if (entry.forceMarch) forcedPieces.add(piece.id);
             result.push(clean);
         }
         return result;
@@ -888,6 +901,7 @@ const Multiplayer = (() => {
                     gameState.showResourcesToOthers || i === index ? resources : null),
                 luckyCards: gameState.luckyCards.map((cards, i) => i === index ? cards : []),
                 immobilizedUntilRound: gameState.immobilizedUntilRound,
+                forceMarch: gameState.forceMarch.map((tokens, i) => i === index ? tokens : []),
                 lastResourceProductionRound: gameState.lastResourceProductionRound,
                 objectives: gameState.objectives.map((objectives, i) => i === index ? objectives : []),
                 missionBatches: (gameState.missionBatches || [null, null, null, null])
@@ -1188,6 +1202,7 @@ const Multiplayer = (() => {
             resources: game.resources,
             luckyCards: game.luckyCards || [[], [], [], []],
             immobilizedUntilRound: game.immobilizedUntilRound || [0, 0, 0, 0],
+            forceMarch: game.forceMarch || [[], [], [], []],
             lastResourceProductionRound: game.lastResourceProductionRound,
             objectives: game.objectives,
             missionBatches: game.missionBatches || [null, null, null, null],
